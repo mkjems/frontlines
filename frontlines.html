@@ -644,7 +644,7 @@
     fields = [];
     for (const t of towns) {
       for (let k = 0, tries = 0; k < (t.capital ? 3 : 2) && tries < 60; tries++) {
-        const ang = rand(0, Math.PI * 2), r = rand(80, 112), x = t.x + Math.cos(ang) * r, y = t.y + Math.sin(ang) * r;
+        const ang = rand(0, Math.PI * 2), r = t.capital ? rand(100, 128) : rand(80, 112), x = t.x + Math.cos(ang) * r, y = t.y + Math.sin(ang) * r;
         if (x < 30 || y < 30 || x > W - 30 || y > H - 30 || nearRiver(x, y, 34)) continue;
         if (towns.some(o => Math.hypot(o.x - x, o.y - y) < 72) || fields.some(f => Math.hypot(f.x - x, f.y - y) < 46) || nearMine(x, y, 50)) continue;
         fields.push(makeField(x, y, t)); k++;
@@ -2138,10 +2138,33 @@
     }
     ctx.stroke();
 
+    // capitals sit inside a tinted city wall with towers
+    for (const t of towns) {
+      if (!t.capital || t.owner < 0) continue;
+      const WR = 66;
+      const g = ctx.createRadialGradient(t.x, t.y, 10, t.x, t.y, WR);
+      g.addColorStop(0, COL.light[t.owner]); g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.globalAlpha = 0.7; ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(t.x, t.y, WR, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = 7; ctx.strokeStyle = COL.shadow;
+      ctx.beginPath(); ctx.arc(t.x + 1.5, t.y + 2.5, WR, 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = 6; ctx.strokeStyle = COL.bridgeEdge;
+      ctx.beginPath(); ctx.arc(t.x, t.y, WR, 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = 3.5; ctx.strokeStyle = COL.bridge;
+      ctx.beginPath(); ctx.arc(t.x, t.y, WR, 0, Math.PI * 2); ctx.stroke();
+      for (let i = 0; i < 8; i++) {
+        const a = i * Math.PI / 4 + Math.PI / 8, x = t.x + Math.cos(a) * WR, y = t.y + Math.sin(a) * WR;
+        rr(ctx, x - 5 + 1.5, y - 5 + 2.5, 10, 10, 2); ctx.fillStyle = COL.shadow; ctx.fill();
+        rr(ctx, x - 5, y - 5, 10, 10, 2); ctx.fillStyle = COL.bridge; ctx.fill();
+        ctx.lineWidth = 1.5; ctx.strokeStyle = COL.mid[t.owner]; ctx.stroke();
+      }
+    }
+
     // drill yards: towns with barracks sit on a tinted parade ground that grows with each barracks
     for (const t of towns) {
       if (!t.barracks || t.owner < 0) continue;
-      const y = (t.capital ? 14 : 10) + 30 + 9 * Math.min(3, t.barracks);
+      const y = (t.capital ? 16 : 10) + 30 + 9 * Math.min(3, t.barracks);
       rr(ctx, t.x - y, t.y - y, y * 2, y * 2, 14);
       ctx.globalAlpha = 0.45; ctx.fillStyle = COL.light[t.owner]; ctx.fill();
       ctx.globalAlpha = 0.7; ctx.strokeStyle = COL.mid[t.owner]; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
@@ -2261,7 +2284,7 @@
     }
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     for (const t of towns) {
-      const s = (t.capital ? 14 : 10) + Math.min(3, t.barracks) * 2;   // the keep grows with each barracks
+      const s = (t.capital ? 16 : 10) + Math.min(3, t.barracks) * 2;   // the keep grows with each barracks
       const col = t.owner < 0 ? COL.neutral : COL.team[t.owner];
       const R = s + 9;
       // houses: more appear as the garrison grows
@@ -2322,8 +2345,18 @@
       }
       ctx.fillStyle = COL.shadow; rr(ctx, t.x - s + 2, t.y - s + 3, s * 2, s * 2, 5); ctx.fill();
       ctx.fillStyle = col; rr(ctx, t.x - s, t.y - s, s * 2, s * 2, 5); ctx.fill();
-      if (t.capital) {   // battlements on the keep
-        for (const dx of [-s, -2.5, s - 5]) { rr(ctx, t.x + dx, t.y - s - 4, 5, 6, 1.2); ctx.fill(); }
+      if (t.capital) {   // battlements, a white inner border and a waving flag on the keep
+        for (const dx of [-s, -s / 2 - 2.5, -2.5, s / 2 - 2.5, s - 5]) { rr(ctx, t.x + dx, t.y - s - 4, 5, 6, 1.2); ctx.fill(); }
+        rr(ctx, t.x - s + 3, t.y - s + 3, s * 2 - 6, s * 2 - 6, 3);
+        ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1.5; ctx.stroke();
+        const px = t.x + s - 3, top = t.y - s - 30, wave = Math.sin(pulseT * 4 + t.x);
+        ctx.strokeStyle = '#5c6460'; ctx.lineWidth = 1.8; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(px, t.y - s - 3); ctx.lineTo(px, top); ctx.stroke();
+        ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(px, top);
+        ctx.quadraticCurveTo(px + 8, top - 2 + wave * 2, px + 17, top + 1 + wave * 1.5);
+        ctx.lineTo(px + 15, top + 6 + wave);
+        ctx.quadraticCurveTo(px + 8, top + 9 - wave * 2, px, top + 12); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = col;
       }
       if (t.owner >= 0) {
         ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.beginPath();
@@ -2332,13 +2365,24 @@
         else ctx.rect(t.x - 4, t.y - 4, 8, 8);
         ctx.fill();
       }
-      ctx.font = `600 ${t.capital ? 12 : 11}px Lexend, "Avenir Next", system-ui, sans-serif`;
-      ctx.fillStyle = 'rgba(46,55,53,.72)';
-      ctx.fillText(t.name, t.x, t.y + R + (t.capital ? 8 : 6));
+      if (t.capital) {   // capital names: bold, team-coloured, with a white halo
+        ctx.font = '800 13.5px Lexend, "Avenir Next", system-ui, sans-serif';
+        const label = t.name.toUpperCase(), ly = t.y + R + 8;
+        ctx.lineJoin = 'round'; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(255,255,255,.85)';
+        ctx.strokeText(label, t.x, ly);
+        ctx.fillStyle = t.owner < 0 ? COL.text : col; ctx.fillText(label, t.x, ly);
+        ctx.font = '600 9px Lexend, "Avenir Next", system-ui, sans-serif';
+        ctx.strokeText('CAPITAL', t.x, ly + 15);
+        ctx.fillStyle = 'rgba(46,55,53,.6)'; ctx.fillText('CAPITAL', t.x, ly + 15);
+      } else {
+        ctx.font = '600 11px Lexend, "Avenir Next", system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(46,55,53,.72)';
+        ctx.fillText(t.name, t.x, t.y + R + 6);
+      }
       if (t.barracks > 0) {
         ctx.font = '700 9.5px Lexend, "Avenir Next", system-ui, sans-serif';
         ctx.fillStyle = hallCol;
-        ctx.fillText(t.barracks === 1 ? 'Barracks' : `×${t.barracks} barracks`, t.x, t.y + R + (t.capital ? 22 : 20));
+        ctx.fillText(t.barracks === 1 ? 'Barracks' : `×${t.barracks} barracks`, t.x, t.y + R + (t.capital ? 35 : 20));
       }
     }
   }
