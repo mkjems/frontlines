@@ -1,0 +1,7 @@
+# Copy of /opt/frontlines/compose.yaml on the VPS.
+services:
+  frontlines:
+    image: ghcr.io/mkjems/frontlines:latest
+    ports:
+      - "127.0.0.1:8083:8080"
+    restart: unless-stopped

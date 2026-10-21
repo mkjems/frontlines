@@ -1,0 +1,73 @@
+name: Deploy Frontlines
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/mkjems/frontlines
+  VPS_APP_DIR: /opt/frontlines
+  VPS_LOCAL_URL: http://127.0.0.1:8083/
+  PUBLIC_URL: https://frontlines.mkjems.dk/
+
+concurrency:
+  group: frontlines-deploy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build page
+        run: ./build.sh
+
+      - name: Validate page
+        run: |
+          test -f Dockerfile
+          test -f site/index.html
+          grep -q '<title>Frontlines</title>' site/index.html
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script_stop: true
+          script: |
+            cd ${{ env.VPS_APP_DIR }}
+            docker compose pull
+            docker compose up -d --remove-orphans
+            docker image prune -f
+            curl -fsSI ${{ env.VPS_LOCAL_URL }}
+            curl -fsSI ${{ env.PUBLIC_URL }}

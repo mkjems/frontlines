@@ -1,0 +1,2503 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Frontlines</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;600;700&display=swap">
+<style>
+  /* Layout: full-bleed map canvas, floating pastel HUD chips at the corners, centered modal cards. Single light look by design (Mini Motorways-style map). */
+  :root {
+    --ground: #d9ded2;
+    --panel: #fbfbf7;
+    --ink: #2e3735;
+    --muted: #6d7771;
+    --line: #dfe3d8;
+    --blue: #3b6fd4;
+    --blue-soft: #b7cbef;
+    --red: #df5448;
+    --red-soft: #f2bcb6;
+    --font: "Lexend", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    color-scheme: light;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; overflow: hidden; background: var(--ground); color: var(--ink); font-family: var(--font); }
+  #map { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+  .hud {
+    position: fixed; top: calc(env(safe-area-inset-top, 0px) + 12px);
+    left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px));
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; pointer-events: none;
+  }
+  .panel {
+    background: var(--panel); border-radius: 12px; padding: 8px 12px; min-width: 0;
+    box-shadow: 0 1px 0 rgba(46, 55, 53, .05), 0 6px 18px rgba(46, 60, 50, .10);
+    pointer-events: auto;
+  }
+  .label { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .big { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .bar { height: 4px; border-radius: 4px; background: var(--line); overflow: hidden; margin-top: 6px; width: 120px; max-width: 100%; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--ink); border-radius: 4px; }
+  #clock .row { display: flex; align-items: baseline; gap: 8px; }
+  #day { font-size: 12px; color: var(--muted); }
+  #balance { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  #balance .split { display: flex; width: 160px; max-width: 32vw; height: 8px; border-radius: 8px; overflow: hidden; background: var(--line); }
+  #balance .split i { display: block; height: 100%; transition: width .4s ease; }
+  #balance .counts { display: flex; justify-content: space-between; width: 100%; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  #ink { text-align: right; }
+  #ink .bar { margin-left: auto; }
+  #ink .bar i { background: var(--blue); }
+
+  .controls {
+    position: fixed; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+    left: max(16px, env(safe-area-inset-left, 0px));
+    display: flex; gap: 8px;
+  }
+  .controls button, .btn {
+    font: 600 13px var(--font); color: var(--ink); background: var(--panel); border: 0; border-radius: 10px;
+    padding: 9px 14px; cursor: pointer; font-variant-numeric: tabular-nums;
+    box-shadow: 0 1px 0 rgba(46, 55, 53, .05), 0 6px 18px rgba(46, 60, 50, .10);
+  }
+  .controls button:hover, .btn:hover { background: #fff; }
+  button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .tray {
+    position: fixed; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+    right: max(16px, env(safe-area-inset-right, 0px));
+    display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; max-width: 55vw;
+  }
+  .tray button {
+    font: 600 13px var(--font); color: var(--ink); background: var(--panel); border: 0; border-radius: 10px;
+    padding: 9px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums;
+    box-shadow: 0 1px 0 rgba(46, 55, 53, .05), 0 6px 18px rgba(46, 60, 50, .10);
+  }
+  .tray button .ico { width: 12px; height: 12px; border-radius: 3px; background: var(--blue); display: block; }
+  .tray button .ico.tower { border-radius: 50%; }
+  .tray button .ico.fort { background: transparent; border: 2.5px solid var(--blue); box-sizing: border-box; }
+  .tray button .ico.bridge { border-radius: 2px; height: 6px; width: 16px; background: #c6ccbf; }
+  .tray button.armed { background: var(--blue); color: #fff; }
+  .tray button.armed .ico { background: #fff; }
+  .tray button.armed .ico.fort { background: transparent; border-color: #fff; }
+  .townmenu {
+    position: fixed; z-index: 5; background: var(--panel); border-radius: 14px; padding: 10px; width: 230px; box-sizing: border-box;
+    box-shadow: 0 2px 0 rgba(46, 55, 53, .05), 0 14px 36px rgba(46, 60, 50, .20);
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .townmenu .label { padding: 2px 4px 0; }
+  .tminfo { padding: 0 4px 4px; font-size: 12px; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .townmenu button {
+    font: 400 12px var(--font); color: var(--ink); background: transparent; border: 1.5px solid transparent; border-radius: 10px;
+    padding: 7px 8px; cursor: pointer; display: grid; grid-template-columns: 18px 1fr; gap: 2px 8px; text-align: left; align-items: center;
+  }
+  .townmenu button:hover { background: #fff; border-color: var(--line); }
+  .townmenu button.on { border-color: var(--blue); background: #fff; }
+  .townmenu button b { font-weight: 600; font-size: 13px; }
+  .townmenu button small { grid-column: 2; color: var(--muted); font-size: 11px; font-weight: 300; }
+  .townmenu .clear { display: block; text-align: center; color: var(--red); font-weight: 600; }
+  .shape { display: block; width: 12px; height: 12px; background: var(--blue); justify-self: center; }
+  .shape.k0 { clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+  .shape.k1 { border-radius: 50%; width: 11px; height: 11px; }
+  .shape.k2 { width: 10px; height: 10px; border-radius: 1px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  #chargeBtn:disabled { opacity: .55; cursor: default; }
+  #chargeBtn.armed { background: var(--blue); color: #fff; }
+  .pulse { animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(59, 111, 212, .55); } 50% { box-shadow: 0 0 0 7px rgba(59, 111, 212, 0); } }
+  .inspect {
+    position: fixed; z-index: 6; pointer-events: none; max-width: 250px; background: var(--panel); border-radius: 10px;
+    padding: 9px 11px; box-shadow: 0 2px 0 rgba(46, 55, 53, .05), 0 10px 26px rgba(46, 60, 50, .18);
+    display: grid; gap: 3px; font-size: 12px; line-height: 1.4;
+  }
+  .inspect b { font-size: 13px; font-weight: 600; }
+  .inspect .own { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; }
+  .inspect span { color: var(--muted); }
+  .coach {
+    position: fixed; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 60px);
+    max-width: 320px; background: var(--panel); border-radius: 12px; padding: 10px 34px 10px 12px; font-size: 12.5px; line-height: 1.45;
+    box-shadow: 0 2px 0 rgba(46, 55, 53, .05), 0 12px 30px rgba(46, 60, 50, .16); border-left: 4px solid var(--blue);
+  }
+  .coach .label { color: var(--blue); display: block; margin-bottom: 2px; }
+  .coach button { position: absolute; top: 6px; right: 6px; border: 0; background: transparent; font: 600 16px var(--font); color: var(--muted); cursor: pointer; padding: 2px 6px; }
+  .card.rules { max-width: 760px; }
+  .rules .cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 22px; }
+  .rules h3 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+  .rules ul { font-size: 12.5px; gap: 5px; }
+  .card.rules li { display: block; position: relative; padding-left: 16px; }
+  .card.rules li::before { position: absolute; left: 0; top: 5px; width: 7px; height: 7px; background: var(--muted); opacity: .45; }
+  .rules .k { font-weight: 600; }
+  @media (max-width: 700px) { .rules .cols { grid-template-columns: 1fr; } }
+  #tutSkip {
+    position: fixed; bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); left: 50%; transform: translateX(-50%);
+    font: 600 11px var(--font); color: var(--muted); background: transparent; border: 0; cursor: pointer; text-decoration: underline;
+  }
+  .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 10px; padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .stats div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .stats b { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stats span { font-size: 11px; color: var(--muted); }
+  .tag { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--blue); font-weight: 600; }
+  #hint {
+    position: fixed; bottom: calc(env(safe-area-inset-bottom, 0px) + 58px);
+    left: 50%; transform: translateX(-50%); max-width: min(560px, calc(100vw - 32px));
+    font-size: 12px; color: var(--muted); text-align: center; line-height: 1.4; pointer-events: none;
+    transition: opacity .6s ease;
+  }
+  #toast {
+    position: fixed; top: calc(env(safe-area-inset-top, 0px) + 84px); left: 50%; transform: translate(-50%, -6px);
+    background: var(--ink); color: #fff; font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 999px;
+    opacity: 0; transition: opacity .25s ease, transform .25s ease; pointer-events: none; white-space: nowrap;
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #toast.bad { background: var(--red); }
+  #toast.good { background: var(--blue); }
+
+  .overlay {
+    position: fixed; inset: 0; display: flex; overflow-y: auto; padding-block: 16px;
+    background: rgba(217, 222, 210, .55); backdrop-filter: blur(3px);
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .card {
+    background: var(--panel); border-radius: 18px; padding: 28px; max-width: 440px; width: 100%;
+    box-shadow: 0 2px 0 rgba(46, 55, 53, .05), 0 24px 60px rgba(46, 60, 50, .18);
+    display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; margin: auto;
+  }
+  .card h1 { margin: 0; font-size: 40px; font-weight: 700; letter-spacing: -.02em; line-height: 1; text-wrap: balance; }
+  .card h2 { margin: 0; font-size: 24px; font-weight: 600; text-wrap: balance; }
+  .card p { margin: 0; color: var(--muted); line-height: 1.5; font-size: 14px; font-weight: 300; }
+  .card ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; font-size: 13px; line-height: 1.45; }
+  .card li { display: grid; grid-template-columns: 14px 1fr; gap: 10px; align-items: start; }
+  .card li::before { content: ""; width: 10px; height: 10px; border-radius: 3px; margin-top: 4px; background: var(--blue); }
+  .card li.r::before { background: var(--red); }
+  .card li.n::before { background: #a8a497; }
+  .hero { margin: -28px -28px 0; border-radius: 18px 18px 0 0; overflow: hidden; line-height: 0; }
+  .hero svg { width: 100%; height: auto; display: block; }
+  .march { animation: march 1.8s linear infinite; }
+  @keyframes march { from { transform: translate(0, 0); } to { transform: translate(var(--mx), var(--my)); } }
+  .icon-tile { width: 40px; height: 40px; border-radius: 10px; background: #e9eff9; color: var(--blue); display: grid; place-items: center; }
+  .icon-tile svg, .tray svg { display: block; }
+  .tray svg { width: 16px; height: 16px; color: var(--blue); }
+  .tray button.armed svg { color: #fff; }
+  .tray button:disabled { opacity: .5; cursor: default; }
+  .hud-right { display: flex; gap: 10px; align-items: flex-start; }
+  .tray .price { display: inline-flex; align-items: center; gap: 3px; color: #a07d12; font-weight: 600; }
+  .tray button.armed .price { color: #fff; }
+  .coin { width: 9px; height: 9px; border-radius: 50%; background: #e2b93b; box-shadow: inset 0 0 0 1.5px #c79a1e; display: inline-block; }
+  #gold .big { display: flex; align-items: center; gap: 6px; }
+  #gold .coin { width: 12px; height: 12px; }
+  #goldRate { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .btn.primary { background: var(--blue); color: #fff; padding: 12px 18px; font-size: 14px; align-self: flex-start; }
+  .diff { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .diff .label { margin-right: 4px; }
+  .diff button {
+    font: 600 12px var(--font); color: var(--ink); background: #fff; border: 1.5px solid var(--line); border-radius: 999px;
+    padding: 6px 12px; cursor: pointer;
+  }
+  .diff button.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .tips { background: #eef2f8; border-radius: 12px; padding: 12px 14px; display: grid; gap: 6px; }
+  .tips .label { color: var(--blue); }
+  .tips ol { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: 12.5px; line-height: 1.45; color: var(--ink); }
+  .tips p { font-size: 12.5px; }
+  .btn.primary:hover { background: #3264c4; }
+  .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .choice {
+    text-align: left; font: inherit; color: var(--ink); background: #fff; border: 1.5px solid var(--line);
+    border-radius: 14px; padding: 14px; cursor: pointer; display: flex; flex-direction: column; gap: 6px;
+    transition: transform .15s ease, border-color .15s ease;
+  }
+  .choice:hover { transform: translateY(-2px); border-color: var(--blue); }
+  .choice b { font-weight: 600; font-size: 15px; }
+  .choice .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .choice span { font-size: 12px; color: var(--muted); line-height: 1.4; font-weight: 300; }
+  @media (max-width: 560px) {
+    #balance { display: none; }
+    #hint { bottom: calc(env(safe-area-inset-bottom, 0px) + 106px); }
+    .tray { bottom: calc(env(safe-area-inset-bottom, 0px) + 58px); left: max(16px, env(safe-area-inset-left, 0px)); max-width: none; justify-content: flex-start; }
+    .tray .name { display: none; }
+    #tutSkip { bottom: calc(env(safe-area-inset-bottom, 0px) + 88px); }
+    #goldRate { display: none; }
+    .choices { grid-template-columns: 1fr; }
+    .card { padding: 22px; }
+    .hero { margin: -22px -22px 0; }
+    .card h1 { font-size: 32px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .march { animation: none; } * { transition: none !important; } .pulse { animation: none; outline: 2px solid var(--blue); } }
+</style>
+
+<canvas id="map"></canvas>
+
+<div class="hud">
+  <div class="panel" id="clock">
+    <div class="row"><span class="big">Week <span id="wk">1</span></span><span id="day">Monday</span></div>
+    <div class="bar"><i id="wkbar"></i></div>
+  </div>
+  <div class="panel" id="balance">
+    <span class="label">Army strength</span>
+    <div class="split"><i id="balB" style="background:var(--blue);width:50%"></i><i id="balR" style="background:var(--red);width:50%"></i></div>
+    <div class="counts"><span id="cntB" style="color:var(--blue)">0</span><span id="cntR" style="color:var(--red)">0</span></div>
+  </div>
+  <div class="hud-right">
+  <div class="panel" id="gold">
+    <span class="label">Gold</span>
+    <div class="big"><i class="coin"></i><span id="goldv">0</span></div>
+    <span id="goldRate">+0 per week</span>
+  </div>
+  <div class="panel" id="ink">
+    <span class="label">Route ink</span>
+    <div class="big"><span id="inkv">0</span></div>
+    <div class="bar"><i id="inkbar"></i></div>
+  </div>
+  </div>
+</div>
+
+<div class="controls">
+  <button id="pauseBtn" type="button" aria-label="Pause">❚❚ Pause</button>
+  <button id="speedBtn" type="button" aria-label="Game speed">1×</button>
+  <button id="chargeBtn" type="button">Charge</button>
+  <button id="soundBtn" type="button" aria-label="Toggle sound">Sound on</button>
+  <button id="rulesBtn" type="button">Rules</button>
+</div>
+<div class="townmenu" id="townMenu" hidden>
+  <span class="label" id="tmName">Town</span>
+  <span id="tmInfo" class="tminfo"></span>
+  <button type="button" id="tmK0" data-k="0"><i class="shape k0"></i><b>Spearmen</b><small>Sturdy. Beat cavalry. Slow.</small></button>
+  <button type="button" id="tmK1" data-k="1"><i class="shape k1"></i><b>Archers</b><small>Shoot from range. Beat spearmen. Fragile.</small></button>
+  <button type="button" id="tmK2" data-k="2"><i class="shape k2"></i><b>Cavalry</b><small>Fast, brutal charge. Beat archers. Train slowly.</small></button>
+  <button type="button" id="tmClear" class="clear">Clear route</button>
+</div>
+<div class="tray" id="tray"></div>
+<div id="hint">Drag from a blue town to draw a march route.</div>
+<div id="toast"></div>
+<button id="tutSkip" type="button" hidden>Skip tips</button>
+
+<div class="overlay" id="intro">
+  <div class="card">
+    <div class="hero" id="introHero"></div>
+    <h1>Frontlines</h1>
+    <p>Two kingdoms, one river. You never command a soldier. You draw the roads they march on, and the armies sort out the rest.</p>
+    <ul>
+      <li>Drag from a blue town to draw a march route. Tap a town to choose its troops or clear its route.</li>
+      <li class="n">End a route on an enemy or grey town to attack it, or on open ground to gather an army. Drag from a gathered army to send it on.</li>
+      <li>Big groups hit harder, troops arriving at a run hit hardest, and everyone fights better near home.</li>
+      <li>Farms and gold mines earn gold. Spend it in the tray on forts, watchtowers, bridges, barracks and more farms. A mine works for whoever holds the land around it. The enemy farms, mines and builds too.</li>
+      <li>Terrain matters. Roads are fast: troops march 40% quicker on them. Archers on hills shoot further, and attacking uphill is weaker. Forests slow troops but shelter them from arrows. Fords let anyone wade across the river, slowly.</li>
+      <li class="r">The enemy gathers at the bridges and sometimes fakes an attack. Take Redmarsh to win; lose Ashford and the war is over.</li>
+    </ul>
+    <div class="legend">
+      <span><i class="shape k0"></i>Spearmen beat cavalry</span>
+      <span><i class="shape k2"></i>Cavalry beat archers</span>
+      <span><i class="shape k1"></i>Archers beat spearmen</span>
+    </div>
+    <div class="diff" id="diff">
+      <span class="label">Difficulty</span>
+      <button type="button" id="diff-easy" data-d="easy">Easy</button>
+      <button type="button" id="diff-normal" data-d="normal">Normal</button>
+      <button type="button" id="diff-hard" data-d="hard">Hard</button>
+    </div>
+    <div class="tips" id="diffTips" aria-live="polite">
+      <span class="label" id="tipsTitle">How to win</span>
+      <p id="tipsIntro"></p>
+      <ol id="tipsList"></ol>
+    </div>
+    <button class="btn primary" id="startBtn" type="button">Start campaign</button>
+  </div>
+</div>
+
+<div class="inspect" id="inspect" hidden></div>
+<div class="coach" id="coach" hidden><span class="label">Tip</span><span id="coachText"></span><button type="button" id="coachClose" aria-label="Dismiss tip">×</button></div>
+
+<div class="overlay" id="rules" hidden>
+  <div class="card rules">
+    <span class="label">How Frontlines works</span>
+    <h2>Rules at a glance</h2>
+    <div class="cols">
+      <div><h3>Orders</h3><ul>
+        <li><span class="k">Drag from a town</span> to draw its march route. New soldiers follow it. The line snaps to roads; hold <span class="k">Shift</span> to draw freehand.</li>
+        <li><span class="k">End on a town</span> to attack it, or <span class="k">on open ground</span> to gather an army there.</li>
+        <li><span class="k">Drag from a gathered army</span> to send it on. Free, costs no ink.</li>
+        <li><span class="k">Tap a town</span> to pick its troops or clear its route.</li>
+        <li><span class="k">Charge</span> (every 25s): troops in the circle sprint and hit harder.</li>
+        <li><span class="k">Space</span> pauses, <span class="k">Esc</span> cancels. Hold <span class="k">Shift</span> and hover to inspect anything.</li>
+      </ul></div>
+      <div><h3>Troops</h3><ul>
+        <li><span class="k">Spearmen ▲</span> tough, stop cavalry charges. Beat cavalry.</li>
+        <li><span class="k">Archers ●</span> shoot from range, fragile up close. Beat spearmen.</li>
+        <li><span class="k">Cavalry ■</span> fast, triple charge damage, train slowly. Beat archers.</li>
+      </ul>
+      <h3 style="margin-top:12px">Combat</h3><ul>
+        <li>Each nearby ally adds 6% damage, up to +60%.</li>
+        <li>Troops fight 40% tougher near their own towns, 55% inside a fort's circle.</li>
+        <li>A town falls when enough enemies march into it to empty its defence ring.</li>
+      </ul></div>
+      <div><h3>Terrain</h3><ul>
+        <li><span class="k">Roads</span>: march 40% faster.</li>
+        <li><span class="k">Woods</span>: 35% slower, arrows do half damage.</li>
+        <li><span class="k">Hills</span>: archers +10 range per contour; downhill hits +25%, uphill −20%.</li>
+        <li><span class="k">Fords</span>: anyone can wade across at 45% speed.</li>
+      </ul></div>
+      <div><h3>Economy</h3><ul>
+        <li><span class="k">Farms</span> earn about 7 gold a week for whoever holds their town.</li>
+        <li><span class="k">Gold mines</span> earn 27 a week for whoever holds the land around them.</li>
+        <li>Buy in the tray: farm 30, watchtower 40, fort 60, barracks 70, bridge 80. Each repeat costs 50% more.</li>
+        <li>Route ink: 600 plus 300 per town you hold.</li>
+        <li>Each week: one free reinforcement, and the enemy grows stronger.</li>
+      </ul></div>
+    </div>
+    <button class="btn primary" id="rulesClose" type="button">Back to the battle</button>
+  </div>
+</div>
+
+<div class="overlay" id="upgrade" hidden>
+  <div class="card">
+    <span class="label" id="upLabel">Week 1 complete</span>
+    <h2>Choose a reinforcement</h2>
+    <div class="choices" id="choices"></div>
+  </div>
+</div>
+
+<div class="overlay" id="over" hidden>
+  <div class="card">
+    <div class="hero" id="overHero"></div>
+    <span class="label" id="overLabel">Campaign over</span>
+    <h1 id="overTitle">Victory</h1>
+    <p id="overText"></p>
+    <div class="stats" id="overStats"></div>
+    <button class="btn primary" id="againBtn" type="button">Play again</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const cvs = $('map'), ctx = cvs.getContext('2d');
+
+  const STEP = 1 / 40, SPEED = 34, WEEK = 45, CELL = 32;
+  const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const COL = {
+    outside: '#d9ded2', land: '#e8ebe2', land2: '#e2e7da', river: '#a9cfe2', riverDeep: '#9dc6dc', shore: '#efeadb', shadow: 'rgba(36,48,38,.15)', bridge: '#fbfaf6', bridgeEdge: '#c6ccbf',
+    tree: '#cddbc1', tree2: '#c1d3b3', text: '#2e3735',
+    team: ['#3b6fd4', '#df5448'], light: ['#bccfef', '#f3c3bd'], mid: ['#86a6e4', '#ec958b'],
+    neutral: '#a8a497', neutralLight: '#d8d5cc', track: 'rgba(46,55,53,.10)'
+  };
+
+  // ---------- sound: everything is synthesized, no audio files ----------
+  const Sound = (() => {
+    let ac = null, master = null, noiseBuf = null, rumbleGain = null, muted = false, lastArrow = 0, lastHit = 0, lastClick = 0;
+    try { muted = localStorage.getItem('frontlines-muted') === '1'; } catch (e) {}
+    function init() {
+      if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      try {
+        ac = new AC();
+        master = ac.createGain(); master.gain.value = muted ? 0 : 0.5; master.connect(ac.destination);
+        noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+        const d = noiseBuf.getChannelData(0);
+        let b = 0;
+        for (let i = 0; i < d.length; i++) { b = (b + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = b * 3.5; }   // brown noise
+        const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+        const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 260;
+        rumbleGain = ac.createGain(); rumbleGain.gain.value = 0;
+        src.connect(lp); lp.connect(rumbleGain); rumbleGain.connect(master); src.start();
+      } catch (e) { ac = null; }
+    }
+    function tone(freq, dur, o = {}) {
+      if (!ac || muted) return;
+      const t0 = ac.currentTime + (o.delay || 0);
+      const osc = ac.createOscillator(), g = ac.createGain();
+      osc.type = o.type || 'sine';
+      osc.frequency.setValueAtTime(freq, t0);
+      if (o.glide) osc.frequency.exponentialRampToValueAtTime(o.glide, t0 + dur);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(o.vol || 0.15, t0 + (o.attack || 0.006));
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      osc.connect(g); g.connect(master); osc.start(t0); osc.stop(t0 + dur + 0.05);
+    }
+    function noise(dur, o = {}) {
+      if (!ac || muted) return;
+      const t0 = ac.currentTime + (o.delay || 0);
+      const src = ac.createBufferSource(); src.buffer = noiseBuf;
+      const f = ac.createBiquadFilter(); f.type = o.filter || 'bandpass'; f.frequency.value = o.freq || 1000; f.Q.value = o.q || 1;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(o.vol || 0.2, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      src.connect(f); f.connect(g); g.connect(master); src.start(t0, Math.random()); src.stop(t0 + dur + 0.05);
+    }
+    const now = () => performance.now();
+    return {
+      init,
+      get muted() { return muted; },
+      setMuted(m) {
+        muted = m;
+        if (master) master.gain.value = m ? 0 : 0.5;
+        try { localStorage.setItem('frontlines-muted', m ? '1' : '0'); } catch (e) {}
+      },
+      click() { if (now() - lastClick > 45) { lastClick = now(); tone(1700, 0.025, { type: 'triangle', vol: 0.03 }); } },
+      commit() { tone(660, 0.12, { vol: 0.1 }); tone(990, 0.2, { vol: 0.08, delay: 0.07 }); },
+      menu() { tone(880, 0.06, { type: 'triangle', vol: 0.06 }); },
+      select() { tone(1175, 0.08, { type: 'triangle', vol: 0.06 }); },
+      place() { noise(0.18, { filter: 'lowpass', freq: 300, vol: 0.5 }); tone(150, 0.2, { vol: 0.18, glide: 70 }); },
+      good() { [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.35, { type: 'triangle', vol: 0.09, delay: i * 0.08 })); },
+      bad() { [440, 349, 294].forEach((f, i) => tone(f, 0.45, { type: 'triangle', vol: 0.1, delay: i * 0.13 })); },
+      charge() { tone(196, 0.55, { type: 'sawtooth', vol: 0.05, glide: 392 }); tone(294, 0.55, { type: 'sawtooth', vol: 0.035, glide: 588, delay: 0.06 }); },
+      arrow() { if (now() - lastArrow > 90) { lastArrow = now(); noise(0.05, { freq: 3200, q: 3, vol: 0.05 }); } },
+      hit() { if (now() - lastHit > 70) { lastHit = now(); noise(0.05, { freq: 600 + Math.random() * 500, q: 4, vol: 0.12 }); } },
+      alarm() { tone(784, 0.14, { type: 'square', vol: 0.035 }); tone(784, 0.14, { type: 'square', vol: 0.035, delay: 0.22 }); },
+      week() { tone(1047, 1.4, { vol: 0.08 }); tone(1568, 1.4, { vol: 0.04 }); },
+      victory() { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.7, { type: 'triangle', vol: 0.1, delay: i * 0.12 })); },
+      defeat() { [392, 330, 262, 196].forEach((f, i) => tone(f, 0.8, { type: 'triangle', vol: 0.1, delay: i * 0.2 })); },
+      clash(level) { if (rumbleGain) rumbleGain.gain.setTargetAtTime(muted ? 0 : Math.min(0.55, level * 0.012), ac.currentTime, 0.25); },
+    };
+  })();
+
+  // ---------- artwork: hero scenes and icons, drawn as inline SVG ----------
+  function heroSVG(mode) {   // 'intro' | 'win' | 'lose'
+    const BL = '#3b6fd4', RD = '#df5448';
+    const leftCol = mode === 'lose' ? RD : BL, rightCol = mode === 'win' ? BL : RD;
+    const castle = (x, col, flip) => `
+      <g transform="translate(${x} 62)">
+        <rect x="-21" y="-13" width="46" height="36" rx="5" fill="rgba(36,48,38,.15)"/>
+        <rect x="-24" y="-16" width="46" height="36" rx="5" fill="${col}"/>
+        ${[-24, -12, 0, 12].map(dx => `<rect x="${dx}" y="-22" width="8" height="8" rx="1.5" fill="${col}"/>`).join('')}
+        <rect x="-6" y="2" width="10" height="18" rx="5" fill="rgba(255,255,255,.85)"/>
+        <line x1="${flip ? -20 : 18}" y1="-22" x2="${flip ? -20 : 18}" y2="-44" stroke="#5c6460" stroke-width="1.6"/>
+        <path d="M${flip ? -20 : 18} -44 l${flip ? -14 : 14} 4 l${flip ? 14 : -14} 4z" fill="${col}"/>
+      </g>`;
+    const march = (pts, col, shape, n) => {
+      const [x0, y0, x1, y1] = pts, dx = (x1 - x0) / n, dy = (y1 - y0) / n;
+      let g = '';
+      for (let i = 0; i < n; i++) {
+        const x = x0 + dx * i, y = y0 + dy * i + (i % 2 ? 2.5 : -2.5);
+        g += shape === 'tri' ? `<path d="M${x} ${y - 3.6}l3.4 6h-6.8z" fill="${col}"/>`
+          : shape === 'sq' ? `<rect x="${x - 2.8}" y="${y - 2.8}" width="5.6" height="5.6" fill="${col}"/>`
+          : `<circle cx="${x}" cy="${y}" r="2.9" fill="${col}"/>`;
+      }
+      return `<g class="march" style="--mx:${dx}px;--my:${dy}px">${g}</g>`;
+    };
+    const trees = [[24, 112, 9], [36, 120, 7], [128, 22, 8], [140, 30, 6], [262, 120, 8], [276, 128, 6], [372, 112, 9], [360, 24, 7], [384, 34, 6]]
+      .map(([x, y, r]) => `<circle cx="${x + 2}" cy="${y + 3}" r="${r}" fill="rgba(36,48,38,.12)"/><circle cx="${x}" cy="${y}" r="${r}" fill="${r > 7 ? '#c1d3b3' : '#cddbc1'}"/>`).join('');
+    const pines = [[110, 120], [120, 128], [292, 18], [304, 26]]
+      .map(([x, y]) => `<path d="M${x} ${y - 10}l7 14h-14z" fill="#b5caa9"/>`).join('');
+    const field = (x, y, rot, col) => `<g transform="translate(${x} ${y}) rotate(${rot})"><rect x="-18" y="-11" width="36" height="22" rx="3" fill="${col}"/>${[-6, 0, 6].map(o => `<line x1="-16" y1="${o}" x2="16" y2="${o}" stroke="rgba(120,110,70,.18)" stroke-width="1.4"/>`).join('')}</g>`;
+    let armies = '';
+    if (mode === 'intro') armies = march([96, 104, 168, 82], BL, 'tri', 7) + march([304, 104, 232, 82], RD, 'circ', 7) + march([110, 32, 170, 74], BL, 'sq', 5);
+    else if (mode === 'win') armies = march([96, 104, 300, 92], BL, 'tri', 18);
+    else armies = march([304, 104, 100, 92], RD, 'circ', 18);
+    const clash = mode === 'intro' ? `<circle cx="200" cy="80" r="9" fill="none" stroke="rgba(46,55,53,.3)" stroke-width="1.4"/><circle cx="200" cy="80" r="16" fill="none" stroke="rgba(46,55,53,.15)" stroke-width="1.2"/>` : '';
+    return `<svg viewBox="0 0 400 150" role="img" aria-label="Two castles facing each other across a river">
+      <rect width="400" height="150" fill="#e8ebe2"/>
+      <ellipse cx="62" cy="30" rx="80" ry="40" fill="#e1e6d8"/><ellipse cx="62" cy="30" rx="50" ry="24" fill="#d9dfcf"/><ellipse cx="62" cy="30" rx="22" ry="10" fill="#d0d7c4"/>
+      <ellipse cx="350" cy="132" rx="90" ry="40" fill="#e1e6d8"/><ellipse cx="350" cy="132" rx="56" ry="24" fill="#d9dfcf"/>
+      ${field(130, 100, -8, '#e9e3c4')}${field(280, 44, 10, '#dfe6c8')}${field(286, 104, -12, '#e9e3c4')}
+      <path d="M95 104 Q140 96 168 82 M304 104 Q262 96 232 82" stroke="#e2dbc5" stroke-width="5" fill="none" stroke-linecap="round"/>
+      <path d="M222 -10 C 190 40, 215 100, 182 160" stroke="#efeadb" stroke-width="40" fill="none"/>
+      <path d="M222 -10 C 190 40, 215 100, 182 160" stroke="#a9cfe2" stroke-width="30" fill="none"/>
+      <path d="M222 -10 C 190 40, 215 100, 182 160" stroke="#9dc6dc" stroke-width="12" fill="none"/>
+      <path d="M205 20 l8 3 M196 50 l7 3 M206 118 l8 3" stroke="rgba(255,255,255,.6)" stroke-width="1.4" stroke-linecap="round"/>
+      <rect x="172" y="73" width="60" height="18" rx="4" fill="rgba(36,48,38,.15)"/>
+      <rect x="170" y="71" width="60" height="18" rx="4" fill="#fbfaf6" stroke="#c6ccbf" stroke-width="1.5"/>
+      ${[178, 186, 194, 202, 210, 218].map(x => `<line x1="${x}" y1="73" x2="${x}" y2="87" stroke="rgba(150,160,140,.4)"/>`).join('')}
+      ${trees}${pines}
+      ${castle(70, leftCol, false)}${castle(330, rightCol, true)}
+      ${armies}${clash}
+    </svg>`;
+  }
+  const ICON = {
+    fort: '<path d="M4 20V9h3V6h3v3h4V6h3v3h3v11z"/><path d="M10 20v-5h4v5"/>',
+    tower: '<path d="M8 21V10h8v11"/><path d="M7 10V5h2v2h2V5h2v2h2V5h2v5"/><path d="M12 13v3"/>',
+    bridge: '<path d="M2 14h20"/><path d="M4 18c2-6 14-6 16 0"/><path d="M7 14v-3M12 14v-3M17 14v-3"/>',
+    barracks: '<path d="M4 11l8-6 8 6v9H4z"/><path d="M10 20v-5h4v5"/><path d="M12 5V1.5l4 1.5-4 1.5"/>',
+    farm: '<path d="M12 21V8"/><path d="M12 8c-3 0-4.5-2.5-4.5-5 2.5 0 4.5 1.5 4.5 5zM12 8c3 0 4.5-2.5 4.5-5-2.5 0-4.5 1.5-4.5 5zM12 14c-3 0-4.5-2.5-4.5-5 2.5 0 4.5 1.5 4.5 5zM12 14c3 0 4.5-2.5 4.5-5-2.5 0-4.5 1.5-4.5 5z"/>',
+    ink: '<circle cx="12" cy="12" r="8.5"/><path d="M12 6.5l2 5.5-2 5.5-2-5.5z"/>',
+    drill: '<ellipse cx="12" cy="9" rx="7" ry="2.8"/><path d="M5 9v7c0 1.6 3.1 2.8 7 2.8s7-1.2 7-2.8V9"/><path d="M6 3l5 4M18 3l-5 4"/>',
+  };
+  const icon = (k, size = 24) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k] || ''}</svg>`;
+
+  const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+  const rand = (a, b) => a + Math.random() * (b - a);
+
+  // ---------- world ----------
+  let W, H, P, LA, LB, scale = 1, offX = 0, offY = 0, dpr = 1, bg = null;
+  let river, bridges, towns, units, deaths, puffs, trees, patches, bgOver = null;
+  let scars = [], waves = [], ripples = [], fields = [], hills = [], roads = [], rocks = [], compass = { x: 0, y: 0 };
+  let state = 'intro', paused = false, speed = 1, time = 0, week = 1, weekT = 0, aiT = 6, ink = 0;
+  let uid = 0, routeSeq = 0, frameNo = 0, routesDrawn = 0;
+  let stats, structs = [], tracers = [], inventory = {}, armed = null, ghost = null, plan = null, hintBase = '';
+  const ITEM = { farm: 'Farm', tower: 'Watchtower', fort: 'Fort', barracks: 'Barracks', bridge: 'Bridge' };
+  // Gold comes from farms around your towns and from gold mines on land you control.
+  const PRICE = { farm: 30, tower: 40, fort: 60, barracks: 70, bridge: 80 };
+  const FARM_RATE = 0.15, MINE_RATE = 0.6;   // gold per second
+  let gold = 0, bought = {}, mines = [], coins = [], redGold = 0, redBought = {}, redBuys = 0;
+  const priceOf = k => Math.round(PRICE[k] * 1.5 ** (bought[k] || 0));
+  // Troop types: 0 spearmen, 1 archers, 2 cavalry
+  const KIND = ['Spearmen', 'Archers', 'Cavalry'];
+  const K_HP = [4, 2, 3], K_SPEED = [1, 1, 1.6], K_TRAIN = [0.85, 1, 1.4];
+  const K_MULT = [[1, 1, 1.4], [1.2, 1, 0.8], [0.75, 1.8, 1]];   // [attacker][defender]
+  const START_KIND = { Ashford: 0, Brindle: 1, Coldwater: 2, Redmarsh: 0, Thornby: 1, Vexley: 2, Millbrook: 2, Oakhollow: 1, Fennick: 1, Larkspur: 2 };
+  const CHARGE_CD = 25;
+  let chargeCd = 0, menuTown = null, alerts = [], strikes = 0, clashLevel = 0;
+  let tally = { trained: 0, lost: 0, killed: 0, captured: 0, fallen: 0 };
+  // Enemy scaling per difficulty. Hard is the original balance.
+  const DIFF = {
+    easy:   { blueTrain: 1.15, redTrain: 0.75, redGrowth: 0.03, hpEvery: 0, buildEvery: 4, counter: 0.2, gather: 22, redIncome: 0.25 },
+    normal: { blueTrain: 1,   redTrain: 0.92, redGrowth: 0.07, hpEvery: 5, buildEvery: 2, counter: 0.45, gather: 16, redIncome: 0.7 },
+    hard:   { blueTrain: 1,   redTrain: 1,    redGrowth: 0.12, hpEvery: 3, buildEvery: 1, counter: 0.6, gather: 14, redIncome: 1 },
+  };
+  let difficulty = 'normal';
+  try { const d = localStorage.getItem('frontlines-difficulty'); if (DIFF[d]) difficulty = d; } catch (e) {}
+  const D = () => DIFF[difficulty];
+  // Route ink grows with the towns you hold.
+  function inkCap() { return 600 + 300 * towns.filter(t => t.owner === 0).length + ink; }
+
+  // a = axis between the two kingdoms, b = axis along the river
+  const A = (x, y) => P ? y : x;
+  const B = (x, y) => P ? x : y;
+  const XY = (a, b) => P ? { x: b, y: a } : { x: a, y: b };
+  const blueSide = () => P ? 1 : -1;
+
+  function riverA(b) { return LA * (0.5 + river.amp * Math.sin(b / LB * Math.PI * 2 * 1.15 + river.phase)); }
+  function sideOf(x, y) { return A(x, y) < riverA(B(x, y)) ? -1 : 1; }
+  function bridgeAt(b) { for (const br of bridges) if (Math.abs(b - br.b) < br.span) return br; return null; }
+  function inBand(x, y) { return Math.abs(A(x, y) - riverA(B(x, y))) < river.hw; }
+  function onBridge(x, y) { return inBand(x, y) && !!bridgeAt(B(x, y)); }
+  function isWater(x, y) { return inBand(x, y) && !bridgeAt(B(x, y)); }
+  function bridgeEnd(br, s) { return XY(riverA(br.b) + s * (river.hw + 14), br.b); }
+
+  function bestBridge(x0, y0, x1, y1) {
+    const s0 = sideOf(x0, y0), s1 = sideOf(x1, y1);
+    let best = bridges[0], bd = Infinity;
+    for (const br of bridges) {
+      const en = bridgeEnd(br, s0), ex = bridgeEnd(br, s1);
+      const d = Math.hypot(en.x - x0, en.y - y0) + Math.hypot(x1 - ex.x, y1 - ex.y) + (br.ford ? 90 : 0);
+      if (d < bd) { bd = d; best = br; }
+    }
+    return best;
+  }
+
+  // Where should a unit at (x,y) head to reach (tx,ty)? Routes around the river via the best bridge.
+  function nav(x, y, tx, ty) {
+    const s0 = sideOf(x, y), s1 = sideOf(tx, ty);
+    if (s0 === s1 || onBridge(x, y)) return [tx, ty];
+    const br = bestBridge(x, y, tx, ty);
+    const en = bridgeEnd(br, s0);
+    if (Math.hypot(en.x - x, en.y - y) < 22) { const ex = bridgeEnd(br, s1); return [ex.x, ex.y]; }
+    return [en.x, en.y];
+  }
+
+  // River is solid except on bridges; bridge rails keep units on the deck.
+  function constrain(u) {
+    let a = A(u.x, u.y), b = B(u.x, u.y);
+    const c = riverA(b), d = a - c;
+    if (Math.abs(d) < river.hw) {
+      let near = null;
+      for (const br of bridges) if (Math.abs(b - br.b) < br.span + 10) { near = br; break; }
+      if (near) { if (Math.abs(b - near.b) > near.span - 3) b = near.b + Math.sign(b - near.b) * (near.span - 3); }
+      else a = c + (d < 0 ? -1 : 1) * river.hw;
+    }
+    a = clamp(a, 6, LA - 6); b = clamp(b, 6, LB - 6);
+    const p = XY(a, b); u.x = p.x; u.y = p.y;
+  }
+
+  const LAYOUT = [
+    // name, a from blue edge (0..1), b along river (0..1), owner, capital
+    ['Ashford', 0.08, 0.50, 0, true], ['Brindle', 0.24, 0.20, 0], ['Coldwater', 0.22, 0.80, 0],
+    ['Redmarsh', 0.92, 0.50, 1, true], ['Thornby', 0.76, 0.80, 1], ['Vexley', 0.78, 0.20, 1],
+    ['Millbrook', 0.38, 0.38, -1], ['Oakhollow', 0.36, 0.92, -1], ['Fennick', 0.62, 0.62, -1], ['Larkspur', 0.64, 0.08, -1],
+  ];
+
+  function baseHold(t) { return t.capital ? 40 : 20; }
+
+  function newGame() {
+    const vw = innerWidth, vh = innerHeight;
+    P = vh > vw * 1.1;
+    const long = clamp(Math.max(vw, vh), 1000, 1500), ratio = Math.min(vw, vh) / Math.max(vw, vh);
+    const short = Math.max(long * ratio, long * 0.56);
+    LA = long; LB = short;
+    if (P) { W = short; H = long; } else { W = long; H = short; }
+    river = { amp: 0.028, phase: rand(0, Math.PI * 2), hw: Math.round(LA * 0.02 + 12) };
+    bridges = [{ b: LB * rand(0.22, 0.32), span: 20 }, { b: LB * rand(0.68, 0.78), span: 20 },
+      { b: LB * rand(0.46, 0.54), span: 22, ford: true }];   // a shallow ford: anyone can wade across, slowly
+
+    towns = LAYOUT.map(([name, an, bn, owner, capital]) => {
+      an += rand(-0.015, 0.015); bn += rand(-0.02, 0.02);
+      const a = blueSide() < 0 ? an * LA : (1 - an) * LA;
+      const p = XY(a, bn * LB);
+      const t = { name, x: p.x, y: p.y, owner, capital: !!capital, route: null, spawnT: rand(0.5, 2), n: 0, hit: 0, barracks: 0, kind: START_KIND[name] };
+      t.holdMax = owner < 0 ? 10 : baseHold(t); t.hold = t.holdMax;
+      return t;
+    });
+
+    trees = []; patches = [];
+    for (let i = 0; i < 14; i++) patches.push({ x: rand(0, W), y: rand(0, H), r: rand(60, 160) });
+    const nearRiver = (x, y, m) => Math.abs(A(x, y) - riverA(B(x, y))) < river.hw + m;
+    compass = { x: 54, y: H - 54 };
+    // gold mines: one deep on each side, two contested near the river
+    mines = [];
+    for (const an of [0.28, 0.72, 0.42, 0.58]) {
+      for (let tries = 0; tries < 80; tries++) {
+        const bn = rand(0.1, 0.9), a = blueSide() < 0 ? an * LA : (1 - an) * LA, p = XY(a + rand(-20, 20), bn * LB);
+        if (p.x < 40 || p.y < 40 || p.x > W - 40 || p.y > H - 40 || nearRiver(p.x, p.y, 40)) continue;
+        if (towns.some(t => Math.hypot(t.x - p.x, t.y - p.y) < 110) || mines.some(m => Math.hypot(m.x - p.x, m.y - p.y) < 220)) continue;
+        if (bridges.some(br => { const q = XY(riverA(br.b), br.b); return Math.hypot(q.x - p.x, q.y - p.y) < 90; })) continue;
+        mines.push({ x: p.x, y: p.y, owner: -1, acc: 0, glow: 0 });
+        break;
+      }
+    }
+    const nearMine = (x, y, m) => mines.some(mn => Math.hypot(mn.x - x, mn.y - y) < m);
+    // crop fields outside each town
+    fields = [];
+    for (const t of towns) {
+      for (let k = 0, tries = 0; k < (t.capital ? 3 : 2) && tries < 60; tries++) {
+        const ang = rand(0, Math.PI * 2), r = rand(80, 112), x = t.x + Math.cos(ang) * r, y = t.y + Math.sin(ang) * r;
+        if (x < 30 || y < 30 || x > W - 30 || y > H - 30 || nearRiver(x, y, 34)) continue;
+        if (towns.some(o => Math.hypot(o.x - x, o.y - y) < 72) || fields.some(f => Math.hypot(f.x - x, f.y - y) < 46) || nearMine(x, y, 50)) continue;
+        fields.push(makeField(x, y, t)); k++;
+      }
+    }
+    // hills with contour rings
+    hills = [];
+    for (let tries = 0; tries < 200 && hills.length < 5; tries++) {
+      const x = rand(60, W - 60), y = rand(60, H - 60), r = rand(55, 95);
+      if (nearRiver(x, y, r + 30) || towns.some(t => Math.hypot(t.x - x, t.y - y) < r + 60) || hills.some(h => Math.hypot(h.x - x, h.y - y) < h.r + r)) continue;
+      if (fields.some(f => Math.hypot(f.x - x, f.y - y) < r + 20) || nearMine(x, y, r + 30)) continue;
+      const pts = Array.from({ length: 20 }, (_, i) => 1 + 0.16 * Math.sin(i * 0.9 + x) + rand(-0.06, 0.06));
+      hills.push({ x, y, r, pts });
+    }
+    // old dirt roads: each town to its nearest neighbours on the same bank, and each bridge to the nearest towns
+    roads = [];
+    const link = (a, b) => { if (!roads.some(r => (r.a === a && r.b === b) || (r.a === b && r.b === a))) roads.push({ a, b, bend: rand(-0.12, 0.12) }); };
+    for (const t of towns) {
+      towns.filter(o => o !== t && sideOf(o.x, o.y) === sideOf(t.x, t.y))
+        .sort((p, q) => Math.hypot(p.x - t.x, p.y - t.y) - Math.hypot(q.x - t.x, q.y - t.y)).slice(0, 2).forEach(o => link(t, o));
+    }
+    for (const br of bridges) for (const sd of [-1, 1]) {
+      const e = bridgeEnd(br, sd);
+      const near = towns.filter(o => sideOf(o.x, o.y) === sd).sort((p, q) => Math.hypot(p.x - e.x, p.y - e.y) - Math.hypot(q.x - e.x, q.y - e.y))[0];
+      if (near) link(near, e);
+    }
+    rocks = [];
+    for (let tries = 0; tries < 200 && rocks.length < 22; tries++) {
+      const x = rand(20, W - 20), y = rand(20, H - 20);
+      if (nearRiver(x, y, 20) || towns.some(t => Math.hypot(t.x - x, t.y - y) < 80) || fields.some(f => Math.hypot(f.x - x, f.y - y) < 36) || nearMine(x, y, 40)) continue;
+      rocks.push({ x, y, r: rand(2.5, 5) });
+    }
+    for (let w = 0, tries = 0; w < 4 && tries < 200; tries++) {   // a few proper woods, big enough to matter
+      const x = rand(80, W - 80), y = rand(80, H - 80), R = rand(45, 70);
+      if (Math.abs(A(x, y) - riverA(B(x, y))) < river.hw + R + 20) continue;
+      if (towns.some(t => Math.hypot(t.x - x, t.y - y) < R + 70) || fields.some(f => Math.hypot(f.x - x, f.y - y) < R + 30)) continue;
+      if (Math.hypot(compass.x - x, compass.y - y) < R + 40 || nearMine(x, y, R + 40) || hills.some(h => Math.hypot(h.x - x, h.y - y) < h.r + R)) continue;
+      for (let k = 0; k < 26; k++) {
+        const a = rand(0, Math.PI * 2), d = Math.sqrt(Math.random()) * R;
+        trees.push({ x: x + Math.cos(a) * d, y: y + Math.sin(a) * d * 0.85, r: rand(7, 12), c: Math.random() < .5 ? COL.tree : COL.tree2, pine: Math.random() < 0.45 });
+      }
+      w++;
+    }
+    for (let tries = 0; tries < 400 && trees.length < 175; tries++) {
+      const x = rand(20, W - 20), y = rand(20, H - 20);
+      if (Math.abs(A(x, y) - riverA(B(x, y))) < river.hw + 26) continue;
+      if (towns.some(t => Math.hypot(t.x - x, t.y - y) < 80)) continue;
+      if (fields.some(f => Math.hypot(f.x - x, f.y - y) < 44) || Math.hypot(compass.x - x, compass.y - y) < 70 || nearMine(x, y, 45)) continue;
+      if (bridges.some(br => { const p = XY(riverA(br.b), br.b); return Math.hypot(p.x - x, p.y - y) < 120; })) continue;
+      const n = 2 + (Math.random() * 3 | 0);
+      for (let k = 0; k < n; k++) trees.push({ x: x + rand(-14, 14), y: y + rand(-14, 14), r: rand(5, 11), c: Math.random() < .5 ? COL.tree : COL.tree2, pine: Math.random() < 0.3 });
+    }
+
+    buildRoadGrid();
+    buildForestGrid();
+    units = []; deaths = []; puffs = []; scars = []; waves = [];
+    ripples = Array.from({ length: 46 }, () => ({ b: rand(0, LB + 60), off: rand(-0.7, 0.7), len: rand(10, 26), sp: rand(5, 11) }));
+    for (const t of towns) {
+      // house plots around the town, leaving the space under it free for the name
+      t.houses = [];
+      for (let tries = 0; t.houses.length < 20 && tries < 600; tries++) {
+        const ang = rand(0, Math.PI * 2);
+        if (Math.abs(((ang - Math.PI / 2 + Math.PI * 3) % (Math.PI * 2)) - Math.PI) < 1.05) continue;
+        const r = rand(42, 68), hx = t.x + Math.cos(ang) * r, hy = t.y + Math.sin(ang) * r;
+        if (t.houses.some(h => Math.hypot(h.x - hx, h.y - hy) < 11.5) || isWater(hx, hy)) continue;
+        t.houses.push({ x: hx, y: hy, s: rand(7, 8.8), r });
+      }
+      t.houses.sort((a, b) => a.r - b.r);
+    }
+    structs = [];
+    initTerritory();
+    stats = { train: [D().blueTrain, D().redTrain], hp: [3, 3], cap: [0, 0], holdMult: [1, 1] };
+    time = 0; week = 1; weekT = 0; aiT = 6; ink = 0; chargeCd = 0; closeMenu(); routesDrawn = 0; drawing = null;
+    alerts = []; tally = { trained: 0, lost: 0, killed: 0, captured: 0, fallen: 0 };
+    structs = []; tracers = []; inventory = { tower: 1 }; armed = null; plan = null;
+    gold = 0; bought = {}; coins = []; redGold = 0; redBought = {}; redBuys = 0;
+    setHint('Drag from a blue town to draw a march route. Your first watchtower is in the tray.');
+    startTutorial();
+    renderTray();
+    resize();
+  }
+
+  function resize() {
+    if (!W) return;
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const vw = innerWidth, vh = innerHeight;
+    cvs.width = Math.round(vw * dpr); cvs.height = Math.round(vh * dpr);
+    const top = 70, bottom = vw <= 560 ? 130 : 84, side = 12;
+    scale = Math.min((vw - side * 2) / W, (vh - top - bottom) / H);
+    offX = (vw - W * scale) / 2;
+    offY = top + (vh - top - bottom - H * scale) / 2;
+    buildStatic();
+  }
+
+  function rr(c, x, y, w, h, r) {
+    c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+  }
+
+  // ---------- terrain effects ----------
+  const FC = 12;
+  let forestGrid = null, fgw = 0;
+  function buildForestGrid() {
+    fgw = Math.ceil(W / FC);
+    forestGrid = new Uint8Array(fgw * Math.ceil(H / FC));
+    for (const t of trees) {
+      const R = t.r + 4, k = Math.ceil(R / FC);
+      for (let j = Math.max(0, (t.y / FC | 0) - k); j <= Math.min(Math.ceil(H / FC) - 1, (t.y / FC | 0) + k); j++)
+        for (let i = Math.max(0, (t.x / FC | 0) - k); i <= Math.min(fgw - 1, (t.x / FC | 0) + k); i++)
+          if (Math.hypot((i + 0.5) * FC - t.x, (j + 0.5) * FC - t.y) < R) forestGrid[i + j * fgw] = 1;
+    }
+  }
+  // Roads: soldiers march 40% faster on them, and the enemy plans its routes along them.
+  const RC = 8, ROAD_SPEED = 1.4;
+  let roadGrid = null, rgw = 0;
+  function roadCurve(r) {
+    const mx = (r.a.x + r.b.x) / 2 - (r.b.y - r.a.y) * r.bend, my = (r.a.y + r.b.y) / 2 + (r.b.x - r.a.x) * r.bend;
+    const n = Math.max(4, Math.ceil(Math.hypot(r.b.x - r.a.x, r.b.y - r.a.y) / 6)), pts = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, u = 1 - t;
+      pts.push({ x: u * u * r.a.x + 2 * u * t * mx + t * t * r.b.x, y: u * u * r.a.y + 2 * u * t * my + t * t * r.b.y });
+    }
+    return pts;
+  }
+  function buildRoadGrid() {
+    rgw = Math.ceil(W / RC);
+    const rgh = Math.ceil(H / RC);
+    roadGrid = new Uint8Array(rgw * rgh);
+    for (const r of roads) {
+      r.pts = roadCurve(r); r.len = routeLen(r.pts);
+      for (const p of r.pts) {
+        for (let j = Math.max(0, (p.y - 6) / RC | 0); j <= Math.min(rgh - 1, (p.y + 6) / RC | 0); j++)
+          for (let i = Math.max(0, (p.x - 6) / RC | 0); i <= Math.min(rgw - 1, (p.x + 6) / RC | 0); i++)
+            if (Math.hypot((i + 0.5) * RC - p.x, (j + 0.5) * RC - p.y) < 7) roadGrid[i + j * rgw] = 1;
+      }
+    }
+  }
+  const onRoad = (x, y) => roadGrid[(x / RC | 0) + (y / RC | 0) * rgw] === 1;
+
+  // Quickest way between two points over roads, open country and river crossings (Dijkstra on a small graph).
+  function roadPath(x0, y0, x1, y1, via) {
+    const nodes = [], key = new Map();
+    const add = (id, x, y, side) => { if (!key.has(id)) { key.set(id, nodes.length); nodes.push({ x, y, side }); } return key.get(id); };
+    const S = add('start', x0, y0, sideOf(x0, y0)), E = add('end', x1, y1, sideOf(x1, y1));
+    towns.forEach((t, i) => add('T' + i, t.x, t.y, sideOf(t.x, t.y)));
+    bridges.forEach((br, i) => { for (const sd of [-1, 1]) { const e = bridgeEnd(br, sd); add('B' + i + sd, e.x, e.y, sd); } });
+    const idOf = p => {
+      const ti = towns.indexOf(p);
+      if (ti >= 0) return 'T' + ti;
+      for (let i = 0; i < bridges.length; i++) for (const sd of [-1, 1]) { const e = bridgeEnd(bridges[i], sd); if (Math.hypot(e.x - p.x, e.y - p.y) < 2) return 'B' + i + sd; }
+      return null;
+    };
+    const N = nodes.length, edges = Array.from({ length: N }, () => []);
+    for (let i = 0; i < N; i++) for (let j = 0; j < i; j++) {
+      if (nodes[i].side !== nodes[j].side) continue;
+      const d = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y);
+      edges[i].push({ to: j, cost: d }); edges[j].push({ to: i, cost: d });
+    }
+    for (const r of roads) {
+      const a = key.get(idOf(r.a)), b = key.get(idOf(r.b));
+      if (a === undefined || b === undefined) continue;
+      const c = r.len / ROAD_SPEED;
+      edges[a].push({ to: b, cost: c, road: r, fwd: true }); edges[b].push({ to: a, cost: c, road: r, fwd: false });
+    }
+    bridges.forEach((br, i) => {
+      if (via && br !== via) return;
+      const a = key.get('B' + i + '-1'), b = key.get('B' + i + '1'), c = river.hw * 2 / (br.ford ? 0.45 : 1) + (br.ford ? 40 : 0);
+      edges[a].push({ to: b, cost: c }); edges[b].push({ to: a, cost: c });
+    });
+    const dist = new Array(N).fill(Infinity), prev = new Array(N).fill(null), done = new Array(N).fill(false);
+    dist[S] = 0;
+    for (;;) {
+      let u = -1;
+      for (let k = 0; k < N; k++) if (!done[k] && (u < 0 || dist[k] < dist[u])) u = k;
+      if (u < 0 || dist[u] === Infinity || u === E) break;
+      done[u] = true;
+      for (const e of edges[u]) { const nd = dist[u] + e.cost; if (nd < dist[e.to]) { dist[e.to] = nd; prev[e.to] = { from: u, e }; } }
+    }
+    if (dist[E] === Infinity) return null;
+    const chain = [];
+    for (let v = E; prev[v]; v = prev[v].from) chain.unshift(prev[v]);
+    const pts = [{ x: x0, y: y0 }];
+    for (const { e } of chain) {
+      if (e.road) { const rp = e.fwd ? e.road.pts : e.road.pts.slice().reverse(); for (const q of rp.slice(1)) pts.push({ x: q.x, y: q.y }); }
+      else pts.push({ x: nodes[e.to].x, y: nodes[e.to].y });
+    }
+    return pts;
+  }
+
+  const inForest = (x, y) => forestGrid[(x / FC | 0) + (y / FC | 0) * fgw] === 1;
+  function hillLevel(x, y) {   // 0 = flat ground, 3 = hilltop
+    for (const h of hills) {
+      const q = Math.hypot(x - h.x, (y - h.y) / 0.8) / h.r;
+      if (q < 1) return q < 0.36 ? 3 : q < 0.68 ? 2 : 1;
+    }
+    return 0;
+  }
+  function onFord(x, y) { if (!inBand(x, y)) return false; const br = bridgeAt(B(x, y)); return !!(br && br.ford); }
+
+  function makeField(x, y, town) {
+    return { x, y, town, acc: rand(0, 1), w: rand(34, 48), h: rand(22, 30), rot: rand(-0.6, 0.6), c: Math.random() < 0.55 ? '#ebe5c6' : '#dde6c6' };
+  }
+  function layer() {
+    const cv = document.createElement('canvas');
+    cv.width = Math.ceil(W * scale * dpr); cv.height = Math.ceil(H * scale * dpr);
+    const c = cv.getContext('2d');
+    c.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+    rr(c, 0, 0, W, H, 18); c.clip();
+    return [cv, c];
+  }
+  function riverPath(c) {
+    c.beginPath();
+    for (let b = -40; b <= LB + 40; b += 8) { const p = XY(riverA(b), b); if (b === -40) c.moveTo(p.x, p.y); else c.lineTo(p.x, p.y); }
+  }
+  function buildStatic() {
+    let c;
+    [bg, c] = layer();
+    c.fillStyle = COL.land; c.fillRect(0, 0, W, H);
+    c.fillStyle = COL.land2;
+    for (const p of patches) { c.beginPath(); c.arc(p.x, p.y, p.r, 0, Math.PI * 2); c.fill(); }
+    for (const h of hills) {
+      [[1, '#e0e5d6'], [0.68, '#d8ded0'], [0.36, '#d0d7c5']].forEach(([k, col]) => {
+        c.beginPath();
+        h.pts.forEach((m, i) => { const a = i / h.pts.length * Math.PI * 2, rr2 = h.r * k * m; const x = h.x + Math.cos(a) * rr2, y = h.y + Math.sin(a) * rr2 * 0.8; i ? c.lineTo(x, y) : c.moveTo(x, y); });
+        c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = 'rgba(150,165,140,.35)'; c.lineWidth = 1; c.stroke();
+      });
+    }
+    for (const f of fields) {
+      c.save(); c.translate(f.x, f.y); c.rotate(f.rot);
+      rr(c, -f.w / 2, -f.h / 2, f.w, f.h, 3); c.fillStyle = f.c; c.fill();
+      c.strokeStyle = 'rgba(120,110,70,.16)'; c.lineWidth = 1.4;
+      for (let o = -f.h / 2 + 5; o < f.h / 2 - 2; o += 5) { c.beginPath(); c.moveTo(-f.w / 2 + 3, o); c.lineTo(f.w / 2 - 3, o); c.stroke(); }
+      c.restore();
+    }
+    c.lineCap = 'round';
+    for (const [col, wdt] of [['#d6cdb2', 8], ['#ebe4cf', 4.5]]) {
+      c.strokeStyle = col; c.lineWidth = wdt;
+      for (const r of roads) {
+        const mx = (r.a.x + r.b.x) / 2 - (r.b.y - r.a.y) * r.bend, my = (r.a.y + r.b.y) / 2 + (r.b.x - r.a.x) * r.bend;
+        c.beginPath(); c.moveTo(r.a.x, r.a.y); c.quadraticCurveTo(mx, my, r.b.x, r.b.y); c.stroke();
+      }
+    }
+
+    [bgOver, c] = layer();
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    riverPath(c); c.strokeStyle = COL.shore; c.lineWidth = river.hw * 2 + 12; c.stroke();
+    riverPath(c); c.strokeStyle = COL.river; c.lineWidth = river.hw * 2; c.stroke();
+    riverPath(c); c.strokeStyle = COL.riverDeep; c.lineWidth = river.hw * 0.9; c.stroke();
+    for (const br of bridges) {
+      if (br.ford) {
+        // shallow water with stepping stones
+        const ca = riverA(br.b);
+        c.fillStyle = 'rgba(214,232,238,.75)';
+        c.beginPath();
+        for (let a = ca - river.hw; a <= ca + river.hw; a += 4) { const q = XY(a, br.b - br.span + Math.sin(a * 0.3) * 2); a === ca - river.hw ? c.moveTo(q.x, q.y) : c.lineTo(q.x, q.y); }
+        for (let a = ca + river.hw; a >= ca - river.hw; a -= 4) { const q = XY(a, br.b + br.span + Math.sin(a * 0.3) * 2); c.lineTo(q.x, q.y); }
+        c.closePath(); c.fill();
+        for (let a = ca - river.hw + 5, i = 0; a < ca + river.hw - 2; a += 9, i++) {
+          for (const off of [-9, 0, 9]) {
+            const q = XY(a + (i % 2) * 3, br.b + off + Math.sin(a + off) * 2);
+            c.fillStyle = COL.shadow; c.beginPath(); c.ellipse(q.x + 1, q.y + 1.5, 3.2, 2.4, 0, 0, Math.PI * 2); c.fill();
+            c.fillStyle = '#d6d5c9'; c.beginPath(); c.ellipse(q.x, q.y, 3.2, 2.4, 0, 0, Math.PI * 2); c.fill();
+          }
+        }
+        continue;
+      }
+      const ca = riverA(br.b), a0 = ca - river.hw - 10, a1 = ca + river.hw + 10;
+      const p0 = XY(a0, br.b - br.span), p1 = XY(a1, br.b + br.span);
+      const x = Math.min(p0.x, p1.x), y = Math.min(p0.y, p1.y), w = Math.abs(p1.x - p0.x), h = Math.abs(p1.y - p0.y);
+      rr(c, x + 2, y + 3, w, h, 6); c.fillStyle = COL.shadow; c.fill();
+      rr(c, x, y, w, h, 6); c.fillStyle = COL.bridge; c.fill();
+      c.strokeStyle = 'rgba(150,160,140,.35)'; c.lineWidth = 1;
+      for (let a = a0 + 5; a < a1 - 3; a += 5) {
+        const q0 = XY(a, br.b - br.span + 3), q1 = XY(a, br.b + br.span - 3);
+        c.beginPath(); c.moveTo(q0.x, q0.y); c.lineTo(q1.x, q1.y); c.stroke();
+      }
+      rr(c, x, y, w, h, 6); c.strokeStyle = COL.bridgeEdge; c.lineWidth = 2; c.stroke();
+    }
+    c.fillStyle = COL.shadow;
+    for (const r of rocks) { c.beginPath(); c.ellipse(r.x + 1.5, r.y + 2, r.r, r.r * 0.7, 0, 0, Math.PI * 2); c.fill(); }
+    for (const r of rocks) { c.fillStyle = '#d3d3c8'; c.beginPath(); c.ellipse(r.x, r.y, r.r, r.r * 0.7, 0, 0, Math.PI * 2); c.fill(); }
+    const treeShape = (t, dx, dy) => {
+      c.beginPath();
+      if (t.pine) { c.moveTo(t.x + dx, t.y + dy - t.r * 1.3); c.lineTo(t.x + dx + t.r * 0.9, t.y + dy + t.r * 0.8); c.lineTo(t.x + dx - t.r * 0.9, t.y + dy + t.r * 0.8); c.closePath(); }
+      else c.arc(t.x + dx, t.y + dy, t.r, 0, Math.PI * 2);
+    };
+    c.fillStyle = COL.shadow;
+    for (const t of trees) { treeShape(t, 2, 3); c.fill(); }
+    for (const t of trees) { c.fillStyle = t.pine ? '#b5caa9' : t.c; treeShape(t, 0, 0); c.fill(); }
+    // compass rose
+    const cp = compass;
+    c.beginPath(); c.arc(cp.x, cp.y, 24, 0, Math.PI * 2); c.fillStyle = 'rgba(251,250,246,.75)'; c.fill();
+    c.strokeStyle = '#c6ccbf'; c.lineWidth = 1.2; c.stroke();
+    c.beginPath(); c.arc(cp.x, cp.y, 18, 0, Math.PI * 2); c.strokeStyle = 'rgba(198,204,191,.7)'; c.stroke();
+    for (let i = 0; i < 4; i++) {
+      const a = i * Math.PI / 2 - Math.PI / 2, L = i === 0 ? 17 : 13;
+      c.beginPath();
+      c.moveTo(cp.x + Math.cos(a) * L, cp.y + Math.sin(a) * L);
+      c.lineTo(cp.x + Math.cos(a + Math.PI / 2) * 3.5, cp.y + Math.sin(a + Math.PI / 2) * 3.5);
+      c.lineTo(cp.x + Math.cos(a - Math.PI / 2) * 3.5, cp.y + Math.sin(a - Math.PI / 2) * 3.5);
+      c.closePath(); c.fillStyle = i === 0 ? '#5c6460' : '#aab2a6'; c.fill();
+    }
+    c.fillStyle = '#5c6460'; c.font = '600 9px Lexend, system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'bottom';
+    c.fillText('N', cp.x, cp.y - 25);
+  }
+
+  // ---------- economy: farms and mines ----------
+  function terrAt(x, y) { const i = clamp(x / TC | 0, 0, tw - 1), j = clamp(y / TC | 0, 0, th - 1); return terr[i + j * tw]; }
+  function earn(src, rate, dt) {
+    src.acc += dt * rate;
+    if (src.acc >= 1) {
+      src.acc -= 1; gold++;
+      if (coins.length < 60) coins.push({ x: src.x + rand(-6, 6), y: src.y - 6, t: 0 });
+    }
+  }
+  function goldPerSecond() {
+    let r = 0;
+    for (const f of fields) if (f.town && f.town.owner === 0) r += FARM_RATE;
+    for (const m of mines) if (m.owner === 0) r += MINE_RATE;
+    return r;
+  }
+  function earnRed(src, rate, dt) { src.acc += dt * rate * D().redIncome; if (src.acc >= 1) { src.acc -= 1; redGold++; } }
+  function stepEconomy(dt) {
+    for (const f of fields) {
+      if (!f.town) continue;
+      if (f.town.owner === 0) earn(f, FARM_RATE, dt);
+      else if (f.town.owner === 1) earnRed(f, FARM_RATE, dt);
+    }
+    for (const m of mines) {
+      const v = terrAt(m.x, m.y);
+      const owner = v > 0.25 ? 0 : v < -0.25 ? 1 : -1;
+      if (owner !== m.owner) {
+        if (owner === 0) toast('You hold a gold mine', 'good');
+        else if (m.owner === 0) toast('A gold mine was lost', 'bad');
+        m.owner = owner;
+      }
+      if (owner === 0) earn(m, MINE_RATE, dt);
+      else if (owner === 1) earnRed(m, MINE_RATE, dt);
+    }
+    for (const c of coins) c.t += dt;
+    coins = coins.filter(c => c.t < 1);
+  }
+
+  // ---------- territory: a soft tint showing who controls the ground ----------
+  const TC = 20;
+  let terr, terrTarget, terrTmp, terrCanvas, terrImg, tw = 0, th = 0, terrT = 0;
+  function initTerritory() {
+    tw = Math.ceil(W / TC); th = Math.ceil(H / TC);
+    terr = new Float32Array(tw * th); terrTarget = new Float32Array(tw * th); terrTmp = new Float32Array(tw * th);
+    terrCanvas = document.createElement('canvas'); terrCanvas.width = tw; terrCanvas.height = th;
+    terrImg = terrCanvas.getContext('2d').createImageData(tw, th);
+    terrT = 0; updateTerritory(); terr.set(terrTarget);
+  }
+  function splat(x, y, R, v) {
+    const k = Math.ceil(R / TC), ci = x / TC | 0, cj = y / TC | 0;
+    for (let j = Math.max(0, cj - k); j <= Math.min(th - 1, cj + k); j++)
+      for (let i = Math.max(0, ci - k); i <= Math.min(tw - 1, ci + k); i++) {
+        const d = Math.hypot((i + 0.5) * TC - x, (j + 0.5) * TC - y);
+        if (d < R) terrTmp[i + j * tw] += v * (1 - d / R) ** 2;
+      }
+  }
+  function updateTerritory() {
+    terrTmp.fill(0);
+    for (const t of towns) if (t.owner >= 0) splat(t.x, t.y, 240, (t.owner === 0 ? 1 : -1) * (t.capital ? 1.5 : 1) * (0.5 + 0.5 * t.hold / t.holdMax));
+    for (const st of structs) splat(st.x, st.y, 120, st.team === 0 ? 0.6 : -0.6);
+    for (const u of units) {
+      if (u.dead) continue;
+      const i = u.x / TC | 0, j = u.y / TC | 0, v = u.team === 0 ? 0.09 : -0.09;
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        const ii = i + di, jj = j + dj;
+        if (ii >= 0 && jj >= 0 && ii < tw && jj < th) terrTmp[ii + jj * tw] += di || dj ? v * 0.5 : v;
+      }
+    }
+    for (let j = 0; j < th; j++) for (let i = 0; i < tw; i++) {   // light blur, then squash into -1..1
+      let sum = 0, n = 0;
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        const ii = i + di, jj = j + dj;
+        if (ii >= 0 && jj >= 0 && ii < tw && jj < th) { sum += terrTmp[ii + jj * tw]; n++; }
+      }
+      terrTarget[i + j * tw] = Math.tanh(sum / n * 1.8);
+    }
+  }
+  function stepTerritory(dt) {
+    terrT -= dt;
+    if (terrT <= 0) { terrT = 0.4; updateTerritory(); }
+    const k = Math.min(1, dt * 1.5);
+    for (let i = 0; i < terr.length; i++) terr[i] += (terrTarget[i] - terr[i]) * k;
+  }
+  function drawTerritory() {
+    const d = terrImg.data;
+    for (let i = 0; i < terr.length; i++) {
+      const v = terr[i], o = i * 4;
+      if (v >= 0) { d[o] = 59; d[o + 1] = 111; d[o + 2] = 212; } else { d[o] = 223; d[o + 1] = 84; d[o + 2] = 72; }
+      d[o + 3] = Math.min(1, Math.abs(v)) * 52;
+    }
+    terrCanvas.getContext('2d').putImageData(terrImg, 0, 0);
+    ctx.save(); rr(ctx, 0, 0, W, H, 18); ctx.clip();
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(terrCanvas, 0, 0, tw, th, 0, 0, tw * TC, th * TC);
+    ctx.restore();
+  }
+
+  // ---------- routes ----------
+  function resample(pts, step) {
+    const out = [{ x: pts[0].x, y: pts[0].y }];
+    let carry = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i], L = Math.hypot(b.x - a.x, b.y - a.y);
+      let d = step - carry;
+      while (d <= L) { out.push({ x: a.x + (b.x - a.x) * d / L, y: a.y + (b.y - a.y) * d / L }); d += step; }
+      carry = L - (d - step);
+    }
+    const e = pts[pts.length - 1]; out.push({ x: e.x, y: e.y });
+    return out;
+  }
+  function routeLen(pts) { let L = 0; for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y); return L; }
+  function pathPts(x0, y0, x1, y1, via) {
+    const viaRoads = roadPath(x0, y0, x1, y1, via);
+    if (viaRoads && viaRoads.length > 1) return resample(viaRoads, 14);
+    const pts = [{ x: x0, y: y0 }];
+    const s0 = sideOf(x0, y0), s1 = sideOf(x1, y1);
+    if (s0 !== s1) { const br = via || bestBridge(x0, y0, x1, y1); pts.push(bridgeEnd(br, s0), bridgeEnd(br, s1)); }
+    pts.push({ x: x1, y: y1 });
+    return resample(pts, 14);
+  }
+  function makeRoute(t, target, point, via) {
+    const to = target || point;
+    const pts = pathPts(t.x, t.y, to.x, to.y, via);
+    return { id: ++routeSeq, pts, target: target || null, len: routeLen(pts) };
+  }
+  function closestIdx(pts, x, y) {
+    let bi = 0, bd = Infinity;
+    for (let i = 0; i < pts.length; i++) { const d = (pts[i].x - x) ** 2 + (pts[i].y - y) ** 2; if (d < bd) { bd = d; bi = i; } }
+    return bi;
+  }
+  function inkUsed(except) {
+    let s = 0; for (const t of towns) if (t.owner === 0 && t.route && t !== except) s += t.route.len; return s;
+  }
+
+  // ---------- units ----------
+  function spawn(t) {
+    const a = rand(0, Math.PI * 2), r = rand(0, 10), ang = rand(0, Math.PI * 2), rad = 20 + Math.sqrt(Math.random()) * 16;
+    units.push({
+      x: t.x + Math.cos(a) * r, y: t.y + Math.sin(a) * r, vx: 0, vy: 0, team: t.owner, kind: t.kind, hp: K_HP[t.kind] + stats.hp[t.owner] - 3, boost: 0,
+      town: t, route: null, rid: -1, ri: 0, arrived: false, cd: 0, flash: 0, enemy: null, calm: 0,
+      ox: Math.cos(ang) * rad, oy: Math.sin(ang) * rad, id: uid++, dead: false
+    });
+    if (t.owner === 0) tally.trained++;
+  }
+
+  let grid = null, gcols = 0, grows = 0;
+  function buildGrid() {
+    const c = Math.ceil(W / CELL) + 1, r = Math.ceil(H / CELL) + 1;
+    if (!grid || c !== gcols || r !== grows) { gcols = c; grows = r; grid = Array.from({ length: c * r }, () => []); }
+    else for (const cell of grid) cell.length = 0;
+    for (const u of units) if (!u.dead) grid[(u.x / CELL | 0) + (u.y / CELL | 0) * gcols].push(u);
+  }
+
+  function findEnemy(u, R) { return nearestEnemy(u.x, u.y, u.team, R, true); }
+  function nearestEnemy(x, y, team, R, sameBank) {
+    const cx = x / CELL | 0, cy = y / CELL | 0, k = Math.ceil(R / CELL);
+    let best = null, bd = R * R;
+    const us = sideOf(x, y), ub = onBridge(x, y);
+    for (let j = Math.max(0, cy - k); j <= Math.min(grows - 1, cy + k); j++)
+      for (let i = Math.max(0, cx - k); i <= Math.min(gcols - 1, cx + k); i++)
+        for (const o of grid[i + j * gcols]) {
+          if (o.team === team || o.dead) continue;
+          const d = (o.x - x) ** 2 + (o.y - y) ** 2;
+          if (d < bd && (!sameBank || ub || sideOf(o.x, o.y) === us || onBridge(o.x, o.y))) { bd = d; best = o; }
+        }
+    return best;
+  }
+
+  // Soldiers take their town's route when they leave and keep it, even if the town gets new orders later.
+  // Red armies follow their town's current orders, which is how the AI gathers troops and then strikes.
+  function goalOf(u) {
+    const t = u.town;
+    if (u.team === 1) u.route = t && t.owner === 1 ? t.route : null;
+    else if (!u.route && t && t.owner === u.team && t.route) u.route = t.route;
+    const r = u.route;
+    if (r) {
+      if (u.rid !== r.id) { u.rid = r.id; u.arrived = false; u.ri = closestIdx(r.pts, u.x, u.y); }
+      if (!u.arrived) {
+        let p = r.pts[u.ri];
+        while (u.ri < r.pts.length - 1 && (p.x - u.x) ** 2 + (p.y - u.y) ** 2 < 400) { u.ri++; p = r.pts[u.ri]; }
+        if (u.ri >= r.pts.length - 1 && (p.x - u.x) ** 2 + (p.y - u.y) ** 2 < 900) u.arrived = true;
+        else return { x: p.x, y: p.y, hold: false };
+      }
+      if (r.target) {
+        if (r.target.owner !== u.team) return { x: r.target.x, y: r.target.y, hold: false };
+        // Reached a friendly town: join its garrison and follow its orders from now on.
+        u.town = r.target; u.route = null;
+        return { x: r.target.x + u.ox, y: r.target.y + u.oy, hold: true };
+      }
+      const e = r.pts[r.pts.length - 1];
+      return { x: e.x + u.ox, y: e.y + u.oy, hold: true };
+    }
+    if (t && t.owner === u.team) return { x: t.x + u.ox, y: t.y + u.oy, hold: true };
+    // Orphaned (home town fell): march on the nearest town that isn't ours.
+    let best = null, bd = Infinity;
+    for (const o of towns) if (o.owner !== u.team) { const d = (o.x - u.x) ** 2 + (o.y - u.y) ** 2; if (d < bd) { bd = d; best = o; } }
+    return best ? { x: best.x, y: best.y, hold: false } : { x: u.x, y: u.y, hold: true };
+  }
+
+  // A gathered group: blue soldiers waiting at the end of a route on open ground.
+  function groupAt(x, y) {
+    let best = null, bd = 45 * 45;
+    for (const u of units) {
+      if (u.team !== 0 || u.dead || !u.route || !u.arrived || u.route.target) continue;
+      const d = (u.x - x) ** 2 + (u.y - y) ** 2;
+      if (d < bd) { bd = d; best = u; }
+    }
+    if (!best) return null;
+    return units.filter(u => u.team === 0 && !u.dead && u.arrived && u.route && !u.route.target &&
+      (u.route === best.route || (u.x - best.x) ** 2 + (u.y - best.y) ** 2 < 70 * 70));
+  }
+
+  function puff(x, y, color, size) {
+    if (puffs.length < 500) puffs.push({ x, y, t: 0, color, size });
+  }
+  function kill(e) {
+    e.dead = true;
+    if (e.team === 0) tally.lost++; else tally.killed++;
+    scars.push({ x: e.x + rand(-1.5, 1.5), y: e.y + rand(-1.5, 1.5), born: time, team: e.team, r: rand(1.6, 3) });
+    if (scars.length > 1500) scars.shift();
+    deaths.push({ x: e.x, y: e.y, team: e.team, t: 0 });
+    puff(e.x, e.y, 'rgba(46,55,53,.35)', 9);
+  }
+  // Damage taken is reduced near your own towns and forts.
+  function defense(e) {
+    let m = 1;
+    for (const t of towns) if (t.owner === e.team && (t.x - e.x) ** 2 + (t.y - e.y) ** 2 < 90 * 90) { m = 0.6; break; }
+    for (const s of structs) if (s.type === 'fort' && s.team === e.team && (s.x - e.x) ** 2 + (s.y - e.y) ** 2 < 80 * 80) m = Math.min(m, 0.45);
+    return m;
+  }
+  function strike(u, e, nx, ny, allies, ranged) {
+    let dmg = (ranged || u.kind !== 1 ? 1 : 0.4) * K_MULT[u.kind][e.kind];
+    dmg *= 1 + Math.min(allies, 10) * 0.06;   // group strength: up to +60%
+    let kb = ranged ? 0 : 2.2;
+    if (!ranged && u.calm > 1.2 && u.kind !== 1) {   // charge; spears stop a cavalry charge cold
+      const cm = u.kind === 2 ? (e.kind === 0 ? 1 : 3) : 2.2;
+      if (cm > 1) { dmg *= cm; kb = 5; puff(e.x, e.y, COL.mid[u.team], 12); }
+    }
+    u.calm = 0;
+    if (ranged) { if (inForest(e.x, e.y)) dmg *= 0.5; }
+    else { const hu = hillLevel(u.x, u.y), he = hillLevel(e.x, e.y); if (hu > he) dmg *= 1.25; else if (hu < he) dmg *= 0.8; }
+    if (ranged && tracers.length < 300) tracers.push({ x0: u.x, y0: u.y, x1: e.x, y1: e.y, t: 0.06, team: u.team });
+    e.hp -= dmg * defense(e); e.flash = 0.12;
+    strikes++;
+    e.x += nx * kb; e.y += ny * kb;
+    if (e.hp <= 0) kill(e);
+  }
+
+  function enterTown(t, u) {
+    u.dead = true;
+    t.hold -= 1; t.hit = 0.6;
+    puff(t.x, t.y, COL.team[u.team], 20);
+    if (t.hold <= 0) capture(t, u.team);
+  }
+
+  function capture(t, team) {
+    const prev = t.owner;
+    t.owner = team;
+    t.holdMax = baseHold(t) * stats.holdMult[team];
+    t.hold = t.holdMax * 0.4;
+    t.route = null; t.spawnT = 2;
+    for (const u of units) if (u.town === t && u.team !== team) u.town = null;
+    for (let i = 0; i < 10; i++) puff(t.x + rand(-14, 14), t.y + rand(-14, 14), COL.team[team], rand(16, 30));
+    waves.push({ x: t.x, y: t.y, t: 0, color: COL.team[team] });
+    if (menuTown === t) closeMenu();
+    if (team === 0) tally.captured++;
+    if (prev === 0) tally.fallen++;
+    if (t.capital) { endGame(team === 0); return; }
+    if (team === 0) Sound.good(); else if (prev === 0) Sound.bad();
+    if (team === 0) toast(towns.some(o => o.owner === 0 && o.route && o.route.target === t) ? `${t.name} captured. Its attackers now guard it` : `${t.name} captured`, 'good');
+    else if (prev === 0) toast(`${t.name} has fallen`, 'bad');
+    aiT = Math.min(aiT, 0.5);
+  }
+
+  function updateUnits(dt) {
+    frameNo++;
+    for (const t of towns) t.n = 0;
+    for (const u of units) if (!u.dead && u.town) u.town.n++;
+
+    for (const u of units) {
+      if (u.dead) continue;
+      u.cd -= dt; u.flash -= dt;
+
+      // separation from everyone nearby, friend or foe: this is what makes clashes push and bulge
+      const cx = u.x / CELL | 0, cy = u.y / CELL | 0;
+      let sx = 0, sy = 0, allies = 0;
+      for (let j = Math.max(0, cy - 1); j <= Math.min(grows - 1, cy + 1); j++)
+        for (let i = Math.max(0, cx - 1); i <= Math.min(gcols - 1, cx + 1); i++)
+          for (const o of grid[i + j * gcols]) {
+            if (o === u || o.dead) continue;
+            const dx = u.x - o.x, dy = u.y - o.y, d2 = dx * dx + dy * dy;
+            if (o.team === u.team && d2 < 400) allies++;
+            if (d2 < 81 && d2 > 1e-4) { const d = Math.sqrt(d2), f = (9 - d) / 9; sx += dx / d * f; sy += dy / d * f; }
+          }
+
+      const g = goalOf(u);
+      const aggro = g.hold ? 100 : 60;
+      if (u.enemy && (u.enemy.dead || (u.enemy.x - u.x) ** 2 + (u.enemy.y - u.y) ** 2 > (aggro * 1.4) ** 2)) u.enemy = null;
+      if (!u.enemy && (u.id + frameNo) % 5 === 0) u.enemy = findEnemy(u, aggro);
+
+      u.boost -= dt;
+      let tx, ty, spd = SPEED * K_SPEED[u.kind] * (u.boost > 0 ? 1.5 : 1);
+      if (onRoad(u.x, u.y)) spd *= ROAD_SPEED;
+      else if (inForest(u.x, u.y)) spd *= 0.65;
+      else if (onFord(u.x, u.y)) spd *= 0.45;
+      if (u.enemy) {
+        const e = u.enemy, dx = e.x - u.x, dy = e.y - u.y, d = Math.hypot(dx, dy) || 1;
+        if (u.kind === 1 && d >= 8.5 && d < 44 + 10 * hillLevel(u.x, u.y)) {   // archers stop and shoot
+          spd *= 0.08;
+          if (u.cd <= 0) { u.cd = rand(0.9, 1.25); strike(u, e, dx / d, dy / d, allies, true); }
+        } else if (d < 8.5) {
+          spd = SPEED * 0.12;
+          if (u.cd <= 0) { u.cd = rand(0.55, 0.95); strike(u, e, dx / d, dy / d, allies); }
+        }
+        [tx, ty] = nav(u.x, u.y, e.x, e.y);
+      } else {
+        u.calm += dt;
+        [tx, ty] = nav(u.x, u.y, g.x, g.y);
+        if (g.hold) { const d = Math.hypot(g.x - u.x, g.y - u.y); if (d < 10) spd *= d / 10; }
+      }
+      const dx = tx - u.x, dy = ty - u.y, dl = Math.hypot(dx, dy) || 1;
+      const dvx = dx / dl * spd + sx * 55, dvy = dy / dl * spd + sy * 55;
+      u.vx += (dvx - u.vx) * 0.18; u.vy += (dvy - u.vy) * 0.18;
+      u.x += u.vx * dt; u.y += u.vy * dt;
+      constrain(u);
+
+      for (const t of towns) {
+        if (t.owner === u.team) continue;
+        const ex = t.x - u.x, ey = t.y - u.y;
+        if (ex * ex + ey * ey < 144) { enterTown(t, u); break; }
+      }
+      if (state !== 'play') return;
+    }
+  }
+
+  // Production: how many soldiers a town can field, and how long one takes to train.
+  function townCap(t) { return (t.capital ? 32 : 22) + stats.cap[Math.max(0, t.owner)] + 10 * t.barracks; }
+  function trainBase(t) { return (t.capital ? 1.6 : 2.4) * K_TRAIN[t.kind] / (1 + 0.5 * t.barracks); }
+  function trainSeconds(t) { return trainBase(t) / stats.train[Math.max(0, t.owner)]; }
+
+  function updateTowns(dt) {
+    for (const t of towns) {
+      t.hit -= dt;
+      if (t.hit <= 0 && t.hold < t.holdMax) t.hold = Math.min(t.holdMax, t.hold + dt * (t.owner < 0 ? 0.3 : 1.2));
+      if (t.owner < 0) continue;
+      t.spawnT -= dt * stats.train[t.owner];
+      if (t.spawnT <= 0) {
+        t.spawnT += trainBase(t);
+        if (t.n < townCap(t) && units.length < 1600) { spawn(t); t.n++; }
+      }
+    }
+  }
+
+  // ---------- structures: forts and watchtowers ----------
+  function countNear(team, x, y, R) {
+    let n = 0;
+    for (const u of units) if (u.team === team && !u.dead && (u.x - x) ** 2 + (u.y - y) ** 2 < R * R) n++;
+    return n;
+  }
+  let structT = 0;
+  function updateStructs(dt) {
+    for (const s of structs) {
+      if (s.type !== 'tower') continue;
+      s.cd -= dt;
+      if (s.cd > 0) continue;
+      const e = nearestEnemy(s.x, s.y, s.team, 130, false);
+      if (!e) { s.cd = 0.2; continue; }
+      s.cd = 0.6;
+      tracers.push({ x0: s.x, y0: s.y, x1: e.x, y1: e.y, t: 0, team: s.team });
+      Sound.arrow();
+      e.hp -= inForest(e.x, e.y) ? 0.75 : 1.5; e.flash = 0.12;
+      if (e.hp <= 0) kill(e);
+    }
+    // A building changes hands when enemies crowd it and no defenders are near.
+    structT -= dt;
+    if (structT <= 0) {
+      structT = 0.5;
+      for (const s of structs) {
+        if (countNear(1 - s.team, s.x, s.y, 50) >= 8 && countNear(s.team, s.x, s.y, 80) === 0) {
+          s.team = 1 - s.team;
+          for (let i = 0; i < 6; i++) puff(s.x + rand(-10, 10), s.y + rand(-10, 10), COL.team[s.team], rand(14, 24));
+          toast(s.team === 0 ? `You took an enemy ${ITEM[s.type].toLowerCase()}` : `Your ${ITEM[s.type].toLowerCase()} was taken`, s.team === 0 ? 'good' : 'bad');
+        }
+      }
+    }
+    for (const tr of tracers) tr.t += dt;
+    tracers = tracers.filter(tr => tr.t < 0.18);
+  }
+
+  // ---------- red AI: gathers at a bridge, hunts weak towns, sometimes feints ----------
+  const redSide = () => -blueSide();
+  function stagingPoint(br) { return XY(riverA(br.b) + redSide() * (river.hw + 70), br.b); }
+  function pickTarget(from) {
+    let best = null, bs = Infinity;
+    for (const o of towns) {
+      if (o.owner === 1) continue;
+      const d = Math.hypot(o.x - from.x, o.y - from.y);
+      const guards = o.owner === 0 ? countNear(0, o.x, o.y, 120) : 0;
+      const s = d * (0.6 + o.hold / o.holdMax) * (1 + guards / 8) * (o.capital ? 1.25 : 1) * rand(0.85, 1.15);
+      if (s < bs) { bs = s; best = o; }
+    }
+    return best;
+  }
+  function chooseRedKinds(red) {
+    const n = [0, 0, 0];
+    for (const u of units) if (u.team === 0 && !u.dead) n[u.kind]++;
+    const common = n.indexOf(Math.max(...n));
+    const counter = [1, 2, 0][common];   // archers vs spears, cavalry vs archers, spears vs cavalry
+    for (const t of red) t.kind = Math.random() < D().counter ? counter : (Math.random() * 3 | 0);
+  }
+  function newPlan() {
+    const red = towns.filter(t => t.owner === 1);
+    plan = null;
+    if (!red.length) return;
+    chooseRedKinds(red);
+    const home = red.find(t => t.capital) || red[0];
+    const target = pickTarget(home);
+    if (!target) return;
+    const cross = sideOf(target.x, target.y) !== sideOf(home.x, home.y);
+    const main = cross ? bestBridge(home.x, home.y, target.x, target.y) : null;
+    let decoy = null, decoyTarget = null;
+    if (main && bridges.length > 1 && red.length >= 3 && Math.random() < 0.45) {
+      const others = bridges.filter(b => b !== main);
+      decoy = others[Math.random() * others.length | 0];
+      const ex = bridgeEnd(decoy, blueSide());
+      let bd = Infinity;
+      for (const o of towns) if (o.owner !== 1) { const d = Math.hypot(o.x - ex.x, o.y - ex.y); if (d < bd) { bd = d; decoyTarget = o; } }
+    }
+    plan = { target, main, decoy, decoyTarget, phase: main ? 'mass' : 'strike', t: time, t2: time };
+  }
+  function setRoute(t, target, via) {
+    if (!target) { t.route = null; return; }
+    if (t.route && t.route.target === target && t.route.via === via) return;
+    t.route = makeRoute(t, target, null, via); t.route.via = via;
+  }
+  function setPoint(t, p) {
+    const r = t.route, end = r && r.pts[r.pts.length - 1];
+    if (r && !r.target && Math.hypot(end.x - p.x, end.y - p.y) < 4) return;
+    t.route = makeRoute(t, null, p);
+  }
+  function aiStep(dt) {
+    aiT -= dt;
+    if (aiT > 0) return;
+    aiT = 2;
+    const red = towns.filter(t => t.owner === 1);
+    if (!red.length) return;
+    if (!plan || plan.target.owner === 1 || time - plan.t > 75) newPlan();
+    if (!plan) return;
+
+    if (plan.phase === 'mass') {
+      const st = stagingPoint(plan.main), need = Math.min(50, D().gather + week * 3);
+      const massed = countNear(1, st.x, st.y, 80);
+      if (!plan.warned && massed >= need / 2) { plan.warned = true; alertAt(bridgeEnd(plan.main, redSide()), `Enemy army gathering at the ${bridgeName(plan.main)}`, false); }
+      if (massed >= need || time - plan.t > 40) {
+        plan.phase = plan.decoy ? 'decoy' : 'strike'; plan.t2 = time;
+        const br = plan.decoy || plan.main;
+        alertAt(bridgeEnd(br, blueSide()), `Attack incoming at the ${bridgeName(br)}!`, true);
+      }
+    } else if (plan.phase === 'decoy' && time - plan.t2 > 7) {
+      plan.phase = 'strike'; plan.t2 = time;
+      alertAt(bridgeEnd(plan.main, blueSide()), `Main attack at the ${bridgeName(plan.main)}!`, true);
+    }
+    else if (plan.phase === 'strike' && time - plan.t2 > 24) { newPlan(); if (!plan) return; }
+
+    const threat = new Map();
+    for (const u of units) {
+      if (u.team !== 0 || u.dead) continue;
+      for (const t of red) if ((t.x - u.x) ** 2 + (t.y - u.y) ** 2 < 170 * 170) threat.set(t, (threat.get(t) || 0) + 1);
+    }
+    aiSpend();
+    // send one town's troops to camp on a gold mine on the enemy's side that it doesn't hold yet
+    let minerTown = null, minerSpot = null;
+    const wanted = mines.filter(m => m.owner !== 1 && sideOf(m.x, m.y) === redSide());
+    if (wanted.length && red.filter(t => !t.capital).length >= 2) {
+      let bd = Infinity;
+      for (const m of wanted) for (const t of red) {
+        if (t.capital) continue;
+        const d = Math.hypot(t.x - m.x, t.y - m.y);
+        if (d < bd) { bd = d; minerTown = t; minerSpot = m; }
+      }
+    }
+    let decoyTown = null;
+    if (plan.decoy) {
+      let bd = Infinity; const st = stagingPoint(plan.decoy);
+      for (const t of red) if (!t.capital) { const d = Math.hypot(t.x - st.x, t.y - st.y); if (d < bd) { bd = d; decoyTown = t; } }
+    }
+    for (const t of red) {
+      if ((threat.get(t) || 0) > 4) { t.route = null; continue; }
+      let helping = null;
+      for (const [o, n] of threat) if (o !== t && n > 6) { helping = o; break; }
+      if (helping && Math.random() < 0.5) { setRoute(t, helping); continue; }
+      if (t.capital && red.length < 4 && week < 3) { t.route = null; continue; }
+      const onRedSide = sideOf(t.x, t.y) === redSide();
+      if (t === minerTown && t !== decoyTown && plan.phase === 'mass') { setPoint(t, { x: minerSpot.x, y: minerSpot.y }); continue; }
+      if (t === decoyTown && plan.decoyTarget) {
+        if (plan.phase === 'mass') setPoint(t, stagingPoint(plan.decoy));
+        else setRoute(t, plan.decoyTarget, plan.decoy);
+        continue;
+      }
+      if (!onRedSide || !plan.main || plan.phase === 'strike') setRoute(t, plan.target, plan.main);
+      else setPoint(t, stagingPoint(plan.main));
+    }
+  }
+
+  function bridgeName(br) {
+    const f = br.b / LB;
+    const where = P ? (f < 0.4 ? 'west' : f > 0.6 ? 'east' : 'middle') : (f < 0.4 ? 'north' : f > 0.6 ? 'south' : 'middle');
+    return `${where} ${br.ford ? 'ford' : 'bridge'}`;
+  }
+  function alertAt(p, msg, loud) {
+    alerts.push({ x: p.x, y: p.y, t: 0, loud });
+    toast(msg, loud ? 'bad' : '');
+    if (loud) Sound.alarm();
+  }
+
+  // The enemy buys with gold from its own farms and mines, in a fixed rotation.
+  const RED_ORDER = ['farm', 'tower', 'barracks', 'fort', 'farm', 'tower', 'fort', 'barracks'];
+  function aiSpotOk(p, side) {
+    if (p.x < 30 || p.y < 30 || p.x > W - 30 || p.y > H - 30) return false;
+    if (Math.abs(A(p.x, p.y) - riverA(B(p.x, p.y))) < river.hw + 14) return false;
+    if (towns.some(t => Math.hypot(t.x - p.x, t.y - p.y) < 55) || structs.some(st => Math.hypot(st.x - p.x, st.y - p.y) < 40)) return false;
+    if (fields.some(f => Math.hypot(f.x - p.x, f.y - p.y) < 40) || mines.some(m => Math.hypot(m.x - p.x, m.y - p.y) < 34)) return false;
+    return sideOf(p.x, p.y) === side || towns.some(t => t.owner === 1 && Math.hypot(t.x - p.x, t.y - p.y) < 160);
+  }
+  function aiSpot(k) {
+    const red = towns.filter(t => t.owner === 1);
+    if (!red.length) return null;
+    if (k === 'barracks') {
+      const t = red.filter(t => t.barracks < 2).sort((a, b) => (b.capital - a.capital) || (b.n - a.n))[0];
+      return t ? { town: t } : null;
+    }
+    if (k === 'farm') {
+      for (let tries = 0; tries < 40; tries++) {
+        const t = red[Math.random() * red.length | 0], a = rand(0, Math.PI * 2), r = rand(80, 120);
+        const p = { x: t.x + Math.cos(a) * r, y: t.y + Math.sin(a) * r };
+        if (aiSpotOk(p, sideOf(t.x, t.y))) return { ...p, town: t };
+      }
+      return null;
+    }
+    const anchors = bridges.map(br => stagingPoint(br)).concat(mines.filter(m => m.owner === 1));
+    if (plan && plan.main) anchors.unshift(stagingPoint(plan.main), stagingPoint(plan.main));
+    for (let tries = 0; tries < 40; tries++) {
+      const a = anchors[Math.random() * anchors.length | 0];
+      const p = { x: a.x + rand(-60, 60), y: a.y + rand(-60, 60) };
+      if (aiSpotOk(p, redSide())) return p;
+    }
+    return null;
+  }
+  function aiSpend() {
+    const k = RED_ORDER[redBuys % RED_ORDER.length];
+    const price = Math.round(PRICE[k] * 1.5 ** (redBought[k] || 0));
+    if (redGold < price) return;
+    const spot = aiSpot(k);
+    redBuys++;
+    if (!spot) return;
+    redGold -= price; redBought[k] = (redBought[k] || 0) + 1;
+    if (k === 'barracks') spot.town.barracks++;
+    else if (k === 'farm') { fields.push(makeField(spot.x, spot.y, spot.town)); buildStatic(); }
+    else structs.push({ type: k, x: spot.x, y: spot.y, team: 1, cd: 0 });
+    const at = spot.town && k === 'barracks' ? spot.town : spot;
+    for (let i = 0; i < 6; i++) puff(at.x + rand(-8, 8), at.y + rand(-8, 8), COL.team[1], rand(12, 22));
+  }
+
+  // Each week the enemy also fortifies one of its bridgeheads.
+  function aiBuild() {
+    for (let tries = 0; tries < 20; tries++) {
+      const br = bridges[Math.random() * bridges.length | 0];
+      const p = XY(riverA(br.b) + redSide() * (river.hw + rand(80, 140)), br.b + rand(-60, 60));
+      if (p.x < 20 || p.y < 20 || p.x > W - 20 || p.y > H - 20) continue;
+      if (Math.abs(A(p.x, p.y) - riverA(B(p.x, p.y))) < river.hw + 10) continue;
+      if (towns.some(t => Math.hypot(t.x - p.x, t.y - p.y) < 40) || structs.some(s => Math.hypot(s.x - p.x, s.y - p.y) < 40)) continue;
+      structs.push({ type: week % 2 ? 'fort' : 'tower', x: p.x, y: p.y, team: 1, cd: 0 });
+      return;
+    }
+  }
+
+  // ---------- game flow ----------
+  const UPGRADES = [
+    { key: 'fort', name: 'Fort', desc: 'Your soldiers within its walls take half damage. Hold a bridge with it.', place: true },
+    { key: 'tower', name: 'Watchtower', desc: 'Archers shoot enemies in range, even across the river.', place: true },
+    { key: 'bridge', name: 'Bridge', desc: 'A new crossing anywhere on the river. The enemy can use it too.', place: true },
+    { key: 'farm', name: 'Farm', desc: 'New fields beside one of your towns. Each farm earns gold while you hold the town.', place: true },
+    { key: 'barracks', name: 'Barracks', desc: 'Put it on one town: it trains 50% faster and fields 10 more soldiers.', place: true },
+    { key: 'ink', name: 'Surveyors', desc: '+400 route ink for longer or more routes.', apply: () => { ink += 400; } },
+    { key: 'drill', name: 'Drill sergeants', desc: 'All your towns train 15% faster.', apply: () => { stats.train[0] += 0.15; } },
+  ];
+
+  function offerUpgrades() {
+    state = 'upgrade';
+    Sound.week(); Sound.clash(0);
+    const shuffled = UPGRADES.slice().sort(() => Math.random() - 0.5);
+    const first = shuffled.find(u => u.place);
+    const pool = [first, shuffled.find(u => u !== first)];
+    $('upLabel').textContent = `Week ${week} complete`;
+    const box = $('choices'); box.innerHTML = '';
+    pool.forEach((up, i) => {
+      const b = document.createElement('button');
+      b.className = 'choice'; b.type = 'button'; b.id = 'choice' + i;
+      b.innerHTML = `<div class="top"><span class="tag">${up.place ? 'Place on the map' : 'Instant'}</span><span class="icon-tile">${icon(up.key)}</span></div><b>${up.name}</b><span>${up.desc}</span>`;
+      b.onclick = () => {
+        if (up.place) inventory[up.key] = (inventory[up.key] || 0) + 1; else up.apply();
+        week++;
+        stats.train[1] = D().redTrain + D().redGrowth * (week - 1);
+        stats.hp[1] = 3 + (D().hpEvery ? Math.floor((week - 1) / D().hpEvery) : 0);
+        if ((week - 1) % D().buildEvery === 0) aiBuild();
+        $('upgrade').hidden = true;
+        state = 'play';
+        renderTray();
+        toast(up.place ? `${up.name} added to your tray` : `Week ${week}: the enemy grows stronger`);
+      };
+      box.appendChild(b);
+    });
+    $('upgrade').hidden = false;
+    box.firstChild.focus();
+  }
+
+  // ---------- placing items from the tray ----------
+  function placeCheck(kind, p) {
+    if (p.x < 10 || p.y < 10 || p.x > W - 10 || p.y > H - 10) return 'Place it inside the map';
+    if (kind === 'charge') return null;
+    if (kind === 'bridge') {
+      if (!inBand(p.x, p.y)) return 'Bridges go on the river';
+      const b = B(p.x, p.y);
+      if (b < 50 || b > LB - 50) return 'Too close to the map edge';
+      if (bridges.some(br => Math.abs(br.b - b) < 90)) return 'Too close to another bridge';
+      return null;
+    }
+    if (kind === 'barracks') return townAt(p.x, p.y, 30, 0) ? null : 'Barracks go on one of your towns';
+    if (kind === 'farm') {
+      if (Math.abs(A(p.x, p.y) - riverA(B(p.x, p.y))) < river.hw + 24) return 'Too close to the water';
+      if (!towns.some(t => t.owner === 0 && Math.hypot(t.x - p.x, t.y - p.y) < 150)) return 'Farms go next to one of your towns';
+      if (towns.some(t => Math.hypot(t.x - p.x, t.y - p.y) < 60)) return 'Too close to the town';
+      if (fields.some(f => Math.hypot(f.x - p.x, f.y - p.y) < 40) || mines.some(m => Math.hypot(m.x - p.x, m.y - p.y) < 50)) return 'Too close to other fields';
+      return null;
+    }
+    if (Math.abs(A(p.x, p.y) - riverA(B(p.x, p.y))) < river.hw + 8) return 'Too close to the water';
+    const own = sideOf(p.x, p.y) === blueSide() || towns.some(t => t.owner === 0 && Math.hypot(t.x - p.x, t.y - p.y) < 160);
+    if (!own) return 'Build on your side of the river or near your towns';
+    if (towns.some(t => Math.hypot(t.x - p.x, t.y - p.y) < 34)) return 'Too close to a town';
+    if (structs.some(s => Math.hypot(s.x - p.x, s.y - p.y) < 30)) return 'Too close to another building';
+    return null;
+  }
+  function place(kind, p) {
+    if (kind === 'charge') {
+      let n = 0;
+      for (const u of units) if (u.team === 0 && !u.dead && (u.x - p.x) ** 2 + (u.y - p.y) ** 2 < 140 * 140) { u.boost = 4; u.calm = 5; n++; }
+      for (let i = 0; i < 3; i++) puffs.push({ x: p.x, y: p.y, t: -i * 0.08, color: COL.team[0], size: 140 });
+      chargeCd = CHARGE_CD; armed = null; renderTray();
+      Sound.charge(); tutorialDid('charge');
+      toast(n ? `Charge! ${n} soldiers sprint forward` : 'No soldiers in range', n ? 'good' : '');
+      return;
+    }
+    if (kind === 'bridge') { bridges.push({ b: B(p.x, p.y), span: 20 }); buildStatic(); }
+    else if (kind === 'barracks') { const t = townAt(p.x, p.y, 30, 0); t.barracks++; toast(`${t.name} now trains faster`, 'good'); }
+    else if (kind === 'farm') {
+      let near = null, bd = Infinity;
+      for (const t of towns) if (t.owner === 0) { const d = Math.hypot(t.x - p.x, t.y - p.y); if (d < bd) { bd = d; near = t; } }
+      fields.push(makeField(p.x, p.y, near)); buildStatic();
+      toast(`New farm for ${near.name}`, 'good');
+    }
+    else structs.push({ type: kind, x: p.x, y: p.y, team: 0, cd: 0 });
+    for (let i = 0; i < 6; i++) puff(p.x + rand(-8, 8), p.y + rand(-8, 8), COL.team[0], rand(12, 22));
+    if (inventory[kind] > 0) inventory[kind]--;
+    else { gold -= priceOf(kind); bought[kind] = (bought[kind] || 0) + 1; }
+    armed = null;
+    renderTray();
+    Sound.place();
+    if (kind === 'tower') tutorialDid('tower');
+  }
+  function renderTray() {
+    const el = $('tray'); el.innerHTML = '';
+    for (const k of Object.keys(ITEM)) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.id = 'tray-' + k; b.className = armed === k ? 'armed' : '';
+      b.onclick = () => {
+        if (armed === k) { armed = null; renderTray(); return; }
+        if (!(inventory[k] > 0) && gold < priceOf(k)) { toast(`Not enough gold: ${priceOf(k)} needed`, 'bad'); return; }
+        armed = k; renderTray();
+      };
+      el.appendChild(b);
+    }
+    refreshTray(true);
+    const el2 = $('hint');
+    if (armed === 'charge') { el2.textContent = 'Click where your soldiers should charge. Everyone within the circle sprints and hits harder. Esc cancels.'; el2.style.opacity = 1; }
+    else if (armed) {
+      el2.textContent = armed === 'bridge' ? 'Click on the river to build the bridge. Esc cancels.'
+        : armed === 'barracks' ? 'Click one of your towns to add barracks. Esc cancels.'
+        : armed === 'farm' ? 'Click next to one of your towns to plant a farm. Esc cancels.'
+        : `Click on your side of the river to place the ${ITEM[armed].toLowerCase()}. Esc cancels.`;
+      el2.style.opacity = 1;
+    } else { el2.textContent = hintBase; el2.style.opacity = hintBase ? 1 : 0; }
+  }
+  // Keeps tray labels and prices current without rebuilding the buttons.
+  function refreshTray(force) {
+    for (const k of Object.keys(ITEM)) {
+      const b = $('tray-' + k);
+      if (!b) continue;
+      const n = inventory[k] || 0, pr = priceOf(k);
+      const html = `${icon(k, 16)}<span class="name">${ITEM[k]}</span> ${n ? `×${n}` : `<span class="price"><i class="coin"></i>${pr}</span>`}`;
+      if (force || b.dataset.html !== html) { b.innerHTML = html; b.dataset.html = html; }
+      b.disabled = !n && gold < pr && armed !== k;
+      b.title = n ? `${ITEM[k]}: ${n} ready to place` : `Buy a ${ITEM[k].toLowerCase()} for ${pr} gold`;
+    }
+  }
+  function setHint(text) { hintBase = text; if (!armed) { $('hint').textContent = text; $('hint').style.opacity = text ? 1 : 0; } }
+
+  function endGame(won) {
+    state = 'over';
+    const level = difficulty[0].toUpperCase() + difficulty.slice(1);
+    $('overLabel').textContent = `${won ? 'Victory' : 'Defeat'} · ${level}`;
+    $('overTitle').textContent = won ? 'Redmarsh has fallen' : 'Ashford has fallen';
+    $('overText').textContent = won
+      ? `You took the enemy capital in week ${week} on ${level} difficulty. ${difficulty === 'hard' ? 'Try again and see if you can do it faster.' : 'Ready to try a harder level?'}`
+      : `You held the river until week ${week}. Gather troops before you attack, and guard the bridges.`;
+    const mins = Math.floor(time / 60), secs = Math.floor(time % 60);
+    const cells = [
+      [tally.trained, 'Soldiers trained'], [tally.killed, 'Enemies defeated'], [tally.lost, 'Soldiers lost'],
+      [tally.captured, 'Towns captured'], [tally.fallen, 'Towns lost'], [`${mins}:${String(secs).padStart(2, '0')}`, 'Time played'],
+    ];
+    $('overStats').innerHTML = cells.map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join('');
+    $('overHero').innerHTML = heroSVG(won ? 'win' : 'lose');
+    $('over').hidden = false;
+    $('againBtn').focus();
+    Sound.clash(0);
+    if (won) Sound.victory(); else Sound.defeat();
+  }
+
+  function step(dt) {
+    time += dt; weekT += dt;
+    buildGrid();
+    updateUnits(dt);
+    if (state !== 'play') return;
+    updateTowns(dt);
+    updateStructs(dt);
+    aiStep(dt);
+    units = units.filter(u => !u.dead);
+    for (const d of deaths) d.t += dt;
+    deaths = deaths.filter(d => d.t < 0.5);
+    for (const p of puffs) p.t += dt;
+    for (const a of alerts) a.t += dt;
+    for (const w of waves) w.t += dt;
+    waves = waves.filter(w => w.t < 1.2);
+    if (scars.length && time - scars[0].born > 30) scars = scars.filter(sc => time - sc.born < 30);
+    stepTerritory(dt);
+    stepEconomy(dt);
+    stepCoach(dt);
+    alerts = alerts.filter(a => a.t < 6);
+    chargeCd = Math.max(0, chargeCd - dt);
+    puffs = puffs.filter(p => p.t < 0.5);
+    if (weekT >= WEEK) { weekT = 0; offerUpgrades(); }
+  }
+
+  // ---------- input ----------
+  let drawing = null, hover = null, hoverGroup = null, pointerId = null;
+  function toWorld(e) {
+    const r = cvs.getBoundingClientRect();
+    return { x: (e.clientX - r.left - offX) / scale, y: (e.clientY - r.top - offY) / scale };
+  }
+  function townAt(x, y, R, owner) {
+    let best = null, bd = R * R;
+    for (const t of towns) {
+      if (owner !== undefined && t.owner !== owner) continue;
+      const d = (t.x - x) ** 2 + (t.y - y) ** 2;
+      if (d < bd) { bd = d; best = t; }
+    }
+    return best;
+  }
+  // Nearest point on any road within R of (x, y): { road, i, x, y } or null.
+  function nearestRoadPt(x, y, R, only) {
+    let best = null, bd = R * R;
+    for (const r of only ? [only] : roads) {
+      const pts = r.pts;
+      for (let i = 0; i < pts.length; i++) {
+        const d = (pts[i].x - x) ** 2 + (pts[i].y - y) ** 2;
+        if (d < bd) { bd = d; best = { road: r, i, x: pts[i].x, y: pts[i].y }; }
+      }
+    }
+    return best;
+  }
+  let freehand = false;
+  function extend(p) {
+    const d = drawing;
+    // dragging back over the line erases it, like retracing a road
+    for (let i = d.pts.length - 4; i >= 0; i--) {
+      if ((d.pts[i].x - p.x) ** 2 + (d.pts[i].y - p.y) ** 2 < 81) { d.pts.length = i + 1; d.len = routeLen(d.pts); break; }
+    }
+    d.blocked = null; d.snap = null;
+    const avail = d.town ? inkCap() - inkUsed(d.town) : Infinity;   // group orders are free
+    let last = d.pts[d.pts.length - 1];
+    const push = (nx, ny) => {
+      if (isWater(nx, ny) || isWater((nx + last.x) / 2, (ny + last.y) / 2)) { d.blocked = 'water'; d.tip = { x: nx, y: ny }; return false; }
+      const step = Math.hypot(nx - last.x, ny - last.y);
+      if (d.len + step > avail) { d.blocked = 'ink'; d.tip = { x: nx, y: ny }; return false; }
+      if (nx < 6 || ny < 6 || nx > W - 6 || ny > H - 6) return false;
+      last = { x: nx, y: ny }; d.pts.push(last); d.len += step;
+      Sound.click();
+      return true;
+    };
+    // Snap to roads unless Shift is held: follow the road's curve when the line is already on it.
+    let target = p;
+    const hit = freehand ? null : nearestRoadPt(p.x, p.y, 26);
+    if (hit) {
+      target = { x: hit.x, y: hit.y }; d.snap = target;
+      const from = nearestRoadPt(last.x, last.y, 9, hit.road);
+      if (from && from.i !== hit.i) {
+        const dir = hit.i > from.i ? 1 : -1, pts = hit.road.pts;
+        let acc = 0;
+        for (let i = from.i + dir; i !== hit.i + dir; i += dir) {
+          acc += Math.hypot(pts[i].x - pts[i - dir].x, pts[i].y - pts[i - dir].y);
+          if (acc < 11 && i !== hit.i) continue;
+          acc = 0;
+          if (!push(pts[i].x, pts[i].y)) return;
+        }
+      }
+    }
+    let dx = target.x - last.x, dy = target.y - last.y, dl = Math.hypot(dx, dy);
+    for (let guard = 0; dl >= 12 && guard < 300; guard++) {
+      let nx = last.x + dx / dl * 12, ny = last.y + dy / dl * 12;
+      if (!freehand) {   // slide onto a nearby road on the way
+        const c = nearestRoadPt(nx, ny, 9);
+        if (c && Math.hypot(c.x - last.x, c.y - last.y) > 6) { nx = c.x; ny = c.y; }
+      }
+      if (!push(nx, ny)) return;
+      dx = target.x - last.x; dy = target.y - last.y; dl = Math.hypot(dx, dy);
+    }
+  }
+  function commit() {
+    const d = drawing, t = d.town;
+    if (t && t.owner !== 0) return;
+    if (d.len < 24) { if (t) openMenu(t); return; }
+    const end = d.pts[d.pts.length - 1];
+    let target = null, bd = 40 * 40;
+    for (const o of towns) {
+      if (o === t) continue;
+      const dd = (o.x - end.x) ** 2 + (o.y - end.y) ** 2;
+      if (dd < bd) { bd = dd; target = o; }
+    }
+    const pts = d.pts.slice();
+    if (target) pts.push({ x: target.x, y: target.y });
+    const route = { id: ++routeSeq, pts, target, len: d.len };
+    if (!t) {
+      const group = d.group.filter(u => !u.dead);
+      for (const u of group) u.route = route;
+      Sound.commit();
+      toast(`${group.length} soldiers on the move`);
+      return;
+    }
+    t.route = route;
+    routesDrawn++;
+    Sound.commit();
+    tutorialDid('route');
+    if (routesDrawn === 1 && !tut) setHint('Tip: end a route on open ground to gather an army there, then drag from the group to strike. Tap a town to choose what it trains.');
+    if (routesDrawn === 4 && !tut) setHint('');
+  }
+
+  function openMenu(t) {
+    menuTown = t;
+    Sound.menu(); tutorialDid('menu');
+    const m = $('townMenu');
+    $('tmName').textContent = `${t.name} trains`;
+    const secs = trainSeconds(t);
+    $('tmInfo').textContent = `${t.n} of ${townCap(t)} soldiers · 1 every ${secs < 10 ? secs.toFixed(1) : Math.round(secs)}s`;
+    for (let k = 0; k < 3; k++) $('tmK' + k).className = t.kind === k ? 'on' : '';
+    $('tmClear').hidden = !t.route;
+    m.hidden = false;
+    const sx = t.x * scale + offX, sy = t.y * scale + offY, mw = m.offsetWidth || 230, mh = m.offsetHeight || 200;
+    m.style.left = clamp(sx - mw / 2, 12, innerWidth - mw - 12) + 'px';
+    m.style.top = (sy + 34 + mh < innerHeight - 8 ? sy + 34 : Math.max(8, sy - 34 - mh)) + 'px';
+  }
+  function closeMenu() { menuTown = null; $('townMenu').hidden = true; }
+  for (let k = 0; k < 3; k++) $('tmK' + k).onclick = () => {
+    if (menuTown && menuTown.owner === 0) { menuTown.kind = k; Sound.select(); toast(`${menuTown.name} now trains ${KIND[k].toLowerCase()}`); }
+    closeMenu();
+  };
+  // Clearing cancels the orders: soldiers still marching on that route head home; groups that already arrived stay put.
+  $('tmClear').onclick = () => {
+    const t = menuTown;
+    if (t && t.route) {
+      const r = t.route;
+      let recalled = 0;
+      for (const u of units) if (u.route === r && !u.arrived && !u.dead) { u.route = null; recalled++; }
+      t.route = null;
+      toast(recalled ? `${t.name} route cleared. ${recalled} soldiers head home` : `${t.name} route cleared`);
+    }
+    closeMenu();
+  };
+  $('chargeBtn').onclick = () => { if (state !== 'play' || chargeCd > 0) return; armed = armed === 'charge' ? null : 'charge'; renderTray(); };
+
+  cvs.addEventListener('pointerdown', e => {
+    if (menuTown) closeMenu();
+    if (state !== 'play') return;
+    const p = toWorld(e);
+    if (armed) {
+      const err = placeCheck(armed, p);
+      if (err) toast(err, 'bad');
+      else if (armed !== 'charge' && !(inventory[armed] > 0) && gold < priceOf(armed)) toast(`Not enough gold: ${priceOf(armed)} needed`, 'bad');
+      else place(armed, p);
+      e.preventDefault();
+      return;
+    }
+    const t = townAt(p.x, p.y, 30, 0);
+    const group = t ? null : groupAt(p.x, p.y);
+    if (!t && !group) return;
+    drawing = t ? { town: t, pts: [{ x: t.x, y: t.y }], len: 0, blocked: null, tip: null }
+      : { town: null, group, pts: [{ x: p.x, y: p.y }], len: 0, blocked: null, tip: null };
+    pointerId = e.pointerId;
+    cvs.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  cvs.addEventListener('pointermove', e => {
+    const p = toWorld(e);
+    ghost = p;
+    lastPointer = { p, cx: e.clientX, cy: e.clientY };
+    inspectAt = e.shiftKey && !drawing && !armed && state === 'play' ? lastPointer : null;
+    showInspect();
+    if (!drawing) {
+      hover = state === 'play' && !armed ? townAt(p.x, p.y, 30, 0) : null;
+      hoverGroup = state === 'play' && !armed && !hover ? groupAt(p.x, p.y) : null;
+      cvs.style.cursor = hover || hoverGroup || armed ? 'pointer' : 'default';
+      return;
+    }
+    freehand = e.shiftKey;
+    if (e.pointerId === pointerId) extend(p);
+  });
+  cvs.addEventListener('pointerup', e => { if (drawing && e.pointerId === pointerId) { commit(); drawing = null; } });
+  cvs.addEventListener('pointercancel', () => { drawing = null; });
+
+  function setPaused(v) {
+    paused = v;
+    $('pauseBtn').textContent = paused ? '▶ Resume' : '❚❚ Pause';
+  }
+  $('pauseBtn').onclick = () => setPaused(!paused);
+  $('speedBtn').onclick = () => { speed = speed === 1 ? 2 : speed === 2 ? 3 : 1; $('speedBtn').textContent = speed + '×'; };
+  // Holding Shift shows what is under the pointer; letting go hides it.
+  addEventListener('keydown', e => {
+    if (e.key === 'Shift' && lastPointer && !drawing && !armed && state === 'play') { inspectAt = lastPointer; showInspect(); }
+  });
+  addEventListener('keyup', e => { if (e.key === 'Shift') { inspectAt = null; showInspect(); } });
+  addEventListener('blur', () => { inspectAt = null; showInspect(); });
+  addEventListener('keydown', e => {
+    if (e.code === 'Space' && state === 'play') { e.preventDefault(); setPaused(!paused); }
+    if (e.key === 'Escape') { if (armed) { armed = null; renderTray(); } closeMenu(); if (!$('rules').hidden) $('rulesClose').onclick(); }
+  });
+  cvs.addEventListener('pointerleave', () => { ghost = null; lastPointer = null; inspectAt = null; showInspect(); });
+
+  // ---------- hover to inspect: what is under the pointer and what it does ----------
+  let inspectAt = null, lastPointer = null;
+  const OWN = o => o === 0 ? ['Yours', COL.team[0]] : o === 1 ? ['Enemy', COL.team[1]] : ['Unclaimed', '#8a877c'];
+  function inField(f, x, y) {
+    const dx = x - f.x, dy = y - f.y, c = Math.cos(-f.rot), s2 = Math.sin(-f.rot);
+    const lx = dx * c - dy * s2, ly = dx * s2 + dy * c;
+    return Math.abs(lx) < f.w / 2 && Math.abs(ly) < f.h / 2;
+  }
+  function describe(x, y) {
+    const t = townAt(x, y, 30);
+    if (t) {
+      const lines = [];
+      if (t.owner >= 0) {
+        const secs = trainSeconds(t);
+        lines.push(`Trains ${KIND[t.kind].toLowerCase()} · 1 every ${secs.toFixed(1)}s`);
+        lines.push(`${t.n} of ${townCap(t)} soldiers at home`);
+      } else lines.push('Capture it by marching soldiers into it.');
+      if (t.barracks) lines.push(`${t.barracks} barracks: trains faster, holds more`);
+      const farms = fields.filter(f => f.town === t).length;
+      if (farms) lines.push(`${farms} farms · ${t.owner === 0 ? `+${Math.round(farms * FARM_RATE * WEEK)} gold a week` : 'pay whoever holds the town'}`);
+      lines.push(`Defence ${Math.ceil(t.hold)} of ${Math.round(t.holdMax)}`);
+      if (t.capital) lines.push(t.owner === 0 ? 'Your capital. Lose it and the war is over.' : 'Enemy capital. Take it to win.');
+      return { title: t.name, own: OWN(t.owner), lines };
+    }
+    for (const m of mines) if (Math.hypot(m.x - x, m.y - y) < 30) {
+      return { title: 'Gold mine', own: OWN(m.owner), lines: [`+${Math.round(MINE_RATE * WEEK)} gold a week for whoever holds the land around it.`, m.owner === 0 ? 'Keep your territory here to keep it.' : 'Camp troops or build a fort nearby to turn the land your color.'] };
+    }
+    for (const st of structs) if (Math.hypot(st.x - x, st.y - y) < 16) {
+      const lines = st.type === 'fort' ? ['Soldiers of its side inside the circle take 55% less damage.'] : ['Shoots enemies within its range, even across the river. Arrows do half damage in woods.'];
+      lines.push('Changes sides if 8 or more enemies crowd it with no defenders near.');
+      return { title: st.type === 'fort' ? 'Fort' : 'Watchtower', own: OWN(st.team), lines };
+    }
+    for (const f of fields) if (inField(f, x, y)) {
+      const o = f.town ? f.town.owner : -1;
+      return { title: 'Farm', own: OWN(o), lines: [f.town ? `Belongs to ${f.town.name}.` : '', o === 0 ? `+${Math.round(FARM_RATE * WEEK)} gold a week while you hold ${f.town.name}.` : o === 1 ? `Pays the enemy. Take ${f.town.name} to make it yours.` : `Fallow. Capture ${f.town.name} to work it.`].filter(Boolean) };
+    }
+    if (inBand(x, y)) {
+      const br = bridgeAt(B(x, y));
+      if (br && br.ford) return { title: 'Ford', lines: ['Shallow water: anyone can wade across at 45% speed.'] };
+      if (br) return { title: 'Bridge', lines: ['The quick way across the river.'] };
+      return { title: 'River', lines: ['Only bridges and fords cross it.'] };
+    }
+    const lines = [];
+    let title = 'Open ground';
+    if (onRoad(x, y)) { title = 'Road'; lines.push('Troops march 40% faster here.'); }
+    else if (inForest(x, y)) { title = 'Woods'; lines.push('Troops move 35% slower, but arrows do half damage.'); }
+    const h = hillLevel(x, y);
+    if (h) {
+      if (title === 'Open ground') title = 'Hill';
+      lines.push(`Hill, height ${h} of 3: archers shoot ${10 * h} further. Attacking downhill +25%, uphill −20%.`);
+    }
+    if (!lines.length) return null;
+    return { title, lines };
+  }
+  let inspectKey = '';
+  function showInspect() {
+    const el = $('inspect');
+    const d = inspectAt && describe(inspectAt.p.x, inspectAt.p.y);
+    if (!d) { el.hidden = true; inspectKey = ''; return; }
+    const html = `${d.own ? `<span class="own" style="color:${d.own[1]}">${d.own[0]}</span>` : ''}<b>${d.title}</b>${d.lines.map(l => `<span>${l}</span>`).join('')}`;
+    if (html !== inspectKey) { el.innerHTML = html; inspectKey = html; }
+    el.hidden = false;
+    const w = el.offsetWidth || 220, h = el.offsetHeight || 80;
+    let lx = inspectAt.cx + 16, ly = inspectAt.cy + 16;
+    if (lx + w > innerWidth - 8) lx = inspectAt.cx - w - 16;
+    if (ly + h > innerHeight - 8) ly = inspectAt.cy - h - 16;
+    el.style.left = lx + 'px'; el.style.top = ly + 'px';
+  }
+
+  // ---------- rules sheet ----------
+  let pausedBeforeRules = false;
+  $('rulesBtn').onclick = () => { if (state !== 'play') return; pausedBeforeRules = paused; setPaused(true); $('rules').hidden = false; $('rulesClose').focus(); };
+  $('rulesClose').onclick = () => { $('rules').hidden = true; setPaused(pausedBeforeRules); };
+
+  // ---------- tips that appear the first time something becomes relevant ----------
+  const COACH = [
+    { id: 'inspect', when: () => time > 25, text: 'Hold Shift and hover over a town, mine, farm or patch of ground to see what it does.' },
+    { id: 'gold', when: () => gold >= 30, text: 'You have gold to spend. Buy farms, watchtowers and more from the tray at the bottom right.' },
+    { id: 'mineNear', when: () => mines.some(m => m.owner !== 0 && units.some(u => u.team === 0 && Math.hypot(u.x - m.x, u.y - m.y) < 70)), text: 'Your troops are near a gold mine. Keep them there until the land turns blue to claim it.' },
+    { id: 'mine', when: () => mines.some(m => m.owner === 0), text: 'You hold a gold mine: +27 gold a week while your color covers the land around it.' },
+    { id: 'road', when: () => units.some(u => u.team === 0 && onRoad(u.x, u.y) && Math.hypot(u.vx, u.vy) > 20 && Math.hypot(u.x - u.town?.x, u.y - u.town?.y) > 80), text: 'Your troops are on a road, marching 40% faster. Draw routes along roads to reach the front sooner.' },
+    { id: 'hill', when: () => units.some(u => u.team === 0 && u.kind === 1 && hillLevel(u.x, u.y) > 0), text: 'Your archers are on a hill: they shoot further from up here. Hills make great defensive spots.' },
+    { id: 'forest', when: () => units.some(u => u.team === 0 && inForest(u.x, u.y) && !onRoad(u.x, u.y)), text: 'Woods slow your troops down, but arrows only do half damage to them there.' },
+    { id: 'ford', when: () => units.some(u => onFord(u.x, u.y)), text: 'Troops are wading the ford. It is slow, but it gets around the bridges, so watch it.' },
+    { id: 'clash', when: () => chargeCd === 0 && clashLevel > 6, text: 'A big fight! Press Charge and click on it to send your soldiers in at a sprint.' },
+    { id: 'lost', when: () => tally.fallen > 0, text: 'A lost town stops training for you and its farms pay the enemy. Take it back to restore your income.' },
+    { id: 'enemyBuild', when: () => structs.some(st => st.team === 1), text: 'The enemy has built defences. Hold Shift and hover over anything on the map to see what it does.' },
+  ];
+  let coachSeen = {}, coachT = 4, coachHide = 0;
+  try { coachSeen = JSON.parse(localStorage.getItem('frontlines-coach') || '{}') || {}; } catch (e) {}
+  function stepCoach(dt) {
+    if (coachHide > 0 && (coachHide -= dt) <= 0) $('coach').hidden = true;
+    if ((coachT -= dt) > 0 || tutStep()) return;
+    coachT = 1;
+    if (!$('coach').hidden) return;
+    const c = COACH.find(c => !coachSeen[c.id] && c.when());
+    if (!c) return;
+    coachSeen[c.id] = true;
+    try { localStorage.setItem('frontlines-coach', JSON.stringify(coachSeen)); } catch (e) {}
+    $('coachText').textContent = c.text; $('coach').hidden = false; coachHide = 10; coachT = 14;
+  }
+  $('coachClose').onclick = () => { $('coach').hidden = true; };
+  $('introHero').innerHTML = heroSVG('intro');
+  $('startBtn').onclick = () => { Sound.init(); $('intro').hidden = true; state = 'play'; };
+  function renderSound() { $('soundBtn').textContent = Sound.muted ? 'Sound off' : 'Sound on'; }
+  $('soundBtn').onclick = () => { Sound.init(); Sound.setMuted(!Sound.muted); renderSound(); };
+  renderSound();
+
+  // ---------- first-game tutorial: one tip at a time, each cleared by doing it ----------
+  let tut = null;
+  const TUT = [
+    { key: 'route', text: 'Drag from Brindle to Millbrook to send soldiers to capture it.', towns: ['Brindle', 'Millbrook'] },
+    { key: 'menu', text: 'Tap Coldwater to choose what it trains.', towns: ['Coldwater'] },
+    { key: 'tower', text: 'Click the watchtower in the tray, then place it on your side near a bridge.', el: 'tray' },
+    { key: 'charge', text: 'When your soldiers meet the enemy, press Charge and click on the fight.', el: 'chargeBtn' },
+  ];
+  function startTutorial() {
+    let done = false;
+    try { done = localStorage.getItem('frontlines-tutorial') === 'done'; } catch (e) {}
+    tut = done ? null : { did: {} };
+    if (tut) aiT = 25;   // give a new player a moment before the first enemy push
+    showTutorial();
+  }
+  function tutStep() { return tut ? TUT.find(s => !tut.did[s.key]) : null; }
+  function tutorialDid(key) { if (tut && !tut.did[key]) { tut.did[key] = true; showTutorial(); } }
+  function endTutorial() {
+    tut = null;
+    try { localStorage.setItem('frontlines-tutorial', 'done'); } catch (e) {}
+    showTutorial();
+    setHint('');
+  }
+  function showTutorial() {
+    for (const id of ['tray', 'chargeBtn']) $(id).classList.remove('pulse');
+    const st = tutStep();
+    $('tutSkip').hidden = !st;
+    if (!st) { if (tut) endTutorial(); return; }
+    setHint(st.text);
+    if (st.el) $(st.el).classList.add('pulse');
+  }
+  $('tutSkip').onclick = endTutorial;
+  $('againBtn').onclick = () => { $('over').hidden = true; newGame(); state = 'intro'; setPaused(false); $('intro').hidden = false; $('startBtn').focus(); };
+  const TIPS = {
+    easy: {
+      intro: 'The enemy grows slowly and rarely counters you. A good level to learn the basics.',
+      list: [
+        'Grab the grey towns on your side first. Every town adds soldiers and 300 route ink.',
+        'Camp an army next to a gold mine until the land turns blue. It pays for your next watchtower.',
+        'Gather 15–20 soldiers on open ground, then drag the group across the bridge in one push.',
+      ],
+    },
+    normal: {
+      intro: 'The enemy masses at a bridge, then attacks. Win the fight at the river and the rest follows.',
+      list: [
+        'Never trickle troops into a defended town. Gather an army first, then strike all at once.',
+        'When the red warning appears, send the counter: spearmen stop cavalry, cavalry run down archers, archers shred spearmen.',
+        'Hold each bridge with a fort or watchtower, and save Charge for the moment the armies collide.',
+      ],
+    },
+    hard: {
+      intro: 'The enemy builds every week, counters your most common troop type, and grows stronger fast.',
+      list: [
+        'Mix your troop types so the enemy has nothing easy to counter.',
+        'Watch the ford. A slow crossing is still a crossing, and the enemy will use it.',
+        'Buy farms early. Gold compounds, and a contested mine near the river is worth fighting over.',
+        'Expand early. Barracks and extra towns matter more than anything else after week 3.',
+        'Expect feints: the first attack may be a decoy. Keep a reserve near the other bridge.',
+        'Strike Redmarsh before week 6. The longer the war lasts, the harder it gets.',
+      ],
+    },
+  };
+  function renderDiff() {
+    for (const k of Object.keys(DIFF)) $('diff-' + k).className = k === difficulty ? 'on' : '';
+    const t = TIPS[difficulty];
+    $('tipsTitle').textContent = `How to win on ${difficulty[0].toUpperCase() + difficulty.slice(1)}`;
+    $('tipsIntro').textContent = t.intro;
+    $('tipsList').innerHTML = t.list.map(x => `<li>${x}</li>`).join('');
+  }
+  for (const k of Object.keys(DIFF)) $('diff-' + k).onclick = () => {
+    difficulty = k; renderDiff();
+    try { localStorage.setItem('frontlines-difficulty', k); } catch (e) {}
+    stats.train[0] = D().blueTrain; stats.train[1] = D().redTrain;
+  };
+  renderDiff();
+  addEventListener('resize', resize);
+
+  let toastTimer = 0;
+  function toast(msg, kind) {
+    const el = $('toast');
+    el.textContent = msg; el.className = 'show' + (kind ? ' ' + kind : '');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.className = kind || ''; }, 2200);
+  }
+
+  // ---------- render ----------
+  function strokeRoute(pts, color, width) {
+    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.stroke();
+  }
+  function chevrons(pts, color) {
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineCap = 'round';
+    const off = (time * 10) % 5 | 0;
+    for (let i = 3 + off; i < pts.length - 2; i += 5) {
+      const a = pts[i - 1], b = pts[i + 1], ang = Math.atan2(b.y - a.y, b.x - a.x), p = pts[i];
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ang);
+      ctx.beginPath(); ctx.moveTo(-2.5, -3.5); ctx.lineTo(1.5, 0); ctx.lineTo(-2.5, 3.5); ctx.stroke();
+      ctx.restore();
+    }
+  }
+  function drawRoute(r, team) {
+    strokeRoute(r.pts, COL.light[team], 8);
+    chevrons(r.pts, COL.mid[team]);
+    if (!r.target) {
+      const e = r.pts[r.pts.length - 1];
+      ctx.strokeStyle = COL.mid[team]; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.arc(e.x, e.y, 34, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+
+  function render() {
+    const vw = innerWidth, vh = innerHeight;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = COL.outside; ctx.fillRect(0, 0, cvs.width, cvs.height);
+    if (!bg) return;
+    const ox = Math.round(offX * dpr), oy = Math.round(offY * dpr), nowS = performance.now() / 1000;
+    ctx.drawImage(bg, ox, oy);
+    ctx.setTransform(dpr * scale, 0, 0, dpr * scale, ox, oy);
+    drawTerritory();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(bgOver, ox, oy);
+    ctx.setTransform(dpr * scale, 0, 0, dpr * scale, ox, oy);
+
+    // drifting ripples on the river
+    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1.4; ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (const rp of ripples) {
+      const b = ((rp.b + nowS * rp.sp) % (LB + 60)) - 30;
+      if (bridges.some(br => Math.abs(b - br.b) < br.span + 8 || Math.abs(b + rp.len - br.b) < br.span + 8)) continue;
+      const p0 = XY(riverA(b) + rp.off * river.hw, b), p1 = XY(riverA(b + rp.len) + rp.off * river.hw, b + rp.len);
+      ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y);
+    }
+    ctx.stroke();
+
+    // drill yards: towns with barracks sit on a tinted parade ground that grows with each barracks
+    for (const t of towns) {
+      if (!t.barracks || t.owner < 0) continue;
+      const y = (t.capital ? 14 : 10) + 30 + 9 * Math.min(3, t.barracks);
+      rr(ctx, t.x - y, t.y - y, y * 2, y * 2, 14);
+      ctx.globalAlpha = 0.45; ctx.fillStyle = COL.light[t.owner]; ctx.fill();
+      ctx.globalAlpha = 0.7; ctx.strokeStyle = COL.mid[t.owner]; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    }
+
+    // battle scars fade over 30 seconds
+    for (const sc of scars) {
+      const k = 1 - (time - sc.born) / 30;
+      if (k <= 0) continue;
+      ctx.globalAlpha = k * 0.32; ctx.fillStyle = '#5e5a48';
+      ctx.beginPath(); ctx.arc(sc.x, sc.y, sc.r, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = k * 0.5; ctx.fillStyle = COL.team[sc.team];
+      ctx.fillRect(sc.x + sc.r * 0.6, sc.y - 1, 1.6, 1.6);
+    }
+    ctx.globalAlpha = 1;
+
+    for (const w of waves) {
+      const k = w.t / 1.2, R = 20 + 150 * Math.sqrt(k);
+      ctx.globalAlpha = (1 - k) * 0.22; ctx.fillStyle = w.color;
+      ctx.beginPath(); ctx.arc(w.x, w.y, R, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = (1 - k) * 0.7; ctx.strokeStyle = w.color; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(w.x, w.y, R, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    const live = new Set();
+    for (const u of units) if (u.team === 0 && !u.dead && u.route && !u.arrived) live.add(u.route);   // only routes someone is still walking
+    for (const t of towns) if (t.route) live.delete(t.route);
+    ctx.globalAlpha = 0.55;
+    for (const r of live) drawRoute(r, 0);
+    ctx.globalAlpha = 1;
+    if (hoverGroup && !drawing) {
+      ctx.strokeStyle = COL.team[0]; ctx.lineWidth = 2; ctx.setLineDash([3, 4]);
+      for (const u of hoverGroup) { ctx.beginPath(); ctx.arc(u.x, u.y, 6, 0, Math.PI * 2); ctx.stroke(); }
+      ctx.setLineDash([]);
+    }
+    for (const t of towns) if (t.route && t.owner === 1) drawRoute(t.route, 1);
+    for (const t of towns) if (t.route && t.owner === 0 && (!drawing || drawing.town !== t)) drawRoute(t.route, 0);
+    if (drawing && drawing.pts.length > 1) {
+      strokeRoute(drawing.pts, COL.mid[0], 8);
+      if (drawing.snap && !drawing.blocked) {   // shows the line is following a road
+        ctx.strokeStyle = COL.team[0]; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(drawing.snap.x, drawing.snap.y, 7, 0, Math.PI * 2); ctx.stroke();
+      }
+      if (drawing.blocked && drawing.tip) {
+        const p = drawing.tip;
+        ctx.strokeStyle = COL.team[1]; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.moveTo(p.x - 5, p.y - 5); ctx.lineTo(p.x + 5, p.y + 5); ctx.moveTo(p.x + 5, p.y - 5); ctx.lineTo(p.x - 5, p.y + 5); ctx.stroke();
+      }
+    }
+
+    drawMines();
+    drawStructs();
+
+    for (const d of deaths) {
+      ctx.globalAlpha = 1 - d.t / 0.5;
+      ctx.fillStyle = COL.team[d.team];
+      ctx.beginPath(); ctx.arc(d.x, d.y, 3 * (1 - d.t / 0.5), 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = COL.shadow;
+    ctx.beginPath();
+    for (const u of units) if (!u.dead) { ctx.moveTo(u.x + 4.4, u.y + 1.8); ctx.arc(u.x + 1.2, u.y + 1.8, 3.2, 0, Math.PI * 2); }
+    ctx.fill();
+    for (let team = 0; team < 2; team++) {
+      ctx.fillStyle = COL.team[team];
+      ctx.beginPath();
+      for (const u of units) {
+        if (u.team !== team || u.dead) continue;
+        if (u.kind === 0) { ctx.moveTo(u.x, u.y - 3.8); ctx.lineTo(u.x + 3.5, u.y + 2.6); ctx.lineTo(u.x - 3.5, u.y + 2.6); ctx.closePath(); }
+        else if (u.kind === 1) { ctx.moveTo(u.x + 2.8, u.y); ctx.arc(u.x, u.y, 2.8, 0, Math.PI * 2); }
+        else ctx.rect(u.x - 2.8, u.y - 2.8, 5.6, 5.6);
+      }
+      ctx.fill();
+    }
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    for (const u of units) if (u.flash > 0 && !u.dead) { ctx.moveTo(u.x + 2, u.y); ctx.arc(u.x, u.y, 2, 0, Math.PI * 2); }
+    ctx.fill();
+
+    for (const tr of tracers) {
+      ctx.globalAlpha = 1 - tr.t / 0.18;
+      ctx.strokeStyle = COL.team[tr.team]; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(tr.x0, tr.y0); ctx.lineTo(tr.x1, tr.y1); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    for (const p of puffs) {
+      if (p.t < 0) continue;
+      const k = p.t / 0.5;
+      ctx.globalAlpha = (1 - k) * 0.6;
+      ctx.strokeStyle = p.color; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 2 + p.size * k, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    const pulseT = performance.now() / 1000;
+    for (const a of alerts) {
+      const k = a.t / 6, wob = Math.sin(pulseT * 8) * 3;
+      ctx.globalAlpha = (1 - k) * (a.loud ? 0.9 : 0.6);
+      ctx.strokeStyle = COL.team[1]; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(a.x, a.y, 26 + wob, 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(a.x, a.y, 40 + ((pulseT * 40) % 30), 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = COL.team[1]; ctx.font = '700 22px Lexend, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('!', a.x, a.y + 1);
+    }
+    ctx.globalAlpha = 1;
+    const st = tutStep();
+    if (st && st.towns) for (const name of st.towns) {
+      const t = towns.find(o => o.name === name);
+      if (!t) continue;
+      ctx.strokeStyle = COL.team[0]; ctx.lineWidth = 2.5; ctx.globalAlpha = 0.5 + 0.4 * Math.sin(pulseT * 5);
+      ctx.beginPath(); ctx.arc(t.x, t.y, 36 + Math.sin(pulseT * 5) * 4, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (const t of towns) {
+      const s = (t.capital ? 14 : 10) + Math.min(3, t.barracks) * 2;   // the keep grows with each barracks
+      const col = t.owner < 0 ? COL.neutral : COL.team[t.owner];
+      const R = s + 9;
+      // houses: more appear as the garrison grows
+      // Houses show capacity (one per 3 soldiers of room); filled roofs show the soldiers at home.
+      const cap = townCap(t);
+      const slots = t.owner < 0 ? 3 : Math.min(t.houses.length, Math.ceil(cap / 3));
+      const filled = t.owner < 0 ? 3 : Math.min(slots, Math.ceil(t.n / 3));
+      const roof = t.owner < 0 ? COL.neutral : COL.mid[t.owner];
+      for (let i = 0; i < slots; i++) {
+        const h = t.houses[i], x0 = h.x - h.s / 2, y0 = h.y - h.s / 2;
+        if (i < filled) {
+          rr(ctx, x0 + 1.2, y0 + 1.8, h.s, h.s, 1.5); ctx.fillStyle = COL.shadow; ctx.fill();
+          rr(ctx, x0, y0, h.s, h.s, 1.5); ctx.fillStyle = COL.bridge; ctx.fill();
+          rr(ctx, x0 + 1.2, y0 + 1.2, h.s - 2.4, h.s - 2.4, 1.2); ctx.fillStyle = roof; ctx.fill();
+        } else {
+          rr(ctx, x0 + 0.6, y0 + 0.6, h.s - 1.2, h.s - 1.2, 1.5);
+          ctx.strokeStyle = roof; ctx.globalAlpha = 0.45; ctx.lineWidth = 1.2; ctx.stroke(); ctx.globalAlpha = 1;
+        }
+      }
+      // Barracks: a long hall with a flag for each one, set around the keep
+      const hallCol = t.owner < 0 ? COL.neutral : COL.team[t.owner];
+      const hallSlots = [-Math.PI / 2 - 0.8, -Math.PI / 2 + 0.8, -Math.PI / 2 - 2, -Math.PI / 2 + 2];
+      for (let i = 0; i < Math.min(4, t.barracks); i++) {
+        const ang = hallSlots[i], hr = s + 27, hx = t.x + Math.cos(ang) * hr, hy = t.y + Math.sin(ang) * hr;
+        ctx.save(); ctx.translate(hx, hy); ctx.rotate(ang + Math.PI / 2);
+        rr(ctx, -14 + 2, -7 + 2.5, 28, 14, 3); ctx.fillStyle = COL.shadow; ctx.fill();
+        rr(ctx, -14, -7, 28, 14, 3); ctx.fillStyle = COL.bridge; ctx.fill();
+        rr(ctx, -12, -5, 24, 10, 2); ctx.fillStyle = hallCol; ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(10, 0); ctx.stroke();
+        ctx.strokeStyle = '#5c6460'; ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.moveTo(11, -5); ctx.lineTo(11, -18); ctx.stroke();
+        ctx.fillStyle = hallCol; ctx.beginPath(); ctx.moveTo(11, -18); ctx.lineTo(20, -15); ctx.lineTo(11, -12); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+      // Training ring: fills as the next soldier trains; solid and dim when the town is full.
+      if (t.owner >= 0) {
+        const tr = s + 4.4, full = t.n >= cap;
+        ctx.lineWidth = 1.8; ctx.strokeStyle = col;
+        ctx.globalAlpha = full ? 0.25 : 0.7;
+        const prog = full ? 1 : clamp(1 - t.spawnT / trainBase(t), 0, 1);
+        ctx.beginPath(); ctx.arc(t.x, t.y, tr, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * prog); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      ctx.lineWidth = 3.5; ctx.lineCap = 'round';
+      ctx.strokeStyle = COL.track; ctx.beginPath(); ctx.arc(t.x, t.y, R, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = col;
+      ctx.beginPath(); ctx.arc(t.x, t.y, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * clamp(t.hold / t.holdMax, 0, 1)); ctx.stroke();
+      if (t.hit > 0) {
+        ctx.globalAlpha = t.hit;
+        ctx.strokeStyle = COL.team[1 - Math.max(0, t.owner)] || COL.neutral;
+        ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(t.x, t.y, R + 5, 0, Math.PI * 2); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      if (hover === t && !drawing) {
+        ctx.strokeStyle = COL.mid[0]; ctx.lineWidth = 2; ctx.setLineDash([3, 4]);
+        ctx.beginPath(); ctx.arc(t.x, t.y, R + 8, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      }
+      ctx.fillStyle = COL.shadow; rr(ctx, t.x - s + 2, t.y - s + 3, s * 2, s * 2, 5); ctx.fill();
+      ctx.fillStyle = col; rr(ctx, t.x - s, t.y - s, s * 2, s * 2, 5); ctx.fill();
+      if (t.capital) {   // battlements on the keep
+        for (const dx of [-s, -2.5, s - 5]) { rr(ctx, t.x + dx, t.y - s - 4, 5, 6, 1.2); ctx.fill(); }
+      }
+      if (t.owner >= 0) {
+        ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.beginPath();
+        if (t.kind === 0) { ctx.moveTo(t.x, t.y - 5.5); ctx.lineTo(t.x + 5, t.y + 4); ctx.lineTo(t.x - 5, t.y + 4); ctx.closePath(); }
+        else if (t.kind === 1) ctx.arc(t.x, t.y, 4.2, 0, Math.PI * 2);
+        else ctx.rect(t.x - 4, t.y - 4, 8, 8);
+        ctx.fill();
+      }
+      ctx.font = `600 ${t.capital ? 12 : 11}px Lexend, "Avenir Next", system-ui, sans-serif`;
+      ctx.fillStyle = 'rgba(46,55,53,.72)';
+      ctx.fillText(t.name, t.x, t.y + R + (t.capital ? 8 : 6));
+      if (t.barracks > 0) {
+        ctx.font = '700 9.5px Lexend, "Avenir Next", system-ui, sans-serif';
+        ctx.fillStyle = hallCol;
+        ctx.fillText(t.barracks === 1 ? 'Barracks' : `×${t.barracks} barracks`, t.x, t.y + R + (t.capital ? 22 : 20));
+      }
+    }
+  }
+
+  function drawFort(x, y, col, alpha) {
+    ctx.globalAlpha = 0.12 * alpha; ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(x, y, 80, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.5 * alpha; ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.setLineDash([3, 5]);
+    ctx.beginPath(); ctx.arc(x, y, 80, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    ctx.globalAlpha = alpha;
+    rr(ctx, x - 9, y - 8, 22, 22, 4); ctx.fillStyle = COL.shadow; ctx.fill();
+    rr(ctx, x - 11, y - 11, 22, 22, 4); ctx.fillStyle = COL.bridge; ctx.fill();
+    ctx.lineWidth = 4; ctx.strokeStyle = col; ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  function drawTower(x, y, col, alpha) {
+    ctx.globalAlpha = 0.35 * alpha; ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.setLineDash([2, 6]);
+    ctx.beginPath(); ctx.arc(x, y, 130, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    ctx.globalAlpha = alpha; ctx.fillStyle = COL.shadow;
+    ctx.beginPath(); ctx.arc(x + 2, y + 3, 9, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  function drawMines() {
+    const nowS = performance.now() / 1000;
+    // Farms: owned fields get a bold team border and tint; fields nobody works look grey and fallow.
+    for (const f of fields) {
+      const owner = f.town ? f.town.owner : -1;
+      ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.rot);
+      rr(ctx, -f.w / 2, -f.h / 2, f.w, f.h, 3);
+      if (owner < 0) {
+        ctx.fillStyle = 'rgba(165,162,150,.5)'; ctx.fill();
+        ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(120,118,108,.55)'; ctx.lineWidth = 1.2; ctx.stroke(); ctx.setLineDash([]);
+      } else {
+        ctx.globalAlpha = owner === 0 ? 0.16 : 0.12; ctx.fillStyle = COL.team[owner]; ctx.fill(); ctx.globalAlpha = 1;
+        ctx.strokeStyle = COL.team[owner]; ctx.lineWidth = owner === 0 ? 2.4 : 2; ctx.stroke();
+        // flag
+        const fx = f.w / 2 - 5, fy = -f.h / 2 - 1;
+        ctx.strokeStyle = '#5c6460'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(fx, fy + 7); ctx.lineTo(fx, fy - 7); ctx.stroke();
+        ctx.fillStyle = COL.team[owner]; ctx.beginPath(); ctx.moveTo(fx, fy - 7); ctx.lineTo(fx + 8, fy - 4.5); ctx.lineTo(fx, fy - 2); ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+    }
+    // Gold mines: yours glow blue with sparkling gold, enemy mines are red, unclaimed ones are dull grey.
+    for (const m of mines) {
+      const owned = m.owner >= 0, col = owned ? COL.team[m.owner] : COL.neutral;
+      if (owned) {
+        ctx.globalAlpha = 0.16; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(m.x, m.y, 28, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1; ctx.strokeStyle = col; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(m.x, m.y, 28, 0, Math.PI * 2); ctx.stroke();
+        if (m.owner === 0) {   // slow pulse while it pays out
+          const k = (nowS * 0.6) % 1;
+          ctx.globalAlpha = (1 - k) * 0.5; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(m.x, m.y, 28 + k * 16, 0, Math.PI * 2); ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      } else {
+        ctx.globalAlpha = 0.45; ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.setLineDash([4, 5]);
+        ctx.beginPath(); ctx.arc(m.x, m.y, 28, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+        // claim progress: how close the land is to tipping one way
+        const v = terrAt(m.x, m.y), prog = Math.min(1, Math.abs(v) / 0.25);
+        if (prog > 0.08) {
+          ctx.strokeStyle = COL.team[v > 0 ? 0 : 1]; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(m.x, m.y, 28, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * prog); ctx.stroke();
+        }
+      }
+      const rocks = owned ? [[-6, 3, 8, '#b4b4a6'], [6, 4, 7, '#c3c3b6'], [0, -4, 7.5, '#cfcfc2']] : [[-6, 3, 8, '#c9c8c0'], [6, 4, 7, '#d2d1ca'], [0, -4, 7.5, '#dad9d2']];
+      for (const [dx, dy, r] of rocks) { ctx.fillStyle = COL.shadow; ctx.beginPath(); ctx.arc(m.x + dx + 1.5, m.y + dy + 2, r, 0, Math.PI * 2); ctx.fill(); }
+      for (const [dx, dy, r, c] of rocks) { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(m.x + dx, m.y + dy, r, 0, Math.PI * 2); ctx.fill(); }
+      const spots = [[-7, 1], [5, 2], [-1, -6], [8, -2], [-3, 6]];
+      for (let i = 0; i < (owned ? 5 : 2); i++) {
+        const tw2 = owned ? 0.5 + 0.5 * Math.sin(nowS * 3 + i * 1.7 + m.x) : 0.2;
+        ctx.globalAlpha = owned ? 0.6 + 0.4 * tw2 : 0.45; ctx.fillStyle = owned ? '#e2b93b' : '#b9a978';
+        ctx.beginPath(); ctx.arc(m.x + spots[i][0], m.y + spots[i][1], owned ? 1.8 + tw2 * 1.2 : 1.4, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.font = `${owned ? 700 : 600} 10px Lexend, system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillStyle = m.owner === 0 ? COL.team[0] : m.owner === 1 ? COL.team[1] : 'rgba(46,55,53,.5)';
+      ctx.fillText(m.owner === 0 ? `Your mine · +${Math.round(MINE_RATE * WEEK)}/week` : m.owner === 1 ? 'Enemy mine' : 'Unclaimed mine', m.x, m.y + 33);
+    }
+    for (const c of coins) {
+      ctx.globalAlpha = 1 - c.t; ctx.fillStyle = '#e2b93b';
+      ctx.beginPath(); ctx.arc(c.x, c.y - c.t * 18, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#c79a1e'; ctx.lineWidth = 1; ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+  function drawStructs() {
+    for (const s of structs) (s.type === 'fort' ? drawFort : drawTower)(s.x, s.y, COL.team[s.team], 1);
+    if (!armed || !ghost || state !== 'play') return;
+    const ok = !placeCheck(armed, ghost), col = ok ? COL.team[0] : COL.team[1];
+    if (armed === 'fort') drawFort(ghost.x, ghost.y, col, 0.6);
+    else if (armed === 'tower') drawTower(ghost.x, ghost.y, col, 0.6);
+    else if (armed === 'farm') {
+      ctx.globalAlpha = 0.6; rr(ctx, ghost.x - 20, ghost.y - 13, 40, 26, 3); ctx.fillStyle = ok ? '#ebe5c6' : COL.light[1]; ctx.fill();
+      ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke(); ctx.globalAlpha = 1;
+    }
+    else if (armed === 'charge') {
+      ctx.globalAlpha = 0.12; ctx.fillStyle = COL.team[0]; ctx.beginPath(); ctx.arc(ghost.x, ghost.y, 140, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.8; ctx.strokeStyle = COL.team[0]; ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
+      ctx.beginPath(); ctx.arc(ghost.x, ghost.y, 140, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+    }
+    else if (armed === 'bridge') {
+      const b = B(ghost.x, ghost.y), ca = riverA(b);
+      const p0 = XY(ca - river.hw - 10, b - 20), p1 = XY(ca + river.hw + 10, b + 20);
+      ctx.globalAlpha = 0.6; ctx.fillStyle = ok ? COL.bridge : COL.light[1]; ctx.strokeStyle = col; ctx.lineWidth = 2;
+      rr(ctx, Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.abs(p1.x - p0.x), Math.abs(p1.y - p0.y), 6); ctx.fill(); ctx.stroke();
+      ctx.globalAlpha = 1;
+    } else {
+      ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.setLineDash([3, 4]);
+      ctx.beginPath(); ctx.arc(ghost.x, ghost.y, 26, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+
+  let hudTick = 0;
+  function updateHud() {
+    if (++hudTick % 8) return;
+    if (inspectAt) showInspect();
+    $('wk').textContent = week;
+    $('day').textContent = DAYS[Math.min(6, Math.floor(weekT / WEEK * 7))];
+    $('wkbar').style.width = (weekT / WEEK * 100) + '%';
+    let b = 0, r = 0;
+    for (const u of units) if (!u.dead) u.team === 0 ? b++ : r++;
+    const tot = Math.max(1, b + r);
+    $('balB').style.width = (b / tot * 100) + '%'; $('balR').style.width = (r / tot * 100) + '%';
+    $('cntB').textContent = b; $('cntR').textContent = r;
+    $('goldv').textContent = gold;
+    $('goldRate').textContent = `+${Math.round(goldPerSecond() * WEEK)} per week`;
+    refreshTray();
+    const used = inkUsed(drawing && drawing.town) + (drawing && drawing.town ? drawing.len : 0);
+    const cap = inkCap();
+    $('inkv').textContent = `${Math.max(0, Math.round(cap - used))}`;
+    $('inkbar').style.width = clamp((1 - used / cap) * 100, 0, 100) + '%';
+    const cb = $('chargeBtn');
+    cb.disabled = chargeCd > 0;
+    cb.textContent = chargeCd > 0 ? `Charge ${Math.ceil(chargeCd)}s` : 'Charge';
+    cb.className = armed === 'charge' ? 'armed' : '';
+  }
+
+  let last = performance.now(), acc = 0;
+  function frame(now) {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    if (state === 'play' && !paused) {
+      acc += dt * speed;
+      while (acc >= STEP && state === 'play') { step(STEP); acc -= STEP; }
+    } else acc = 0;
+    // Battle noise follows how much fighting happened this frame.
+    clashLevel += (strikes / Math.max(dt, 0.001) / 60 - clashLevel) * 0.08;
+    if (strikes && Math.random() < Math.min(1, strikes * 0.15)) Sound.hit();
+    strikes = 0;
+    Sound.clash(state === 'play' && !paused ? clashLevel : 0);
+    render();
+    updateHud();
+    requestAnimationFrame(frame);
+  }
+
+  newGame();
+  requestAnimationFrame(frame);
+})();
+</script>
