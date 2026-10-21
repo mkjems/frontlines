@@ -118,7 +118,8 @@
     box-shadow: 0 2px 0 rgba(46, 55, 53, .05), 0 12px 30px rgba(46, 60, 50, .16); border-left: 4px solid var(--blue);
   }
   .coach .label { color: var(--blue); display: block; margin-bottom: 2px; }
-  .coach button { position: absolute; top: 6px; right: 6px; border: 0; background: transparent; font: 600 16px var(--font); color: var(--muted); cursor: pointer; padding: 2px 6px; }
+  .coach .coach-toggle { border: 0; background: transparent; font: inherit; color: var(--blue); padding: 0; text-align: left; cursor: default; }
+  .coach .coach-close { position: absolute; top: 6px; right: 6px; border: 0; background: transparent; font: 600 16px var(--font); color: var(--muted); cursor: pointer; padding: 2px 6px; }
   .card.rules { max-width: 760px; }
   .rules .cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 22px; }
   .rules h3 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
@@ -213,6 +214,11 @@
     #hint { bottom: calc(env(safe-area-inset-bottom, 0px) + 106px); }
     .tray { bottom: calc(env(safe-area-inset-bottom, 0px) + 58px); left: max(16px, env(safe-area-inset-left, 0px)); max-width: none; justify-content: flex-start; }
     .tray .name { display: none; }
+    .coach { top: calc(env(safe-area-inset-top, 0px) + 84px); right: max(16px, env(safe-area-inset-right, 0px)); left: auto; bottom: auto; max-width: min(320px, calc(100vw - 32px)); }
+    .coach .coach-toggle { border-radius: 999px; padding: 7px 10px; background: var(--panel); box-shadow: 0 1px 0 rgba(46, 55, 53, .05), 0 6px 18px rgba(46, 60, 50, .10); font: 600 11px var(--font); cursor: pointer; }
+    .coach:not(.expanded) { padding: 0; background: transparent; border-left: 0; box-shadow: none; }
+    .coach:not(.expanded) #coachText, .coach:not(.expanded) .coach-close { display: none; }
+    .coach.expanded { padding: 10px 34px 10px 12px; }
     #tutSkip { bottom: calc(env(safe-area-inset-bottom, 0px) + 88px); }
     #goldRate { display: none; }
     .choices { grid-template-columns: 1fr; }
@@ -303,7 +309,7 @@
 </div>
 
 <div class="inspect" id="inspect" hidden></div>
-<div class="coach" id="coach" hidden><span class="label">Tip</span><span id="coachText"></span><button type="button" id="coachClose" aria-label="Dismiss tip">×</button></div>
+<div class="coach" id="coach" hidden><button type="button" class="label coach-toggle" id="coachToggle" aria-expanded="false" aria-controls="coachText" aria-label="Show tip">Tip</button><span id="coachText"></span><button type="button" class="coach-close" id="coachClose" aria-label="Dismiss tip">×</button></div>
 
 <div class="overlay" id="rules" hidden>
   <div class="card rules">
@@ -2016,8 +2022,18 @@ import * as THREE from 'three';
     if (!c) return;
     coachSeen[c.id] = true;
     try { localStorage.setItem('frontlines-coach', JSON.stringify(coachSeen)); } catch (e) {}
-    $('coachText').textContent = c.text; $('coach').hidden = false; coachHide = 10; coachT = 14;
+    const mobile = matchMedia('(max-width: 560px)').matches;
+    $('coachText').textContent = c.text; $('coach').classList.toggle('expanded', !mobile);
+    $('coachToggle').setAttribute('aria-expanded', String(!mobile));
+    $('coachToggle').setAttribute('aria-label', mobile ? 'Show tip' : 'Tip');
+    $('coach').hidden = false; coachHide = mobile ? 0 : 10; coachT = 14;
   }
+  $('coachToggle').onclick = () => {
+    if (!matchMedia('(max-width: 560px)').matches) return;
+    const expanded = $('coach').classList.toggle('expanded');
+    $('coachToggle').setAttribute('aria-expanded', String(expanded));
+    $('coachToggle').setAttribute('aria-label', expanded ? 'Hide tip' : 'Show tip');
+  };
   $('coachClose').onclick = () => { $('coach').hidden = true; };
   $('introHero').innerHTML = heroSVG('intro');
   $('startBtn').onclick = () => { Sound.init(); $('intro').hidden = true; state = 'play'; };
