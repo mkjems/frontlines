@@ -21,7 +21,9 @@
   }
   [hidden] { display: none !important; }
   html, body { height: 100%; margin: 0; overflow: hidden; background: var(--ground); color: var(--ink); font-family: var(--font); }
-  #map { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #map { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none;
+    background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(40,50,40,.13)); }
 
   .hud {
     position: fixed; top: calc(env(safe-area-inset-top, 0px) + 12px);
@@ -315,6 +317,7 @@
         <li><span class="k">Tap a town</span> to pick its troops or clear its route.</li>
         <li><span class="k">Charge</span> (every 25s): troops in the circle sprint and hit harder.</li>
         <li><span class="k">Space</span> pauses, <span class="k">Esc</span> cancels. Hold <span class="k">Shift</span> and hover to inspect anything.</li>
+        <li><span class="k">Scroll or pinch</span> to zoom in on the fighting, <span class="k">drag open ground</span> to look around, <span class="k">double-click</span> to zoom in or back out.</li>
       </ul></div>
       <div><h3>Troops</h3><ul>
         <li><span class="k">Spearmen ▲</span> tough, stop cavalry charges. Beat cavalry.</li>
@@ -363,10 +366,13 @@
   </div>
 </div>
 
-<script>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }</script>
+<script type="module">
+import * as THREE from 'three';
 (() => {
   const $ = id => document.getElementById(id);
-  const cvs = $('map'), ctx = cvs.getContext('2d');
+  const cvs = $('map'), octx = cvs.getContext('2d');
+  let ctx = octx;   // points at whichever canvas is being drawn: the ground decals or the screen overlay
 
   const STEP = 1 / 40, SPEED = 34, WEEK = 45, CELL = 32;
   const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -513,8 +519,8 @@
   const rand = (a, b) => a + Math.random() * (b - a);
 
   // ---------- world ----------
-  let W, H, P, LA, LB, scale = 1, offX = 0, offY = 0, dpr = 1, bg = null;
-  let river, bridges, towns, units, deaths, puffs, trees, patches, bgOver = null;
+  let W, H, P, LA, LB, dpr = 1, bg = null;
+  let river, bridges, towns, units, deaths, puffs, trees, patches;
   let scars = [], waves = [], ripples = [], fields = [], hills = [], roads = [], rocks = [], compass = { x: 0, y: 0 };
   let state = 'intro', paused = false, speed = 1, time = 0, week = 1, weekT = 0, aiT = 6, ink = 0;
   let uid = 0, routeSeq = 0, frameNo = 0, routesDrawn = 0;
@@ -724,19 +730,16 @@
     setHint('Drag from a blue town to draw a march route. Your first watchtower is in the tray.');
     startTutorial();
     renderTray();
+    view.z = 1; view.x = view.y = 0;
+    buildStatic();
     resize();
   }
 
   function resize() {
-    if (!W) return;
+    if (!W || !renderer) return;
     dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const vw = innerWidth, vh = innerHeight;
-    cvs.width = Math.round(vw * dpr); cvs.height = Math.round(vh * dpr);
-    const top = 70, bottom = vw <= 560 ? 130 : 84, side = 12;
-    scale = Math.min((vw - side * 2) / W, (vh - top - bottom) / H);
-    offX = (vw - W * scale) / 2;
-    offY = top + (vh - top - bottom - H * scale) / 2;
-    buildStatic();
+    cvs.width = Math.round(innerWidth * dpr); cvs.height = Math.round(innerHeight * dpr);
+    fitCamera();
   }
 
   function rr(c, x, y, w, h, r) {
@@ -847,26 +850,29 @@
   function makeField(x, y, town) {
     return { x, y, town, acc: rand(0, 1), w: rand(34, 48), h: rand(22, 30), rot: rand(-0.6, 0.6), c: Math.random() < 0.55 ? '#ebe5c6' : '#dde6c6' };
   }
-  function layer() {
-    const cv = document.createElement('canvas');
-    cv.width = Math.ceil(W * scale * dpr); cv.height = Math.ceil(H * scale * dpr);
-    const c = cv.getContext('2d');
-    c.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
-    rr(c, 0, 0, W, H, 18); c.clip();
-    return [cv, c];
-  }
   function riverPath(c) {
     c.beginPath();
     for (let b = -40; b <= LB + 40; b += 8) { const p = XY(riverA(b), b); if (b === -40) c.moveTo(p.x, p.y); else c.lineTo(p.x, p.y); }
   }
+  // The ground texture: everything flat that never changes during a game. Trees, rocks, bridges and buildings are 3D.
   function buildStatic() {
-    let c;
-    [bg, c] = layer();
-    c.fillStyle = COL.land; c.fillRect(0, 0, W, H);
-    c.fillStyle = COL.land2;
+    init3D();
+    if (!bg || bg.width !== Math.ceil(W * TS) || bg.height !== Math.ceil(H * TS)) {
+      bg = document.createElement('canvas');
+      bg.width = Math.ceil(W * TS); bg.height = Math.ceil(H * TS);
+    }
+    const c = bg.getContext('2d');
+    c.setTransform(TS, 0, 0, TS, 0, 0);
+    c.fillStyle = '#e3e9d6'; c.fillRect(0, 0, W, H);
+    c.fillStyle = '#dbe3cc';
     for (const p of patches) { c.beginPath(); c.arc(p.x, p.y, p.r, 0, Math.PI * 2); c.fill(); }
+    // speckled grass so the ground has some grain up close
+    for (let i = 0; i < W * H / 90; i++) {
+      c.fillStyle = Math.random() < 0.5 ? 'rgba(150,170,120,.10)' : 'rgba(255,255,240,.12)';
+      c.fillRect(Math.random() * W, Math.random() * H, rand(0.6, 1.6), rand(0.6, 1.6));
+    }
     for (const h of hills) {
-      [[1, '#e0e5d6'], [0.68, '#d8ded0'], [0.36, '#d0d7c5']].forEach(([k, col]) => {
+      [[1, '#d5dfc4'], [0.68, '#cad6b6'], [0.36, '#bfcda9']].forEach(([k, col]) => {
         c.beginPath();
         h.pts.forEach((m, i) => { const a = i / h.pts.length * Math.PI * 2, rr2 = h.r * k * m; const x = h.x + Math.cos(a) * rr2, y = h.y + Math.sin(a) * rr2 * 0.8; i ? c.lineTo(x, y) : c.moveTo(x, y); });
         c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = 'rgba(150,165,140,.35)'; c.lineWidth = 1; c.stroke();
@@ -875,7 +881,7 @@
     for (const f of fields) {
       c.save(); c.translate(f.x, f.y); c.rotate(f.rot);
       rr(c, -f.w / 2, -f.h / 2, f.w, f.h, 3); c.fillStyle = f.c; c.fill();
-      c.strokeStyle = 'rgba(120,110,70,.16)'; c.lineWidth = 1.4;
+      c.strokeStyle = 'rgba(120,110,70,.22)'; c.lineWidth = 1.4;
       for (let o = -f.h / 2 + 5; o < f.h / 2 - 2; o += 5) { c.beginPath(); c.moveTo(-f.w / 2 + 3, o); c.lineTo(f.w / 2 - 3, o); c.stroke(); }
       c.restore();
     }
@@ -887,53 +893,21 @@
         c.beginPath(); c.moveTo(r.a.x, r.a.y); c.quadraticCurveTo(mx, my, r.b.x, r.b.y); c.stroke();
       }
     }
-
-    [bgOver, c] = layer();
-    c.lineCap = 'round'; c.lineJoin = 'round';
-    riverPath(c); c.strokeStyle = COL.shore; c.lineWidth = river.hw * 2 + 12; c.stroke();
-    riverPath(c); c.strokeStyle = COL.river; c.lineWidth = river.hw * 2; c.stroke();
-    riverPath(c); c.strokeStyle = COL.riverDeep; c.lineWidth = river.hw * 0.9; c.stroke();
+    // the river bed, seen through the water: sandy banks, darker towards the middle
+    c.lineJoin = 'round';
+    riverPath(c); c.strokeStyle = COL.shore; c.lineWidth = river.hw * 2 + 16; c.stroke();
+    riverPath(c); c.strokeStyle = '#b9c7b4'; c.lineWidth = river.hw * 2 - 2; c.stroke();
+    riverPath(c); c.strokeStyle = '#8fa9a6'; c.lineWidth = river.hw * 1.2; c.stroke();
+    riverPath(c); c.strokeStyle = '#7b979a'; c.lineWidth = river.hw * 0.5; c.stroke();
     for (const br of bridges) {
-      if (br.ford) {
-        // shallow water with stepping stones
-        const ca = riverA(br.b);
-        c.fillStyle = 'rgba(214,232,238,.75)';
-        c.beginPath();
-        for (let a = ca - river.hw; a <= ca + river.hw; a += 4) { const q = XY(a, br.b - br.span + Math.sin(a * 0.3) * 2); a === ca - river.hw ? c.moveTo(q.x, q.y) : c.lineTo(q.x, q.y); }
-        for (let a = ca + river.hw; a >= ca - river.hw; a -= 4) { const q = XY(a, br.b + br.span + Math.sin(a * 0.3) * 2); c.lineTo(q.x, q.y); }
-        c.closePath(); c.fill();
-        for (let a = ca - river.hw + 5, i = 0; a < ca + river.hw - 2; a += 9, i++) {
-          for (const off of [-9, 0, 9]) {
-            const q = XY(a + (i % 2) * 3, br.b + off + Math.sin(a + off) * 2);
-            c.fillStyle = COL.shadow; c.beginPath(); c.ellipse(q.x + 1, q.y + 1.5, 3.2, 2.4, 0, 0, Math.PI * 2); c.fill();
-            c.fillStyle = '#d6d5c9'; c.beginPath(); c.ellipse(q.x, q.y, 3.2, 2.4, 0, 0, Math.PI * 2); c.fill();
-          }
-        }
-        continue;
-      }
-      const ca = riverA(br.b), a0 = ca - river.hw - 10, a1 = ca + river.hw + 10;
-      const p0 = XY(a0, br.b - br.span), p1 = XY(a1, br.b + br.span);
-      const x = Math.min(p0.x, p1.x), y = Math.min(p0.y, p1.y), w = Math.abs(p1.x - p0.x), h = Math.abs(p1.y - p0.y);
-      rr(c, x + 2, y + 3, w, h, 6); c.fillStyle = COL.shadow; c.fill();
-      rr(c, x, y, w, h, 6); c.fillStyle = COL.bridge; c.fill();
-      c.strokeStyle = 'rgba(150,160,140,.35)'; c.lineWidth = 1;
-      for (let a = a0 + 5; a < a1 - 3; a += 5) {
-        const q0 = XY(a, br.b - br.span + 3), q1 = XY(a, br.b + br.span - 3);
-        c.beginPath(); c.moveTo(q0.x, q0.y); c.lineTo(q1.x, q1.y); c.stroke();
-      }
-      rr(c, x, y, w, h, 6); c.strokeStyle = COL.bridgeEdge; c.lineWidth = 2; c.stroke();
-    }
-    c.fillStyle = COL.shadow;
-    for (const r of rocks) { c.beginPath(); c.ellipse(r.x + 1.5, r.y + 2, r.r, r.r * 0.7, 0, 0, Math.PI * 2); c.fill(); }
-    for (const r of rocks) { c.fillStyle = '#d3d3c8'; c.beginPath(); c.ellipse(r.x, r.y, r.r, r.r * 0.7, 0, 0, Math.PI * 2); c.fill(); }
-    const treeShape = (t, dx, dy) => {
+      if (!br.ford) continue;
+      const ca = riverA(br.b);
+      c.fillStyle = '#e1dac0';
       c.beginPath();
-      if (t.pine) { c.moveTo(t.x + dx, t.y + dy - t.r * 1.3); c.lineTo(t.x + dx + t.r * 0.9, t.y + dy + t.r * 0.8); c.lineTo(t.x + dx - t.r * 0.9, t.y + dy + t.r * 0.8); c.closePath(); }
-      else c.arc(t.x + dx, t.y + dy, t.r, 0, Math.PI * 2);
-    };
-    c.fillStyle = COL.shadow;
-    for (const t of trees) { treeShape(t, 2, 3); c.fill(); }
-    for (const t of trees) { c.fillStyle = t.pine ? '#b5caa9' : t.c; treeShape(t, 0, 0); c.fill(); }
+      for (let a = ca - river.hw - 4; a <= ca + river.hw + 4; a += 4) { const q = XY(a, br.b - br.span + Math.sin(a * 0.3) * 2); a === ca - river.hw - 4 ? c.moveTo(q.x, q.y) : c.lineTo(q.x, q.y); }
+      for (let a = ca + river.hw + 4; a >= ca - river.hw - 4; a -= 4) { const q = XY(a, br.b + br.span + Math.sin(a * 0.3) * 2); c.lineTo(q.x, q.y); }
+      c.closePath(); c.fill();
+    }
     // compass rose
     const cp = compass;
     c.beginPath(); c.arc(cp.x, cp.y, 24, 0, Math.PI * 2); c.fillStyle = 'rgba(251,250,246,.75)'; c.fill();
@@ -949,8 +923,8 @@
     }
     c.fillStyle = '#5c6460'; c.font = '600 9px Lexend, system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'bottom';
     c.fillText('N', cp.x, cp.y - 25);
+    buildWorld();
   }
-
   // ---------- economy: farms and mines ----------
   function terrAt(x, y) { const i = clamp(x / TC | 0, 0, tw - 1), j = clamp(y / TC | 0, 0, th - 1); return terr[i + j * tw]; }
   function earn(src, rate, dt) {
@@ -1705,8 +1679,7 @@
   // ---------- input ----------
   let drawing = null, hover = null, hoverGroup = null, pointerId = null;
   function toWorld(e) {
-    const r = cvs.getBoundingClientRect();
-    return { x: (e.clientX - r.left - offX) / scale, y: (e.clientY - r.top - offY) / scale };
+    return pointAt(e.clientX, e.clientY, true);
   }
   function townAt(x, y, R, owner) {
     let best = null, bd = R * R;
@@ -1815,7 +1788,7 @@
     for (let k = 0; k < 3; k++) $('tmK' + k).className = t.kind === k ? 'on' : '';
     $('tmClear').hidden = !t.route;
     m.hidden = false;
-    const sx = t.x * scale + offX, sy = t.y * scale + offY, mw = m.offsetWidth || 230, mh = m.offsetHeight || 200;
+    const sp = toScreen(t.x, t.y, 0), sx = sp.x, sy = sp.y, mw = m.offsetWidth || 230, mh = m.offsetHeight || 200;
     m.style.left = clamp(sx - mw / 2, 12, innerWidth - mw - 12) + 'px';
     m.style.top = (sy + 34 + mh < innerHeight - 8 ? sy + 34 : Math.max(8, sy - 34 - mh)) + 'px';
   }
@@ -1838,9 +1811,35 @@
   };
   $('chargeBtn').onclick = () => { if (state !== 'play' || chargeCd > 0) return; armed = armed === 'charge' ? null : 'charge'; renderTray(); };
 
+  // Camera: wheel or pinch to zoom, drag empty ground (or right/middle-drag anywhere) to pan.
+  let pan = null, pinch = null;
+  const touches = new Map();
+  const startPan = e => { pan = { id: e.pointerId, grab: pointAt(e.clientX, e.clientY) }; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = 'grabbing'; };
+  cvs.addEventListener('wheel', e => {
+    e.preventDefault();
+    if (!renderer || state === 'intro') return;
+    zoomTo(view.z * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0018)), e.clientX, e.clientY);
+  }, { passive: false });
+  cvs.addEventListener('contextmenu', e => e.preventDefault());
+  cvs.addEventListener('dblclick', e => {
+    const p = toWorld(e);
+    if (state !== 'play' || armed || townAt(p.x, p.y, 30)) return;
+    if (view.z > 1.2) { view.z = 1; view.x = view.y = 0; placeCamera(); }
+    else zoomTo(2.4, e.clientX, e.clientY);
+  });
   cvs.addEventListener('pointerdown', e => {
     if (menuTown) closeMenu();
     if (state !== 'play') return;
+    if (e.pointerType === 'touch') {
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.size === 2) {   // a second finger turns any drag into a pinch
+        drawing = null; pan = null;
+        const [a, b] = [...touches.values()], mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+        pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y), z0: view.z, grab: pointAt(mx, my) };
+        return;
+      }
+    }
+    if (e.button === 1 || e.button === 2) { startPan(e); e.preventDefault(); return; }
     const p = toWorld(e);
     if (armed) {
       const err = placeCheck(armed, p);
@@ -1852,7 +1851,7 @@
     }
     const t = townAt(p.x, p.y, 30, 0);
     const group = t ? null : groupAt(p.x, p.y);
-    if (!t && !group) return;
+    if (!t && !group) { startPan(e); return; }
     drawing = t ? { town: t, pts: [{ x: t.x, y: t.y }], len: 0, blocked: null, tip: null }
       : { town: null, group, pts: [{ x: p.x, y: p.y }], len: 0, blocked: null, tip: null };
     pointerId = e.pointerId;
@@ -1860,6 +1859,17 @@
     e.preventDefault();
   });
   cvs.addEventListener('pointermove', e => {
+    if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && touches.size >= 2) {
+      const [a, b] = [...touches.values()];
+      zoomTo(pinch.z0 * Math.hypot(a.x - b.x, a.y - b.y) / Math.max(1, pinch.d0), (a.x + b.x) / 2, (a.y + b.y) / 2, pinch.grab);
+      return;
+    }
+    if (pan && e.pointerId === pan.id) {
+      const p = pointAt(e.clientX, e.clientY);
+      view.x += pan.grab.x - p.x; view.y += pan.grab.y - p.y; placeCamera();
+      return;
+    }
     const p = toWorld(e);
     ghost = p;
     lastPointer = { p, cx: e.clientX, cy: e.clientY };
@@ -1868,14 +1878,15 @@
     if (!drawing) {
       hover = state === 'play' && !armed ? townAt(p.x, p.y, 30, 0) : null;
       hoverGroup = state === 'play' && !armed && !hover ? groupAt(p.x, p.y) : null;
-      cvs.style.cursor = hover || hoverGroup || armed ? 'pointer' : 'default';
+      cvs.style.cursor = hover || hoverGroup || armed ? 'pointer' : view.z > 1 ? 'grab' : 'default';
       return;
     }
     freehand = e.shiftKey;
     if (e.pointerId === pointerId) extend(p);
   });
-  cvs.addEventListener('pointerup', e => { if (drawing && e.pointerId === pointerId) { commit(); drawing = null; } });
-  cvs.addEventListener('pointercancel', () => { drawing = null; });
+  const endTouch = e => { touches.delete(e.pointerId); if (touches.size < 2) pinch = null; if (pan && e.pointerId === pan.id) { pan = null; cvs.style.cursor = view.z > 1 ? 'grab' : 'default'; } };
+  cvs.addEventListener('pointerup', e => { endTouch(e); if (drawing && e.pointerId === pointerId) { commit(); drawing = null; } });
+  cvs.addEventListener('pointercancel', e => { endTouch(e); drawing = null; });
 
   function setPaused(v) {
     paused = v;
@@ -2087,7 +2098,499 @@
     clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.className = kind || ''; }, 2200);
   }
 
+  // ---------- 3D scene: the board is a lit diorama with real height and shadows ----------
+  // World units match the game's: game (x, y) is three.js (x, height, y).
+  const BASE = 46, WATER_Y = -2.4, BED_Y = -10, FORD_Y = -3.4, DECK_Y = 2.2, GS = 4, TILT = 0.58;
+  const TS = 2, DS = 1.25;   // pixels per world unit: static ground texture, per-frame decal texture
+  let renderer = null, scene, camera, sun, groundTex, decalTex, dcv, dctx, waterMat, world = null, dyn, clouds = [];
+  const smooth = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const v3 = new THREE.Vector3(), dummy = new THREE.Object3D(), ray = new THREE.Raycaster();
+  const GEO = {}, matCache = new Map();
+  function mat(hex, o) {
+    const k = hex + (o ? JSON.stringify(o) : '');
+    if (!matCache.has(k)) matCache.set(k, new THREE.MeshStandardMaterial({ color: hex, roughness: 0.85, flatShading: true, ...o }));
+    return matCache.get(k);
+  }
+  const STONE = '#f1ede3', STONE2 = '#ddd8ca', WOOD = '#7d6a52', POLE = '#5c6460';
+
+  function init3D() {
+    if (renderer) return;
+    try { renderer = new THREE.WebGLRenderer({ antialias: true }); }
+    catch (err) {
+      document.body.insertAdjacentHTML('beforeend', '<div class="overlay"><div class="card"><h1>WebGL needed</h1><p>Frontlines draws its battlefield in 3D with WebGL, which is turned off or unavailable in this browser.</p></div></div>');
+      throw err;
+    }
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.NeutralToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    renderer.domElement.id = 'gl';
+    cvs.parentNode.insertBefore(renderer.domElement, cvs);
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(COL.outside);
+    camera = new THREE.PerspectiveCamera(24, 1, 20, 12000);
+    scene.add(new THREE.HemisphereLight('#eef3ff', '#8f8a72', 1.05));
+    sun = new THREE.DirectionalLight('#fff1d8', 2.5);
+    sun.castShadow = true;
+    const big = Math.min(renderer.capabilities.maxTextureSize, matchMedia('(pointer: coarse)').matches ? 2048 : 4096);
+    sun.shadow.mapSize.set(big, big);
+    sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.5; sun.shadow.radius = 3;
+    scene.add(sun, sun.target);
+    dyn = new THREE.Group(); scene.add(dyn);
+
+    GEO.box = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+    GEO.cyl = new THREE.CylinderGeometry(1, 1, 1, 14).translate(0, 0.5, 0);
+    GEO.cone = new THREE.ConeGeometry(1, 1, 14).translate(0, 0.5, 0);
+    const tri = new THREE.Shape(); tri.moveTo(-0.5, 0); tri.lineTo(0.5, 0); tri.lineTo(0, 1); tri.closePath();
+    GEO.gable = new THREE.ExtrudeGeometry(tri, { depth: 1, bevelEnabled: false }).translate(0, 0, -0.5);
+    GEO.flag = new THREE.PlaneGeometry(1, 1).translate(0.5, -0.5, 0);
+    const ring = new THREE.Shape(); ring.absarc(0, 0, 68.2, 0, Math.PI * 2, false);
+    const hole = new THREE.Path(); hole.absarc(0, 0, 63.8, 0, Math.PI * 2, true); ring.holes.push(hole);
+    GEO.wall = new THREE.ExtrudeGeometry(ring, { depth: 7, bevelEnabled: false, curveSegments: 72 }).rotateX(-Math.PI / 2);   // a capital's city wall
+    GEO.canopy = new THREE.IcosahedronGeometry(1, 1);
+    GEO.pine = new THREE.ConeGeometry(1, 1, 7).translate(0, 0.5, 0);
+    GEO.trunk = new THREE.CylinderGeometry(0.6, 0.9, 1, 6).translate(0, 0.5, 0);
+    GEO.rock = new THREE.DodecahedronGeometry(1, 0);
+    GEO.nugget = new THREE.OctahedronGeometry(1, 0);
+    GEO.unit = [
+      new THREE.ConeGeometry(4.2, 8.6, 3).translate(0, 4.3, 0),           // spearmen: a triangle from above
+      new THREE.CapsuleGeometry(3, 3, 3, 10).translate(0, 4.5, 0),         // archers: a circle
+      new THREE.BoxGeometry(6.2, 5.4, 7.2).translate(0, 2.7, 0),           // cavalry: a square
+    ];
+    unitMeshes = GEO.unit.map(g => {
+      const im = new THREE.InstancedMesh(g, mat('#ffffff', { roughness: 0.55 }), MAXU);
+      im.castShadow = true; im.receiveShadow = true; im.frustumCulled = false; im.count = 0;
+      for (let i = 0; i < MAXU; i++) im.setColorAt(i, WHITE);
+      scene.add(im); return im;
+    });
+
+    dcv = document.createElement('canvas'); dctx = dcv.getContext('2d');
+    const water = waterNormals();
+    waterMat = new THREE.MeshStandardMaterial({ color: '#86bfdc', roughness: 0.12, metalness: 0.1, transparent: true, opacity: 0.8, side: THREE.DoubleSide, normalMap: water, normalScale: new THREE.Vector2(0.45, 0.45) });
+  }
+  const MAXU = 3000, WHITE = new THREE.Color('#ffffff'), TEAMC = [new THREE.Color('#3b6fd4'), new THREE.Color('#df5448')];
+  let unitMeshes = [];
+
+  function waterNormals() {   // a small tileable ripple normal map
+    const N = 128, cv = document.createElement('canvas'); cv.width = cv.height = N;
+    const c = cv.getContext('2d'), img = c.createImageData(N, N), TAU = Math.PI * 2;
+    const waves = [[3, 1, 0.9, 0.3], [-2, 3, 0.7, 1.7], [5, -2, 0.4, 2.9], [1, 6, 0.35, 0.8], [7, 4, 0.2, 4.1]];
+    const ht = (x, y) => waves.reduce((s, [fx, fy, a, p]) => s + a * Math.sin(TAU * (fx * x + fy * y) / N + p), 0);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const dx = ht(x + 1, y) - ht(x - 1, y), dy = ht(x, y + 1) - ht(x, y - 1), l = Math.hypot(dx, dy, 2), o = (x + y * N) * 4;
+      img.data[o] = (-dx / l * 0.5 + 0.5) * 255; img.data[o + 1] = (-dy / l * 0.5 + 0.5) * 255; img.data[o + 2] = (2 / l * 0.5 + 0.5) * 255; img.data[o + 3] = 255;
+    }
+    c.putImageData(img, 0, 0);
+    const t = new THREE.CanvasTexture(cv);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    return t;
+  }
+
+  // ---- terrain height: terraced hills that match the painted contour rings, and a river channel ----
+  function hillHeight(x, y) {
+    let best = 0;
+    for (const h of hills) {
+      const dx = x - h.x, dy = (y - h.y) / 0.8, d = Math.hypot(dx, dy);
+      if (d > h.r * 1.4) continue;
+      const n = h.pts.length, f = ((Math.atan2(dy, dx) / (Math.PI * 2)) + 1) % 1 * n, i = f | 0, w = f - i;
+      const q = d / (h.r * (h.pts[i % n] * (1 - w) + h.pts[(i + 1) % n] * w));
+      best = Math.max(best, 9 * (smooth(1.06, 0.9, q) + smooth(0.75, 0.59, q) + smooth(0.43, 0.27, q)));
+    }
+    return best;
+  }
+  function groundAt(x, y) {
+    let h = hillHeight(x, y);
+    const d = Math.abs(A(x, y) - riverA(B(x, y))), hw = river.hw;
+    if (d < hw + 12) {
+      const br = bridgeAt(B(x, y));
+      const bed = br && br.ford ? FORD_Y : lerp(BED_Y, -4, (d / hw) ** 2);
+      h = lerp(h, bed, smooth(hw + 12, hw - 3, d));
+    }
+    return h;
+  }
+  function deckAt(x, y) {
+    if (Math.abs(A(x, y) - riverA(B(x, y))) > river.hw + 10) return false;
+    const br = bridgeAt(B(x, y));
+    return !!br && !br.ford;
+  }
+  // where things stand: bridge decks, wading depth in the ford, otherwise the ground
+  function surfaceAt(x, y) { return deckAt(x, y) ? DECK_Y : groundAt(x, y); }
+  function decalAt(x, y) { return (deckAt(x, y) ? DECK_Y : Math.max(groundAt(x, y), WATER_Y)) + 0.12; }
+
+  function gridGeometry(hf) {
+    const nx = Math.ceil(W / GS), ny = Math.ceil(H / GS), pos = new Float32Array((nx + 1) * (ny + 1) * 3), uv = new Float32Array((nx + 1) * (ny + 1) * 2), idx = [];
+    for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) {
+      const x = Math.min(W, i * GS), y = Math.min(H, j * GS), k = i + j * (nx + 1);
+      pos[k * 3] = x; pos[k * 3 + 1] = hf(x, y); pos[k * 3 + 2] = y;
+      uv[k * 2] = x / W; uv[k * 2 + 1] = 1 - y / H;
+      if (i < nx && j < ny) idx.push(k, k + nx + 1, k + 1, k + 1, k + nx + 1, k + nx + 2);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    g.setIndex(idx); g.computeVertexNormals();
+    return g;
+  }
+  // the board's sides: earth below the grass, water where the river runs off the edge
+  function skirtGeometry() {
+    const pos = [], col = [], idx = [], C = h => new THREE.Color(h);
+    const grass = C('#93ad74'), soil = C('#b09772'), clay = C('#9b8262'), rock = C('#76664f'), wet = C('#86b9d3'), deep = C('#6a98b0');
+    const edge = (x0, y0, x1, y1) => {
+      const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / GS), s = pos.length / 3;
+      for (let i = 0; i <= n; i++) {
+        const x = lerp(x0, x1, i / n), y = lerp(y0, y1, i / n), g = groundAt(x, y), top = Math.max(g, WATER_Y), water = g < WATER_Y - 0.5;
+        const wave = Math.sin(x * 0.05 + y * 0.07) * 2;
+        const rows = water ? [[top, wet], [g, deep], [g - 1, clay], [-BASE * 0.55 + wave, clay], [-BASE, rock]]
+          : [[top, grass], [top - 3, grass], [top - 3.6, soil], [-BASE * 0.55 + wave, clay], [-BASE, rock]];
+        for (const [h, c] of rows) { pos.push(x, h, y); col.push(c.r, c.g, c.b); }
+        if (i < n) for (let r = 0; r < 4; r++) { const k = s + i * 5 + r; idx.push(k, k + 1, k + 5, k + 5, k + 1, k + 6); }
+      }
+    };
+    edge(0, H, W, H); edge(W, H, W, 0); edge(W, 0, 0, 0); edge(0, 0, 0, H);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setIndex(idx); g.computeVertexNormals();
+    return g;
+  }
+  function riverGeometry() {
+    const pos = [], uv = [], idx = [], hw = river.hw + 4;
+    for (let b = -10, i = 0; b <= LB + 10; b += 6, i++) {
+      const bb = Math.min(b, LB), a = riverA(bb);
+      for (const s of [-1, 1]) { const p = XY(clamp(a + s * hw, 0, LA), clamp(bb, 0, LB)); pos.push(p.x, WATER_Y, p.y); uv.push(p.x / 70, p.y / 70); }
+      if (i) { const k = i * 2; idx.push(k - 2, k - 1, k, k, k - 1, k + 1); }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx); g.computeVertexNormals();
+    return g;
+  }
+
+  function put(group, geo, material, x, y, z, sx, sy, sz, ry = 0) {
+    const m = new THREE.Mesh(geo, material);
+    m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.rotation.y = ry;
+    m.castShadow = true; m.receiveShadow = true;
+    group.add(m); return m;
+  }
+  function addFlag(group, x, y, z, h, color, size = 1) {
+    put(group, GEO.cyl, mat(POLE), x, y, z, 0.45 * size, h, 0.45 * size);
+    const f = put(group, GEO.flag, mat(color, { side: THREE.DoubleSide, flatShading: false }), x, y + h, z, 9 * size, 5.5 * size, 1);
+    (group.userData.flags ||= []).push(f);
+    return f;
+  }
+  function instanced(geo, material, items, set) {
+    const im = new THREE.InstancedMesh(geo, material, Math.max(1, items.length));
+    im.count = items.length; im.castShadow = true; im.receiveShadow = true;
+    const c = new THREE.Color();
+    items.forEach((it, i) => { dummy.position.set(0, 0, 0); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1); set(it, dummy, c); dummy.updateMatrix(); im.setMatrixAt(i, dummy.matrix); im.setColorAt(i, c); });
+    return im;
+  }
+
+  // Rebuilt whenever the ground changes (new game, a new bridge or farm).
+  function buildWorld() {
+    if (world) {
+      scene.remove(world);
+      world.traverse(o => { if (o.userData.own) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); });
+    }
+    world = new THREE.Group(); scene.add(world);
+    if (!groundTex || groundTex.image !== bg) {
+      groundTex && groundTex.dispose();
+      groundTex = new THREE.CanvasTexture(bg);
+      groundTex.colorSpace = THREE.SRGBColorSpace;
+      groundTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    } else groundTex.needsUpdate = true;
+    const own = m => { m.userData.own = true; return m; };
+    const ground = own(new THREE.Mesh(gridGeometry(groundAt), new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.95 })));
+    ground.receiveShadow = true; ground.castShadow = true; world.add(ground);   // hills shade the ground behind them
+
+    if (dcv.width !== Math.ceil(W * DS) || dcv.height !== Math.ceil(H * DS)) {
+      dcv.width = Math.ceil(W * DS); dcv.height = Math.ceil(H * DS);
+      decalTex && decalTex.dispose(); decalTex = null;
+    }
+    if (!decalTex) {
+      decalTex = new THREE.CanvasTexture(dcv);
+      decalTex.colorSpace = THREE.SRGBColorSpace;
+      decalTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    }
+    const decal = own(new THREE.Mesh(gridGeometry(decalAt), new THREE.MeshStandardMaterial({ map: decalTex, transparent: true, depthWrite: false, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })));
+    decal.receiveShadow = true; decal.renderOrder = 1; world.add(decal);
+
+    // the cut edge of the board is lit evenly so its earth layers read, whichever way the sun falls
+    const skirt = own(new THREE.Mesh(skirtGeometry(), new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide })));
+    skirt.castShadow = true; world.add(skirt);
+    const water = own(new THREE.Mesh(riverGeometry(), waterMat));
+    water.receiveShadow = true; water.renderOrder = 2; world.add(water);
+    // a soft drop shadow on the table under the board
+    const sc = document.createElement('canvas'), pad = 90; sc.width = 256; sc.height = Math.round(256 * (H + pad * 2) / (W + pad * 2));
+    const sx = sc.getContext('2d'), k = sc.width / (W + pad * 2);
+    sx.filter = `blur(${Math.round(30 * k)}px)`; sx.fillStyle = 'rgba(40,46,36,.42)'; sx.fillRect(pad * k, pad * k, W * k, H * k);
+    const shadowTex = new THREE.CanvasTexture(sc);
+    const drop = own(new THREE.Mesh(new THREE.PlaneGeometry(W + pad * 2, H + pad * 2).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false })));
+    drop.position.set(W / 2 + 26, -BASE - 0.5, H / 2 + 34); world.add(drop);
+
+    // trees: round broadleaves and two-tier pines, with a little colour variety
+    const leafy = trees.filter(t => !t.pine), pines = trees.filter(t => t.pine);
+    const tint = (c, base, j) => c.set(base).offsetHSL(rand(-0.02, 0.02), rand(-0.05, 0.05), rand(-j, j));
+    world.add(instanced(GEO.trunk, mat(WOOD), trees, (t, d, c) => { d.position.set(t.x, groundAt(t.x, t.y), t.y); d.scale.set(t.r * 0.16, t.pine ? t.r * 0.6 : t.r * 1.1, t.r * 0.16); c.set('#ffffff'); }));
+    world.add(instanced(GEO.canopy, mat('#ffffff'), leafy, (t, d, c) => {
+      d.position.set(t.x, groundAt(t.x, t.y) + t.r * 1.55, t.y); d.scale.set(t.r, t.r * 0.92, t.r); d.rotation.set(rand(0, 3), rand(0, 3), 0);
+      tint(c, t.c === COL.tree ? '#a6c98c' : '#8fb97a', 0.04);
+    }));
+    world.add(instanced(GEO.pine, mat('#ffffff'), pines, (t, d, c) => { d.position.set(t.x, groundAt(t.x, t.y) + t.r * 0.45, t.y); d.scale.set(t.r * 0.95, t.r * 1.7, t.r * 0.95); tint(c, '#7ea679', 0.03); }));
+    world.add(instanced(GEO.pine, mat('#ffffff'), pines, (t, d, c) => { d.position.set(t.x, groundAt(t.x, t.y) + t.r * 1.45, t.y); d.scale.set(t.r * 0.68, t.r * 1.45, t.r * 0.68); tint(c, '#8db487', 0.03); }));
+    clouds = Array.from({ length: 5 }, () => ({ x: rand(0, W + 600), y: rand(0, H), r: rand(120, 230), v: rand(6, 11) }));
+    // crop rows on the fields, and low bushes dotted about the open country
+    const rows = [];
+    for (const f of fields) for (let o = -f.h / 2 + 5; o < f.h / 2 - 2; o += 5) rows.push({ f, o });
+    world.add(instanced(GEO.box, mat('#ffffff'), rows, ({ f, o }, d, c) => {
+      d.position.set(f.x - o * Math.sin(f.rot), groundAt(f.x, f.y), f.y + o * Math.cos(f.rot)); d.rotation.set(0, -f.rot, 0); d.scale.set(f.w - 7, 1.3, 2.2);
+      tint(c, f.c === '#ebe5c6' ? '#e2d49a' : '#b9cf96', 0.03);
+    }));
+    const bushes = [];
+    for (let tries = 0; tries < 900 && bushes.length < 90; tries++) {
+      const x = rand(15, W - 15), y = rand(15, H - 15);
+      if (Math.abs(A(x, y) - riverA(B(x, y))) < river.hw + 16 || onRoad(x, y)) continue;
+      if (towns.some(t => Math.hypot(t.x - x, t.y - y) < (t.capital ? 80 : 60)) || fields.some(f => Math.hypot(f.x - x, f.y - y) < 32) || mines.some(m => Math.hypot(m.x - x, m.y - y) < 40)) continue;
+      if (Math.hypot(compass.x - x, compass.y - y) < 40) continue;
+      bushes.push({ x, y, r: rand(1.8, 3.4) });
+    }
+    world.add(instanced(GEO.canopy, mat('#ffffff'), bushes, (b, d, c) => { d.position.set(b.x, groundAt(b.x, b.y) + b.r * 0.4, b.y); d.scale.set(b.r * 1.3, b.r, b.r * 1.3); d.rotation.set(0, rand(0, 6), 0); tint(c, '#a9c48f', 0.05); }));
+    world.add(instanced(GEO.rock, mat('#ffffff'), rocks, (r, d, c) => { d.position.set(r.x, groundAt(r.x, r.y) + r.r * 0.2, r.y); d.scale.set(r.r, r.r * 0.6, r.r * 0.8); d.rotation.set(0, rand(0, 6), 0); tint(c, '#cfcec2', 0.04); }));
+
+    // bridges: a stone deck with parapets and piers; the ford gets stepping stones
+    const stones = [];
+    for (const br of bridges) {
+      const ca = riverA(br.b);
+      if (br.ford) {
+        for (let a = ca - river.hw + 5, i = 0; a < ca + river.hw - 2; a += 9, i++) for (const off of [-9, 0, 9]) stones.push(XY(a + (i % 2) * 3, br.b + off + Math.sin(a + off) * 2));
+        continue;
+      }
+      const len = river.hw * 2 + 24, wid = br.span * 2, c = XY(ca, br.b), g = new THREE.Group();
+      g.position.set(c.x, 0, c.y); if (P) g.rotation.y = Math.PI / 2;
+      put(g, GEO.box, mat(STONE), 0, DECK_Y - 2.4, 0, len, 2.4, wid);
+      for (const s of [-1, 1]) put(g, GEO.box, mat(STONE2), 0, DECK_Y, s * (wid / 2 - 1.2), len, 1.8, 2.4);
+      for (const s of [-0.5, 0, 0.5]) put(g, GEO.box, mat(STONE2), s * river.hw * 1.3, BED_Y, 0, 5, DECK_Y - 2.4 - BED_Y, wid - 6);
+      for (let x = -len / 2 + 4; x < len / 2 - 2; x += 4.5) put(g, GEO.box, mat('#e6e1d4'), x, DECK_Y - 0.02, 0, 0.5, 0.06, wid - 5);
+      world.add(g);
+    }
+    world.add(instanced(GEO.cyl, mat('#d6d5c9'), stones, (p, d, c) => { d.position.set(p.x, FORD_Y, p.y); d.scale.set(3.2, WATER_Y - FORD_Y + 0.7, 2.6); c.set('#ffffff'); }));
+
+    // gold mines: a heap of rock with nuggets that glint when someone holds the land
+    for (const m of mines) {
+      const g = new THREE.Group(), y0 = groundAt(m.x, m.y);
+      m._rock = new THREE.MeshStandardMaterial({ color: '#d2d1ca', roughness: 0.9, flatShading: true });
+      m._gold = new THREE.MeshStandardMaterial({ color: '#e2b93b', emissive: '#7a5600', emissiveIntensity: 0.2, roughness: 0.3, metalness: 0.6, flatShading: true });
+      [[-6, 3, 8], [6, 4, 7], [0, -4, 7.5]].forEach(([dx, dy, r], i) => { const o = put(g, GEO.rock, m._rock, m.x + dx, y0 + r * 0.3, m.y + dy, r, r * 0.75, r); o.rotation.set(0, i * 2.1, 0); });
+      m._nug = [[-7, 1], [5, 2], [-1, -6], [8, -2], [-3, 6]].map(([dx, dy], i) => { const o = put(g, GEO.nugget, m._gold, m.x + dx * 0.8, y0 + 5.5 + (i % 2) * 1.2, m.y + dy * 0.8, 1.7, 1.7, 1.7); o.rotation.set(i, i * 1.3, 0); return o; });
+      world.add(g);
+    }
+  }
+
+  // ---- buildings: rebuilt only when what they show changes ----
+  const townG = new Map(), structG = new Map(), fieldG = new Map();
+  function keepH(t) { return t.capital ? 22 : 14; }
+  function townSize(t) { return (t.capital ? 16 : 10) + Math.min(3, t.barracks) * 2; }   // half-width of the keep
+  function townRing(t) { return townSize(t) * 1.42 + 6; }
+  function houseCounts(t) {
+    const cap = townCap(t), slots = t.owner < 0 ? 3 : Math.min(t.houses.length, Math.ceil(cap / 3));
+    return [slots, t.owner < 0 ? 3 : Math.min(slots, Math.ceil(t.n / 3))];
+  }
+  function buildTown(t, slots, filled) {
+    const g = new THREE.Group(), x = t.x, z = t.y, y0 = groundAt(x, z), s = townSize(t), KH = keepH(t);
+    const col = t.owner < 0 ? COL.neutral : COL.team[t.owner], roof = t.owner < 0 ? '#c4c0b3' : COL.mid[t.owner];
+    put(g, GEO.box, mat(STONE2), x, y0 - 1, z, s * 2 + 5, 2, s * 2 + 5);
+    put(g, GEO.box, mat(col), x, y0, z, s * 2, KH, s * 2);
+    const n = t.capital ? 5 : 3, mw = 2 * s / (2 * n - 1);
+    for (let i = 0; i < n; i++) {
+      const o = -s + mw / 2 + i * 2 * mw;
+      for (const e of [-1, 1]) {
+        put(g, GEO.box, mat(col), x + o, y0 + KH, z + e * (s - 1.1), mw, 3, 2.2);
+        put(g, GEO.box, mat(col), x + e * (s - 1.1), y0 + KH, z + o, 2.2, 3, mw);
+      }
+    }
+    put(g, GEO.box, mat(t.owner < 0 ? '#9a978b' : t.owner === 0 ? '#2f5fbd' : '#c4443a'), x, y0 + KH - 0.3, z, s * 2 - 4.4, 0.5, s * 2 - 4.4);
+    if (t.capital) {
+      for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        put(g, GEO.cyl, mat(col), x + dx * s, y0, z + dz * s, 4.2, KH + 6, 4.2);
+        put(g, GEO.cone, mat(roof), x + dx * s, y0 + KH + 6, z + dz * s, 5.2, 7, 5.2);
+      }
+      addFlag(g, x + s, y0 + KH + 13, z - s, 12, col, 1.3);
+      // the city wall: one extruded ring, with towers
+      const WR = 66;
+      put(g, GEO.wall, mat(STONE), x, y0 - 0.5, z, 1, 1, 1);
+      for (let i = 0; i < 8; i++) {
+        const a = i * Math.PI / 4 + Math.PI / 8, tx = x + Math.cos(a) * WR, tz = z + Math.sin(a) * WR, ty = groundAt(tx, tz);
+        put(g, GEO.cyl, mat(STONE), tx, ty - 0.5, tz, 5.2, 12, 5.2);
+        put(g, GEO.cone, mat(roof), tx, ty + 11.5, tz, 6.4, 6.5, 6.4);
+      }
+    } else addFlag(g, x + s - 2, y0 + KH + 3, z - s + 2, 9, col);
+    for (let i = 0; i < slots && i < filled; i++) {
+      const h = t.houses[i], hy = groundAt(h.x, h.y), ry = Math.atan2(h.x - x, h.y - z);
+      put(g, GEO.box, mat('#f7f4ec'), h.x, hy, h.y, h.s, 4.6, h.s * 0.85, ry);
+      put(g, GEO.gable, mat(roof), h.x, hy + 4.6, h.y, h.s + 1.2, 3.8, h.s * 0.85 + 1, ry);
+    }
+    const hallSlots = [-Math.PI / 2 - 0.8, -Math.PI / 2 + 0.8, -Math.PI / 2 - 2, -Math.PI / 2 + 2];
+    for (let i = 0; i < Math.min(4, t.barracks); i++) {
+      const ang = hallSlots[i], hr = s + 27, hall = new THREE.Group();
+      hall.position.set(x + Math.cos(ang) * hr, groundAt(x + Math.cos(ang) * hr, z + Math.sin(ang) * hr), z + Math.sin(ang) * hr);
+      hall.rotation.y = -(ang + Math.PI / 2);
+      put(hall, GEO.box, mat('#f7f4ec'), 0, 0, 0, 26, 6, 12);
+      put(hall, GEO.gable, mat(col), 0, 6, 0, 13, 4.5, 28, Math.PI / 2);
+      addFlag(hall, 11, 6, -5, 10, col);
+      g.add(hall);
+      (g.userData.flags ||= []).push(...hall.userData.flags);
+    }
+    return g;
+  }
+  function buildStruct(s) {
+    const g = new THREE.Group(), y0 = groundAt(s.x, s.y), col = COL.team[s.team];
+    if (s.type === 'fort') {
+      for (const e of [-1, 1]) {
+        put(g, GEO.box, mat(STONE), s.x, y0, s.y + e * 10, 23, 6, 3);
+        put(g, GEO.box, mat(STONE), s.x + e * 10, y0, s.y, 3, 6, 23);
+        put(g, GEO.box, mat(col), s.x, y0 + 6, s.y + e * 10, 23, 1, 3.2);
+        put(g, GEO.box, mat(col), s.x + e * 10, y0 + 6, s.y, 3.2, 1, 23);
+        for (const f of [-1, 1]) {
+          put(g, GEO.cyl, mat(STONE), s.x + e * 11, y0, s.y + f * 11, 3.4, 9, 3.4);
+          put(g, GEO.cone, mat(col), s.x + e * 11, y0 + 9, s.y + f * 11, 4.2, 4.5, 4.2);
+        }
+      }
+      addFlag(g, s.x, y0, s.y, 16, col);
+    } else {
+      put(g, GEO.cyl, mat(STONE2), s.x, y0, s.y, 6, 3, 6);
+      put(g, GEO.cyl, mat(STONE), s.x, y0 + 3, s.y, 4, 22, 4);
+      put(g, GEO.cyl, mat(col), s.x, y0 + 24, s.y, 6, 2.2, 6);
+      put(g, GEO.cone, mat(col), s.x, y0 + 26, s.y, 6.4, 8, 6.4);
+      addFlag(g, s.x, y0 + 33.5, s.y, 6, col, 0.8);
+    }
+    return g;
+  }
+  function buildFieldFlag(f) {
+    const g = new THREE.Group(), lx = f.w / 2 - 5, ly = -f.h / 2 - 1;
+    const x = f.x + lx * Math.cos(f.rot) - ly * Math.sin(f.rot), y = f.y + lx * Math.sin(f.rot) + ly * Math.cos(f.rot);
+    addFlag(g, x, groundAt(x, y), y, 9, COL.team[f.town.owner], 0.7);
+    return g;
+  }
+  function syncMap(map, items, keyOf, build) {
+    const live = new Set(items);
+    for (const [o, e] of map) if (!live.has(o)) { dyn.remove(e.g); map.delete(o); }
+    for (const o of items) {
+      const k = keyOf(o), e = map.get(o);
+      if (e && e.k === k) continue;
+      if (e) dyn.remove(e.g);
+      if (k === null) { map.delete(o); continue; }
+      const g = build(o); dyn.add(g); map.set(o, { k, g });
+    }
+  }
+
+  function sync3D(nowS) {
+    syncMap(townG, towns, t => { const [s, f] = houseCounts(t); return `${t.owner}|${s}|${f}|${t.barracks}`; }, t => buildTown(t, ...houseCounts(t)));
+    syncMap(structG, structs, s => s.type + s.team, buildStruct);
+    syncMap(fieldG, fields, f => f.town && f.town.owner >= 0 ? f.town.owner : null, buildFieldFlag);
+    for (const m of [townG, structG, fieldG]) for (const { g } of m.values()) {
+      const fl = g.userData.flags; if (!fl) continue;
+      for (let i = 0; i < fl.length; i++) { const f = fl[i]; f.rotation.y = Math.sin(nowS * 2.6 + f.position.x * 0.1 + i) * 0.35; f.rotation.x = Math.sin(nowS * 4 + f.position.z * 0.1) * 0.06; }
+    }
+    for (const m of mines) {
+      if (!m._rock) continue;
+      const owned = m.owner >= 0;
+      m._rock.color.set(owned ? '#b9b8aa' : '#d2d1ca');
+      m._gold.emissiveIntensity = owned ? 0.6 + 0.5 * Math.sin(nowS * 3 + m.x) : 0.05;
+      m._gold.color.set(owned ? '#f0c53c' : '#bfae80');
+      m._nug.forEach((o, i) => { o.rotation.y = nowS * (owned ? 1.2 : 0) + i; });
+    }
+    // soldiers: one instanced mesh per kind, facing where they march, bobbing as they go
+    const cnt = [0, 0, 0];
+    for (const u of units) {
+      if (u.dead) continue;
+      const k = u.kind, i = cnt[k];
+      if (i >= MAXU) continue;
+      cnt[k]++;
+      const sp = Math.hypot(u.vx, u.vy);
+      if (sp > 3) {
+        const a = Math.atan2(u.vx, u.vy);
+        if (u.hd === undefined) u.hd = a;
+        else { let d = a - u.hd; d -= Math.round(d / (Math.PI * 2)) * Math.PI * 2; u.hd += d * 0.25; }
+      }
+      const bob = sp > 8 ? Math.abs(Math.sin(nowS * 13 + u.id)) * 1.3 : 0;
+      dummy.position.set(u.x, surfaceAt(u.x, u.y) + bob, u.y);
+      dummy.rotation.set(0, u.hd || 0, 0); dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      unitMeshes[k].setMatrixAt(i, dummy.matrix);
+      unitMeshes[k].setColorAt(i, u.flash > 0 ? WHITE : TEAMC[u.team]);
+    }
+    unitMeshes.forEach((im, k) => { im.count = cnt[k]; im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true; });
+    waterMat.normalMap.offset.set(P ? nowS * 0.03 : nowS * 0.008, P ? nowS * 0.008 : -nowS * 0.03);
+  }
+
+  // ---- camera: tilted towards the north, framed to fit between the top bar and the tray ----
+  function toScreen(x, y, h) {
+    v3.set(x, h, y).project(camera);
+    return { x: (v3.x + 1) / 2 * innerWidth, y: (1 - v3.y) / 2 * innerHeight };
+  }
+  function pxPerUnit(x, y, h = 0) { const a = toScreen(x - 10, y, h), b = toScreen(x + 10, y, h); return Math.hypot(b.x - a.x, b.y - a.y) / 20; }
+  // zoom and pan: the camera looks at the board centre plus (view.x, view.y), from baseDist / view.z away
+  const view = { z: 1, x: 0, y: 0 }, MAXZ = 4;
+  let baseDist = 1000;
+  function placeCamera() {
+    view.z = clamp(view.z, 1, MAXZ);
+    const fx = W / 2 * (1 - 1 / view.z), fy = H / 2 * (1 - 1 / view.z);
+    view.x = clamp(view.x, -fx, fx); view.y = clamp(view.y, -fy, fy);
+    const d = baseDist / view.z, tx = W / 2 + view.x, tz = H / 2 + view.y;
+    camera.position.set(tx, Math.cos(TILT) * d, tz + Math.sin(TILT) * d);
+    camera.lookAt(tx, 0, tz); camera.updateProjectionMatrix(); camera.updateMatrixWorld();
+  }
+  // where a screen point meets the ground plane (refine: follow hills and bridges)
+  function pointAt(cx, cy, refine) {
+    const r = cvs.getBoundingClientRect();
+    ray.setFromCamera(new THREE.Vector2((cx - r.left) / r.width * 2 - 1, 1 - (cy - r.top) / r.height * 2), camera);
+    const o = ray.ray.origin, d = ray.ray.direction;
+    let h = 0, p = null;
+    for (let i = 0; i < (refine ? 4 : 1); i++) {
+      const k = (h - o.y) / d.y;
+      p = { x: o.x + d.x * k, y: o.z + d.z * k };
+      h = p.x >= 0 && p.y >= 0 && p.x <= W && p.y <= H ? decalAt(p.x, p.y) : 0;
+    }
+    return p;
+  }
+  // keep a world point under the same screen point while the zoom changes
+  function zoomTo(z, cx, cy, grab) {
+    const g = grab || pointAt(cx, cy);
+    view.z = z; placeCamera();
+    const p = pointAt(cx, cy);
+    view.x += g.x - p.x; view.y += g.y - p.y; placeCamera();
+  }
+  function fitCamera() {
+    const vw = innerWidth, vh = innerHeight, top = 70, bottom = vw <= 560 ? 130 : 84, side = 12;
+    const aw = vw - side * 2, ah = vh - top - bottom;
+    renderer.setSize(vw, vh, false);
+    camera.aspect = vw / vh; camera.clearViewOffset();
+    const pts = [[0, 0, 0], [W, 0, 0], [0, 0, H], [W, 0, H], [0, -BASE, H], [W, -BASE, H]];
+    const place = dist => {
+      camera.position.set(W / 2, Math.cos(TILT) * dist, H / 2 + Math.sin(TILT) * dist);
+      camera.lookAt(W / 2, 0, H / 2); camera.updateProjectionMatrix(); camera.updateMatrixWorld();
+      let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+      for (const [x, h, y] of pts) { const s = toScreen(x, y, h); x0 = Math.min(x0, s.x); x1 = Math.max(x1, s.x); y0 = Math.min(y0, s.y); y1 = Math.max(y1, s.y); }
+      return { x0, x1, y0, y1 };
+    };
+    let lo = 100, hi = 30000;
+    for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2, b = place(m); if (b.x1 - b.x0 > aw || b.y1 - b.y0 > ah) lo = m; else hi = m; }
+    const b = place(hi);
+    baseDist = hi;
+    camera.setViewOffset(vw, vh, (b.x0 + b.x1) / 2 - (side + aw / 2), (b.y0 + b.y1) / 2 - (top + ah / 2), vw, vh);
+    placeCamera();
+    const R = Math.max(W, H) * 0.8;
+    sun.position.set(W / 2 - 520, 1000, H / 2 - 640); sun.target.position.set(W / 2, 0, H / 2);
+    Object.assign(sun.shadow.camera, { left: -R, right: R, top: R, bottom: -R, near: 300, far: 2600 });
+    sun.shadow.camera.updateProjectionMatrix();
+  }
+
   // ---------- render ----------
+  // Flat markings (territory, routes, rings, field and mine borders) are painted each frame onto a decal
+  // texture that lies on the ground; names, icons and arrows are drawn on the 2D overlay canvas on top.
   function strokeRoute(pts, color, width) {
     ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
@@ -2115,62 +2618,47 @@
   }
 
   function render() {
-    const vw = innerWidth, vh = innerHeight;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = COL.outside; ctx.fillRect(0, 0, cvs.width, cvs.height);
-    if (!bg) return;
-    const ox = Math.round(offX * dpr), oy = Math.round(offY * dpr), nowS = performance.now() / 1000;
-    ctx.drawImage(bg, ox, oy);
-    ctx.setTransform(dpr * scale, 0, 0, dpr * scale, ox, oy);
+    if (!bg || !renderer) return;
+    const nowS = performance.now() / 1000;
+    drawDecals(nowS);
+    decalTex.needsUpdate = true;
+    sync3D(nowS);
+    renderer.render(scene, camera);
+    drawOverlay(nowS);
+  }
+
+  function drawDecals(nowS) {
+    ctx = dctx;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, dcv.width, dcv.height);
+    ctx.setTransform(DS, 0, 0, DS, 0, 0);
     drawTerritory();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(bgOver, ox, oy);
-    ctx.setTransform(dpr * scale, 0, 0, dpr * scale, ox, oy);
-
-    // drifting ripples on the river
-    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1.4; ctx.lineCap = 'round';
-    ctx.beginPath();
-    for (const rp of ripples) {
-      const b = ((rp.b + nowS * rp.sp) % (LB + 60)) - 30;
-      if (bridges.some(br => Math.abs(b - br.b) < br.span + 8 || Math.abs(b + rp.len - br.b) < br.span + 8)) continue;
-      const p0 = XY(riverA(b) + rp.off * river.hw, b), p1 = XY(riverA(b + rp.len) + rp.off * river.hw, b + rp.len);
-      ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y);
+    for (const c of clouds) {   // soft cloud shadows drifting across the board
+      const x = ((c.x + nowS * c.v) % (W + 600)) - 300, g = ctx.createRadialGradient(x, c.y, 0, x, c.y, c.r);
+      g.addColorStop(0, 'rgba(30,45,60,.09)'); g.addColorStop(0.6, 'rgba(30,45,60,.05)'); g.addColorStop(1, 'rgba(30,45,60,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, c.y, c.r, c.r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
     }
-    ctx.stroke();
+    ctx.globalCompositeOperation = 'destination-out';   // no territory tint on open water
+    riverPath(ctx); ctx.lineWidth = river.hw * 2; ctx.lineCap = 'butt'; ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
 
-    // capitals sit inside a tinted city wall with towers
+    // capitals: a soft glow of their colour inside the city wall
     for (const t of towns) {
       if (!t.capital || t.owner < 0) continue;
-      const WR = 66;
-      const g = ctx.createRadialGradient(t.x, t.y, 10, t.x, t.y, WR);
+      const g = ctx.createRadialGradient(t.x, t.y, 10, t.x, t.y, 64);
       g.addColorStop(0, COL.light[t.owner]); g.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.globalAlpha = 0.7; ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(t.x, t.y, WR, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.6; ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(t.x, t.y, 64, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
-      ctx.lineWidth = 7; ctx.strokeStyle = COL.shadow;
-      ctx.beginPath(); ctx.arc(t.x + 1.5, t.y + 2.5, WR, 0, Math.PI * 2); ctx.stroke();
-      ctx.lineWidth = 6; ctx.strokeStyle = COL.bridgeEdge;
-      ctx.beginPath(); ctx.arc(t.x, t.y, WR, 0, Math.PI * 2); ctx.stroke();
-      ctx.lineWidth = 3.5; ctx.strokeStyle = COL.bridge;
-      ctx.beginPath(); ctx.arc(t.x, t.y, WR, 0, Math.PI * 2); ctx.stroke();
-      for (let i = 0; i < 8; i++) {
-        const a = i * Math.PI / 4 + Math.PI / 8, x = t.x + Math.cos(a) * WR, y = t.y + Math.sin(a) * WR;
-        rr(ctx, x - 5 + 1.5, y - 5 + 2.5, 10, 10, 2); ctx.fillStyle = COL.shadow; ctx.fill();
-        rr(ctx, x - 5, y - 5, 10, 10, 2); ctx.fillStyle = COL.bridge; ctx.fill();
-        ctx.lineWidth = 1.5; ctx.strokeStyle = COL.mid[t.owner]; ctx.stroke();
-      }
     }
-
     // drill yards: towns with barracks sit on a tinted parade ground that grows with each barracks
     for (const t of towns) {
       if (!t.barracks || t.owner < 0) continue;
-      const y = (t.capital ? 16 : 10) + 30 + 9 * Math.min(3, t.barracks);
+      const y = townSize(t) + 30 + 9 * Math.min(3, t.barracks);
       rr(ctx, t.x - y, t.y - y, y * 2, y * 2, 14);
       ctx.globalAlpha = 0.45; ctx.fillStyle = COL.light[t.owner]; ctx.fill();
       ctx.globalAlpha = 0.7; ctx.strokeStyle = COL.mid[t.owner]; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
       ctx.globalAlpha = 1;
     }
-
     // battle scars fade over 30 seconds
     for (const sc of scars) {
       const k = 1 - (time - sc.born) / 30;
@@ -2181,7 +2669,6 @@
       ctx.fillRect(sc.x + sc.r * 0.6, sc.y - 1, 1.6, 1.6);
     }
     ctx.globalAlpha = 1;
-
     for (const w of waves) {
       const k = w.t / 1.2, R = 20 + 150 * Math.sqrt(k);
       ctx.globalAlpha = (1 - k) * 0.22; ctx.fillStyle = w.color;
@@ -2217,7 +2704,7 @@
       }
     }
 
-    drawMines();
+    drawMines(nowS);
     drawStructs();
 
     for (const d of deaths) {
@@ -2225,35 +2712,6 @@
       ctx.fillStyle = COL.team[d.team];
       ctx.beginPath(); ctx.arc(d.x, d.y, 3 * (1 - d.t / 0.5), 0, Math.PI * 2); ctx.fill();
     }
-    ctx.globalAlpha = 1;
-
-    ctx.fillStyle = COL.shadow;
-    ctx.beginPath();
-    for (const u of units) if (!u.dead) { ctx.moveTo(u.x + 4.4, u.y + 1.8); ctx.arc(u.x + 1.2, u.y + 1.8, 3.2, 0, Math.PI * 2); }
-    ctx.fill();
-    for (let team = 0; team < 2; team++) {
-      ctx.fillStyle = COL.team[team];
-      ctx.beginPath();
-      for (const u of units) {
-        if (u.team !== team || u.dead) continue;
-        if (u.kind === 0) { ctx.moveTo(u.x, u.y - 3.8); ctx.lineTo(u.x + 3.5, u.y + 2.6); ctx.lineTo(u.x - 3.5, u.y + 2.6); ctx.closePath(); }
-        else if (u.kind === 1) { ctx.moveTo(u.x + 2.8, u.y); ctx.arc(u.x, u.y, 2.8, 0, Math.PI * 2); }
-        else ctx.rect(u.x - 2.8, u.y - 2.8, 5.6, 5.6);
-      }
-      ctx.fill();
-    }
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    for (const u of units) if (u.flash > 0 && !u.dead) { ctx.moveTo(u.x + 2, u.y); ctx.arc(u.x, u.y, 2, 0, Math.PI * 2); }
-    ctx.fill();
-
-    for (const tr of tracers) {
-      ctx.globalAlpha = 1 - tr.t / 0.18;
-      ctx.strokeStyle = COL.team[tr.team]; ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.moveTo(tr.x0, tr.y0); ctx.lineTo(tr.x1, tr.y1); ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-
     for (const p of puffs) {
       if (p.t < 0) continue;
       const k = p.t / 0.5;
@@ -2262,71 +2720,35 @@
       ctx.beginPath(); ctx.arc(p.x, p.y, 2 + p.size * k, 0, Math.PI * 2); ctx.stroke();
     }
     ctx.globalAlpha = 1;
-
-    const pulseT = performance.now() / 1000;
     for (const a of alerts) {
-      const k = a.t / 6, wob = Math.sin(pulseT * 8) * 3;
+      const k = a.t / 6, wob = Math.sin(nowS * 8) * 3;
       ctx.globalAlpha = (1 - k) * (a.loud ? 0.9 : 0.6);
       ctx.strokeStyle = COL.team[1]; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(a.x, a.y, 26 + wob, 0, Math.PI * 2); ctx.stroke();
-      ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(a.x, a.y, 40 + ((pulseT * 40) % 30), 0, Math.PI * 2); ctx.stroke();
-      ctx.fillStyle = COL.team[1]; ctx.font = '700 22px Lexend, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('!', a.x, a.y + 1);
+      ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(a.x, a.y, 40 + ((nowS * 40) % 30), 0, Math.PI * 2); ctx.stroke();
     }
     ctx.globalAlpha = 1;
     const st = tutStep();
     if (st && st.towns) for (const name of st.towns) {
       const t = towns.find(o => o.name === name);
       if (!t) continue;
-      ctx.strokeStyle = COL.team[0]; ctx.lineWidth = 2.5; ctx.globalAlpha = 0.5 + 0.4 * Math.sin(pulseT * 5);
-      ctx.beginPath(); ctx.arc(t.x, t.y, 36 + Math.sin(pulseT * 5) * 4, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = COL.team[0]; ctx.lineWidth = 2.5; ctx.globalAlpha = 0.5 + 0.4 * Math.sin(nowS * 5);
+      ctx.beginPath(); ctx.arc(t.x, t.y, townRing(t) + 12 + Math.sin(nowS * 5) * 4, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 1;
     }
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     for (const t of towns) {
-      const s = (t.capital ? 16 : 10) + Math.min(3, t.barracks) * 2;   // the keep grows with each barracks
-      const col = t.owner < 0 ? COL.neutral : COL.team[t.owner];
-      const R = s + 9;
-      // houses: more appear as the garrison grows
-      // Houses show capacity (one per 3 soldiers of room); filled roofs show the soldiers at home.
-      const cap = townCap(t);
-      const slots = t.owner < 0 ? 3 : Math.min(t.houses.length, Math.ceil(cap / 3));
-      const filled = t.owner < 0 ? 3 : Math.min(slots, Math.ceil(t.n / 3));
-      const roof = t.owner < 0 ? COL.neutral : COL.mid[t.owner];
-      for (let i = 0; i < slots; i++) {
-        const h = t.houses[i], x0 = h.x - h.s / 2, y0 = h.y - h.s / 2;
-        if (i < filled) {
-          rr(ctx, x0 + 1.2, y0 + 1.8, h.s, h.s, 1.5); ctx.fillStyle = COL.shadow; ctx.fill();
-          rr(ctx, x0, y0, h.s, h.s, 1.5); ctx.fillStyle = COL.bridge; ctx.fill();
-          rr(ctx, x0 + 1.2, y0 + 1.2, h.s - 2.4, h.s - 2.4, 1.2); ctx.fillStyle = roof; ctx.fill();
-        } else {
-          rr(ctx, x0 + 0.6, y0 + 0.6, h.s - 1.2, h.s - 1.2, 1.5);
-          ctx.strokeStyle = roof; ctx.globalAlpha = 0.45; ctx.lineWidth = 1.2; ctx.stroke(); ctx.globalAlpha = 1;
-        }
-      }
-      // Barracks: a long hall with a flag for each one, set around the keep
-      const hallCol = t.owner < 0 ? COL.neutral : COL.team[t.owner];
-      const hallSlots = [-Math.PI / 2 - 0.8, -Math.PI / 2 + 0.8, -Math.PI / 2 - 2, -Math.PI / 2 + 2];
-      for (let i = 0; i < Math.min(4, t.barracks); i++) {
-        const ang = hallSlots[i], hr = s + 27, hx = t.x + Math.cos(ang) * hr, hy = t.y + Math.sin(ang) * hr;
-        ctx.save(); ctx.translate(hx, hy); ctx.rotate(ang + Math.PI / 2);
-        rr(ctx, -14 + 2, -7 + 2.5, 28, 14, 3); ctx.fillStyle = COL.shadow; ctx.fill();
-        rr(ctx, -14, -7, 28, 14, 3); ctx.fillStyle = COL.bridge; ctx.fill();
-        rr(ctx, -12, -5, 24, 10, 2); ctx.fillStyle = hallCol; ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(10, 0); ctx.stroke();
-        ctx.strokeStyle = '#5c6460'; ctx.lineWidth = 1.4;
-        ctx.beginPath(); ctx.moveTo(11, -5); ctx.lineTo(11, -18); ctx.stroke();
-        ctx.fillStyle = hallCol; ctx.beginPath(); ctx.moveTo(11, -18); ctx.lineTo(20, -15); ctx.lineTo(11, -12); ctx.closePath(); ctx.fill();
-        ctx.restore();
-      }
+      const s = townSize(t), col = t.owner < 0 ? COL.neutral : COL.team[t.owner], R = townRing(t);
+      // Empty house plots show room to grow: one per 3 soldiers of capacity not yet filled.
+      const [slots, filled] = houseCounts(t), roof = t.owner < 0 ? COL.neutral : COL.mid[t.owner];
+      ctx.strokeStyle = roof; ctx.globalAlpha = 0.55; ctx.lineWidth = 1.2;
+      for (let i = filled; i < slots; i++) { const h = t.houses[i]; rr(ctx, h.x - h.s / 2 + 0.6, h.y - h.s / 2 + 0.6, h.s - 1.2, h.s - 1.2, 1.5); ctx.stroke(); }
+      ctx.globalAlpha = 1;
       // Training ring: fills as the next soldier trains; solid and dim when the town is full.
       if (t.owner >= 0) {
-        const tr = s + 4.4, full = t.n >= cap;
-        ctx.lineWidth = 1.8; ctx.strokeStyle = col;
-        ctx.globalAlpha = full ? 0.25 : 0.7;
+        const full = t.n >= townCap(t);
+        ctx.lineWidth = 2; ctx.strokeStyle = col; ctx.globalAlpha = full ? 0.3 : 0.8;
         const prog = full ? 1 : clamp(1 - t.spawnT / trainBase(t), 0, 1);
-        ctx.beginPath(); ctx.arc(t.x, t.y, tr, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * prog); ctx.stroke();
+        ctx.beginPath(); ctx.arc(t.x, t.y, R - 4.5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * prog); ctx.stroke();
         ctx.globalAlpha = 1;
       }
       ctx.lineWidth = 3.5; ctx.lineCap = 'round';
@@ -2343,47 +2765,64 @@
         ctx.strokeStyle = COL.mid[0]; ctx.lineWidth = 2; ctx.setLineDash([3, 4]);
         ctx.beginPath(); ctx.arc(t.x, t.y, R + 8, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
       }
-      ctx.fillStyle = COL.shadow; rr(ctx, t.x - s + 2, t.y - s + 3, s * 2, s * 2, 5); ctx.fill();
-      ctx.fillStyle = col; rr(ctx, t.x - s, t.y - s, s * 2, s * 2, 5); ctx.fill();
-      if (t.capital) {   // battlements, a white inner border and a waving flag on the keep
-        for (const dx of [-s, -s / 2 - 2.5, -2.5, s / 2 - 2.5, s - 5]) { rr(ctx, t.x + dx, t.y - s - 4, 5, 6, 1.2); ctx.fill(); }
-        rr(ctx, t.x - s + 3, t.y - s + 3, s * 2 - 6, s * 2 - 6, 3);
-        ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1.5; ctx.stroke();
-        const px = t.x + s - 3, top = t.y - s - 30, wave = Math.sin(pulseT * 4 + t.x);
-        ctx.strokeStyle = '#5c6460'; ctx.lineWidth = 1.8; ctx.lineCap = 'round';
-        ctx.beginPath(); ctx.moveTo(px, t.y - s - 3); ctx.lineTo(px, top); ctx.stroke();
-        ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(px, top);
-        ctx.quadraticCurveTo(px + 8, top - 2 + wave * 2, px + 17, top + 1 + wave * 1.5);
-        ctx.lineTo(px + 15, top + 6 + wave);
-        ctx.quadraticCurveTo(px + 8, top + 9 - wave * 2, px, top + 12); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = col;
-      }
-      if (t.owner >= 0) {
-        ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.beginPath();
-        if (t.kind === 0) { ctx.moveTo(t.x, t.y - 5.5); ctx.lineTo(t.x + 5, t.y + 4); ctx.lineTo(t.x - 5, t.y + 4); ctx.closePath(); }
-        else if (t.kind === 1) ctx.arc(t.x, t.y, 4.2, 0, Math.PI * 2);
-        else ctx.rect(t.x - 4, t.y - 4, 8, 8);
+    }
+  }
+
+  function label(text, x, y, size, weight, fill, halo = 3) {
+    ctx.font = `${weight} ${size}px Lexend, "Avenir Next", system-ui, sans-serif`;
+    ctx.lineJoin = 'round'; ctx.lineWidth = halo; ctx.strokeStyle = 'rgba(255,255,255,.8)';
+    ctx.strokeText(text, x, y); ctx.fillStyle = fill; ctx.fillText(text, x, y);
+  }
+  function drawOverlay(nowS) {
+    ctx = octx;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cvs.width, cvs.height);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // arrows fly in an arc
+    ctx.lineCap = 'round';
+    for (const tr of tracers) {
+      const h0 = surfaceAt(tr.x0, tr.y0) + 6, h1 = surfaceAt(tr.x1, tr.y1) + 4, L = Math.hypot(tr.x1 - tr.x0, tr.y1 - tr.y0);
+      const a = toScreen(tr.x0, tr.y0, h0), b = toScreen(tr.x1, tr.y1, h1), m = toScreen((tr.x0 + tr.x1) / 2, (tr.y0 + tr.y1) / 2, (h0 + h1) / 2 + L * 0.22);
+      ctx.globalAlpha = 1 - tr.t / 0.18; ctx.strokeStyle = COL.team[tr.team]; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(2 * m.x - (a.x + b.x) / 2, 2 * m.y - (a.y + b.y) / 2, b.x, b.y); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    for (const c of coins) {
+      const p = toScreen(c.x, c.y, groundAt(c.x, c.y) + 8 + c.t * 22), k = pxPerUnit(c.x, c.y);
+      ctx.globalAlpha = 1 - c.t; ctx.fillStyle = '#e2b93b';
+      ctx.beginPath(); ctx.arc(p.x, p.y, 3 * k, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#c79a1e'; ctx.lineWidth = 1; ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const a of alerts) {
+      const p = toScreen(a.x, a.y, 10), k = pxPerUnit(a.x, a.y);
+      ctx.globalAlpha = (1 - a.t / 6) * (a.loud ? 1 : 0.7);
+      label('!', p.x, p.y, Math.round(24 * k), 700, COL.team[1], 4);
+    }
+    ctx.globalAlpha = 1;
+    const zs = view.z ** -0.55;   // labels grow more slowly than the map when zoomed in
+    for (const t of towns) {
+      const kr = pxPerUnit(t.x, t.y), k = kr * zs, R = townRing(t);
+      if (t.owner >= 0) {   // what the town trains, on the keep's roof
+        const c = toScreen(t.x, t.y, groundAt(t.x, t.y) + keepH(t)), q = 4.6 * kr;
+        ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.beginPath();
+        if (t.kind === 0) { ctx.moveTo(c.x, c.y - q * 1.15); ctx.lineTo(c.x + q, c.y + q * 0.8); ctx.lineTo(c.x - q, c.y + q * 0.8); ctx.closePath(); }
+        else if (t.kind === 1) ctx.arc(c.x, c.y, q * 0.9, 0, Math.PI * 2);
+        else ctx.rect(c.x - q * 0.85, c.y - q * 0.85, q * 1.7, q * 1.7);
         ctx.fill();
       }
-      if (t.capital) {   // capital names: bold, team-coloured, with a white halo
-        ctx.font = '800 13.5px Lexend, "Avenir Next", system-ui, sans-serif';
-        const label = t.name.toUpperCase(), ly = t.y + R + 8;
-        ctx.lineJoin = 'round'; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(255,255,255,.85)';
-        ctx.strokeText(label, t.x, ly);
-        ctx.fillStyle = t.owner < 0 ? COL.text : col; ctx.fillText(label, t.x, ly);
-        ctx.font = '600 9px Lexend, "Avenir Next", system-ui, sans-serif';
-        ctx.strokeText('CAPITAL', t.x, ly + 15);
-        ctx.fillStyle = 'rgba(46,55,53,.6)'; ctx.fillText('CAPITAL', t.x, ly + 15);
-      } else {
-        ctx.font = '600 11px Lexend, "Avenir Next", system-ui, sans-serif';
-        ctx.fillStyle = 'rgba(46,55,53,.72)';
-        ctx.fillText(t.name, t.x, t.y + R + 6);
-      }
-      if (t.barracks > 0) {
-        ctx.font = '700 9.5px Lexend, "Avenir Next", system-ui, sans-serif';
-        ctx.fillStyle = hallCol;
-        ctx.fillText(t.barracks === 1 ? 'Barracks' : `×${t.barracks} barracks`, t.x, t.y + R + (t.capital ? 35 : 20));
-      }
+      const p = toScreen(t.x, t.y + R + 10, 0);
+      if (p.x < -80 || p.y < -40 || p.x > innerWidth + 80 || p.y > innerHeight + 40) continue;
+      if (t.capital) {
+        label(t.name.toUpperCase(), p.x, p.y + 2 * k, Math.round(14 * k), 800, t.owner < 0 ? COL.text : COL.team[t.owner], 4);
+        label('CAPITAL', p.x, p.y + 16 * k, Math.round(9 * k), 600, 'rgba(46,55,53,.65)');
+      } else label(t.name, p.x, p.y, Math.round(11.5 * k), 600, 'rgba(46,55,53,.85)');
+      if (t.barracks > 0) label(t.barracks === 1 ? 'Barracks' : `×${t.barracks} barracks`, p.x, p.y + (t.capital ? 29 : 14) * k, Math.round(9.5 * k), 700, t.owner < 0 ? COL.neutral : COL.team[t.owner]);
+    }
+    for (const m of mines) {
+      const p = toScreen(m.x, m.y + 38, 0), k = pxPerUnit(m.x, m.y) * zs;
+      label(m.owner === 0 ? `Your mine · +${Math.round(MINE_RATE * WEEK)}/week` : m.owner === 1 ? 'Enemy mine' : 'Unclaimed mine', p.x, p.y, Math.round(10 * k), m.owner >= 0 ? 700 : 600,
+        m.owner === 0 ? COL.team[0] : m.owner === 1 ? COL.team[1] : 'rgba(46,55,53,.6)');
     }
   }
 
@@ -2392,24 +2831,23 @@
     ctx.beginPath(); ctx.arc(x, y, 80, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 0.5 * alpha; ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.setLineDash([3, 5]);
     ctx.beginPath(); ctx.arc(x, y, 80, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-    ctx.globalAlpha = alpha;
-    rr(ctx, x - 9, y - 8, 22, 22, 4); ctx.fillStyle = COL.shadow; ctx.fill();
-    rr(ctx, x - 11, y - 11, 22, 22, 4); ctx.fillStyle = COL.bridge; ctx.fill();
-    ctx.lineWidth = 4; ctx.strokeStyle = col; ctx.stroke();
+    if (alpha < 1) {   // placement preview: the footprint
+      ctx.globalAlpha = alpha; rr(ctx, x - 11, y - 11, 22, 22, 4); ctx.fillStyle = COL.bridge; ctx.fill();
+      ctx.lineWidth = 4; ctx.strokeStyle = col; ctx.stroke();
+    }
     ctx.globalAlpha = 1;
   }
   function drawTower(x, y, col, alpha) {
     ctx.globalAlpha = 0.35 * alpha; ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.setLineDash([2, 6]);
     ctx.beginPath(); ctx.arc(x, y, 130, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-    ctx.globalAlpha = alpha; ctx.fillStyle = COL.shadow;
-    ctx.beginPath(); ctx.arc(x + 2, y + 3, 9, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = col;
-    ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill();
+    if (alpha < 1) {
+      ctx.globalAlpha = alpha; ctx.fillStyle = col;
+      ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.globalAlpha = 1;
   }
-  function drawMines() {
-    const nowS = performance.now() / 1000;
+  function drawMines(nowS) {
     // Farms: owned fields get a bold team border and tint; fields nobody works look grey and fallow.
     for (const f of fields) {
       const owner = f.town ? f.town.owner : -1;
@@ -2421,14 +2859,10 @@
       } else {
         ctx.globalAlpha = owner === 0 ? 0.16 : 0.12; ctx.fillStyle = COL.team[owner]; ctx.fill(); ctx.globalAlpha = 1;
         ctx.strokeStyle = COL.team[owner]; ctx.lineWidth = owner === 0 ? 2.4 : 2; ctx.stroke();
-        // flag
-        const fx = f.w / 2 - 5, fy = -f.h / 2 - 1;
-        ctx.strokeStyle = '#5c6460'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(fx, fy + 7); ctx.lineTo(fx, fy - 7); ctx.stroke();
-        ctx.fillStyle = COL.team[owner]; ctx.beginPath(); ctx.moveTo(fx, fy - 7); ctx.lineTo(fx + 8, fy - 4.5); ctx.lineTo(fx, fy - 2); ctx.closePath(); ctx.fill();
       }
       ctx.restore();
     }
-    // Gold mines: yours glow blue with sparkling gold, enemy mines are red, unclaimed ones are dull grey.
+    // Gold mines: a ring in the holder's colour; unclaimed ones show how close the land is to tipping.
     for (const m of mines) {
       const owned = m.owner >= 0, col = owned ? COL.team[m.owner] : COL.neutral;
       if (owned) {
@@ -2444,33 +2878,13 @@
       } else {
         ctx.globalAlpha = 0.45; ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.setLineDash([4, 5]);
         ctx.beginPath(); ctx.arc(m.x, m.y, 28, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
-        // claim progress: how close the land is to tipping one way
         const v = terrAt(m.x, m.y), prog = Math.min(1, Math.abs(v) / 0.25);
         if (prog > 0.08) {
           ctx.strokeStyle = COL.team[v > 0 ? 0 : 1]; ctx.lineWidth = 3;
           ctx.beginPath(); ctx.arc(m.x, m.y, 28, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * prog); ctx.stroke();
         }
       }
-      const rocks = owned ? [[-6, 3, 8, '#b4b4a6'], [6, 4, 7, '#c3c3b6'], [0, -4, 7.5, '#cfcfc2']] : [[-6, 3, 8, '#c9c8c0'], [6, 4, 7, '#d2d1ca'], [0, -4, 7.5, '#dad9d2']];
-      for (const [dx, dy, r] of rocks) { ctx.fillStyle = COL.shadow; ctx.beginPath(); ctx.arc(m.x + dx + 1.5, m.y + dy + 2, r, 0, Math.PI * 2); ctx.fill(); }
-      for (const [dx, dy, r, c] of rocks) { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(m.x + dx, m.y + dy, r, 0, Math.PI * 2); ctx.fill(); }
-      const spots = [[-7, 1], [5, 2], [-1, -6], [8, -2], [-3, 6]];
-      for (let i = 0; i < (owned ? 5 : 2); i++) {
-        const tw2 = owned ? 0.5 + 0.5 * Math.sin(nowS * 3 + i * 1.7 + m.x) : 0.2;
-        ctx.globalAlpha = owned ? 0.6 + 0.4 * tw2 : 0.45; ctx.fillStyle = owned ? '#e2b93b' : '#b9a978';
-        ctx.beginPath(); ctx.arc(m.x + spots[i][0], m.y + spots[i][1], owned ? 1.8 + tw2 * 1.2 : 1.4, 0, Math.PI * 2); ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-      ctx.font = `${owned ? 700 : 600} 10px Lexend, system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.fillStyle = m.owner === 0 ? COL.team[0] : m.owner === 1 ? COL.team[1] : 'rgba(46,55,53,.5)';
-      ctx.fillText(m.owner === 0 ? `Your mine · +${Math.round(MINE_RATE * WEEK)}/week` : m.owner === 1 ? 'Enemy mine' : 'Unclaimed mine', m.x, m.y + 33);
     }
-    for (const c of coins) {
-      ctx.globalAlpha = 1 - c.t; ctx.fillStyle = '#e2b93b';
-      ctx.beginPath(); ctx.arc(c.x, c.y - c.t * 18, 3, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = '#c79a1e'; ctx.lineWidth = 1; ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
   }
   function drawStructs() {
     for (const s of structs) (s.type === 'fort' ? drawFort : drawTower)(s.x, s.y, COL.team[s.team], 1);
