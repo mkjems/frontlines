@@ -438,6 +438,7 @@ import * as THREE from 'three';
       commit() { tone(660, 0.12, { vol: 0.1 }); tone(990, 0.2, { vol: 0.08, delay: 0.07 }); },
       menu() { tone(880, 0.06, { type: 'triangle', vol: 0.06 }); },
       select() { tone(1175, 0.08, { type: 'triangle', vol: 0.06 }); },
+      lock() { tone(1320, 0.06, { type: 'triangle', vol: 0.06 }); tone(1760, 0.1, { type: 'triangle', vol: 0.05, delay: 0.05 }); },
       place() { noise(0.18, { filter: 'lowpass', freq: 300, vol: 0.5 }); tone(150, 0.2, { vol: 0.18, glide: 70 }); },
       good() { [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.35, { type: 'triangle', vol: 0.09, delay: i * 0.08 })); },
       bad() { [440, 349, 294].forEach((f, i) => tone(f, 0.45, { type: 'triangle', vol: 0.1, delay: i * 0.13 })); },
@@ -1749,17 +1750,23 @@ import * as THREE from 'three';
       dx = target.x - last.x; dy = target.y - last.y; dl = Math.hypot(dx, dy);
     }
   }
+  // The town a route will end on: the pointer is over it and the line has reached its outskirts,
+  // or the line itself ends close by.
+  function lockTarget(p) {
+    const d = drawing, end = d.pts[d.pts.length - 1];
+    let best = null, bd = Infinity;
+    for (const o of towns) {
+      if (o === d.town) continue;
+      const dp = Math.hypot(o.x - p.x, o.y - p.y), de = Math.hypot(o.x - end.x, o.y - end.y);
+      if (((dp < townRing(o) + 10 && de < 90) || de < 40) && dp < bd) { bd = dp; best = o; }
+    }
+    return best;
+  }
   function commit() {
     const d = drawing, t = d.town;
     if (t && t.owner !== 0) return;
-    if (d.len < 24) { if (t) openMenu(t); return; }
-    const end = d.pts[d.pts.length - 1];
-    let target = null, bd = 40 * 40;
-    for (const o of towns) {
-      if (o === t) continue;
-      const dd = (o.x - end.x) ** 2 + (o.y - end.y) ** 2;
-      if (dd < bd) { bd = dd; target = o; }
-    }
+    if (d.len < 24 && !d.lock) { if (t) openMenu(t); return; }
+    const target = d.lock || null;
     const pts = d.pts.slice();
     if (target) pts.push({ x: target.x, y: target.y });
     const route = { id: ++routeSeq, pts, target, len: d.len };
@@ -1882,7 +1889,11 @@ import * as THREE from 'three';
       return;
     }
     freehand = e.shiftKey;
-    if (e.pointerId === pointerId) extend(p);
+    if (e.pointerId === pointerId) {
+      extend(p);
+      const lock = lockTarget(p);
+      if (lock !== drawing.lock) { drawing.lock = lock; drawing.lockT = performance.now(); if (lock) Sound.lock(); }
+    }
   });
   const endTouch = e => { touches.delete(e.pointerId); if (touches.size < 2) pinch = null; if (pan && e.pointerId === pan.id) { pan = null; cvs.style.cursor = view.z > 1 ? 'grab' : 'default'; } };
   cvs.addEventListener('pointerup', e => { endTouch(e); if (drawing && e.pointerId === pointerId) { commit(); drawing = null; } });
@@ -2693,7 +2704,15 @@ import * as THREE from 'three';
     for (const t of towns) if (t.route && t.owner === 0 && (!drawing || drawing.town !== t)) drawRoute(t.route, 0);
     if (drawing && drawing.pts.length > 1) {
       strokeRoute(drawing.pts, COL.mid[0], 8);
-      if (drawing.snap && !drawing.blocked) {   // shows the line is following a road
+      if (drawing.lock) {   // locked onto a town: the line runs into it and the town is ringed
+        const L = drawing.lock, e = drawing.pts[drawing.pts.length - 1], col = lockColor(L);
+        strokeRoute([e, { x: L.x, y: L.y }], COL.mid[0], 8);
+        const age = (performance.now() - drawing.lockT) / 1000, R = (townRing(L) + 18) * (1 + 0.4 * Math.max(0, 1 - age * 5));
+        ctx.globalAlpha = 0.16; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(L.x, L.y, R, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1; ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.stroke();
+        ctx.lineWidth = 4.5; ctx.lineCap = 'round';
+        for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + nowS * 0.9; ctx.beginPath(); ctx.arc(L.x, L.y, R + 8, a - 0.28, a + 0.28); ctx.stroke(); }
+      } else if (drawing.snap && !drawing.blocked) {   // shows the line is following a road
         ctx.strokeStyle = COL.team[0]; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(drawing.snap.x, drawing.snap.y, 7, 0, Math.PI * 2); ctx.stroke();
       }
@@ -2768,6 +2787,7 @@ import * as THREE from 'three';
     }
   }
 
+  const lockColor = t => t.owner === 0 ? COL.team[0] : t.owner === 1 ? COL.team[1] : '#5c6460';
   function label(text, x, y, size, weight, fill, halo = 3) {
     ctx.font = `${weight} ${size}px Lexend, "Avenir Next", system-ui, sans-serif`;
     ctx.lineJoin = 'round'; ctx.lineWidth = halo; ctx.strokeStyle = 'rgba(255,255,255,.8)';
@@ -2819,6 +2839,19 @@ import * as THREE from 'three';
       } else label(t.name, p.x, p.y, Math.round(11.5 * k), 600, 'rgba(46,55,53,.85)');
       if (t.barracks > 0) label(t.barracks === 1 ? 'Barracks' : `×${t.barracks} barracks`, p.x, p.y + (t.capital ? 29 : 14) * k, Math.round(9.5 * k), 700, t.owner < 0 ? COL.neutral : COL.team[t.owner]);
     }
+    if (drawing && drawing.lock) {
+      const L = drawing.lock, p = toScreen(L.x, L.y, groundAt(L.x, L.y) + keepH(L) + 16);
+      const text = L.owner === 0 ? 'Reinforce' : L.owner === 1 ? 'Attack' : 'Capture';
+      ctx.font = '700 13px Lexend, "Avenir Next", system-ui, sans-serif';
+      const w = ctx.measureText(text).width + 20;
+      ctx.fillStyle = lockColor(L); rr(ctx, p.x - w / 2, p.y - 13, w, 24, 12); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillText(text, p.x, p.y);
+    }
+    if (armed && ghost && state === 'play' && (armed === 'tower' || armed === 'fort')) {
+      const R = armed === 'tower' ? 130 : 80, p = toScreen(ghost.x, ghost.y + R + 9, 0), ok = !placeCheck(armed, ghost);
+      label(!ok ? placeCheck(armed, ghost) : armed === 'tower' ? 'Shoots enemies inside this circle' : 'Your soldiers inside take 55% less damage',
+        p.x, p.y, 12, 700, ok ? COL.team[0] : COL.team[1], 4);
+    }
     for (const m of mines) {
       const p = toScreen(m.x, m.y + 38, 0), k = pxPerUnit(m.x, m.y) * zs;
       label(m.owner === 0 ? `Your mine · +${Math.round(MINE_RATE * WEEK)}/week` : m.owner === 1 ? 'Enemy mine' : 'Unclaimed mine', p.x, p.y, Math.round(10 * k), m.owner >= 0 ? 700 : 600,
@@ -2827,24 +2860,26 @@ import * as THREE from 'three';
   }
 
   function drawFort(x, y, col, alpha) {
+    if (alpha < 1) {   // placement preview: the footprint (the range is drawn by drawStructs)
+      ctx.globalAlpha = alpha; rr(ctx, x - 11, y - 11, 22, 22, 4); ctx.fillStyle = COL.bridge; ctx.fill();
+      ctx.lineWidth = 4; ctx.strokeStyle = col; ctx.stroke(); ctx.globalAlpha = 1;
+      return;
+    }
     ctx.globalAlpha = 0.12 * alpha; ctx.fillStyle = col;
     ctx.beginPath(); ctx.arc(x, y, 80, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 0.5 * alpha; ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.setLineDash([3, 5]);
     ctx.beginPath(); ctx.arc(x, y, 80, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-    if (alpha < 1) {   // placement preview: the footprint
-      ctx.globalAlpha = alpha; rr(ctx, x - 11, y - 11, 22, 22, 4); ctx.fillStyle = COL.bridge; ctx.fill();
-      ctx.lineWidth = 4; ctx.strokeStyle = col; ctx.stroke();
-    }
     ctx.globalAlpha = 1;
   }
   function drawTower(x, y, col, alpha) {
-    ctx.globalAlpha = 0.35 * alpha; ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.setLineDash([2, 6]);
-    ctx.beginPath(); ctx.arc(x, y, 130, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
     if (alpha < 1) {
       ctx.globalAlpha = alpha; ctx.fillStyle = col;
       ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+      return;
     }
+    ctx.globalAlpha = 0.35 * alpha; ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.setLineDash([2, 6]);
+    ctx.beginPath(); ctx.arc(x, y, 130, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
     ctx.globalAlpha = 1;
   }
   function drawMines(nowS) {
@@ -2890,8 +2925,19 @@ import * as THREE from 'three';
     for (const s of structs) (s.type === 'fort' ? drawFort : drawTower)(s.x, s.y, COL.team[s.team], 1);
     if (!armed || !ghost || state !== 'play') return;
     const ok = !placeCheck(armed, ghost), col = ok ? COL.team[0] : COL.team[1];
-    if (armed === 'fort') drawFort(ghost.x, ghost.y, col, 0.6);
-    else if (armed === 'tower') drawTower(ghost.x, ghost.y, col, 0.6);
+    if (armed === 'fort' || armed === 'tower') {
+      const R = armed === 'tower' ? 130 : 80, nowS = performance.now() / 1000;
+      if (armed === 'tower') {   // enemies it would shoot at right now
+        ctx.strokeStyle = COL.team[1]; ctx.lineWidth = 1.8; ctx.globalAlpha = 0.9;
+        for (const u of units) if (u.team === 1 && !u.dead && (u.x - ghost.x) ** 2 + (u.y - ghost.y) ** 2 < R * R) { ctx.beginPath(); ctx.arc(u.x, u.y, 6.5, 0, Math.PI * 2); ctx.stroke(); }
+      }
+      ctx.globalAlpha = 0.14; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(ghost.x, ghost.y, R, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.95; ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.stroke();
+      ctx.globalAlpha = 0.55; ctx.lineWidth = 1.5; ctx.setLineDash([8, 8]); ctx.lineDashOffset = -nowS * 18;
+      ctx.beginPath(); ctx.arc(ghost.x, ghost.y, R - 7, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); ctx.lineDashOffset = 0;
+      ctx.globalAlpha = 1;
+      (armed === 'fort' ? drawFort : drawTower)(ghost.x, ghost.y, col, 0.6);
+    }
     else if (armed === 'farm') {
       ctx.globalAlpha = 0.6; rr(ctx, ghost.x - 20, ghost.y - 13, 40, 26, 3); ctx.fillStyle = ok ? '#ebe5c6' : COL.light[1]; ctx.fill();
       ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke(); ctx.globalAlpha = 1;
