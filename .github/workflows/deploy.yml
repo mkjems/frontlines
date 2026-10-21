@@ -56,6 +56,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
 
+    env:
+      GHCR_USERNAME: ${{ github.actor }}
+      GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     steps:
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.2.0
@@ -63,9 +67,13 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          envs: GHCR_USERNAME,GHCR_TOKEN
           script_stop: true
           script: |
+            set -eu
             cd ${{ env.VPS_APP_DIR }}
+            # Log in with this run's token; a stale ghcr.io login left on the VPS makes pulls fail with "denied".
+            printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
             docker compose pull
             docker compose up -d --remove-orphans
             docker image prune -f
