@@ -1093,7 +1093,7 @@ import * as THREE from 'three';
     for (let i = 0; i < terr.length; i++) {
       const v = terr[i], o = i * 4;
       if (v >= 0) { d[o] = 80; d[o + 1] = 135; d[o + 2] = 255; } else { d[o] = 255; d[o + 1] = 100; d[o + 2] = 80; }
-      d[o + 3] = Math.min(1, Math.abs(v)) * 28;   // a gentle wash: territory should tint the land, not flood it
+      d[o + 3] = Math.min(1, Math.abs(v)) * (v >= 0 ? 30 : 21);   // a gentle wash; red reads hotter than blue on dark ground, so it gets less
     }
     terrCanvas.getContext('2d').putImageData(terrImg, 0, 0);
     ctx.save(); rr(ctx, 0, 0, W, H, 18); ctx.clip();
@@ -2245,6 +2245,8 @@ import * as THREE from 'three';
   }
   const STONE = '#b4b3ab', STONE2 = '#8e8d86', WOOD = '#7d6a52', POLE = '#5c6460';
   const DECK = '#5f5545', RAIL = '#51493c', SEAM = '#3f382e';   // bridge timber
+  const WALL = '#6e6c65', WALL2 = '#7a7871', HOUSE = '#a8a49a';   // capital walls and towers, house and hall walls
+  const KEEPC = ['#3466c8', '#b8433a'];   // keeps, forts and tower roofs: deeper than the soldiers' colours
 
   function init3D() {
     if (renderer) return;
@@ -2576,6 +2578,7 @@ import * as THREE from 'three';
       kick: { col: '#c2b08a', life: [0.8, 1.4], size: [5, 8], grow: 9, rise: [4, 9], spread: 6, a: 0.45, drag: 2.5, grav: 0 },
       smoke: { col: '#5f625c', life: [3.5, 5], size: [8, 12], grow: 9, rise: [10, 16], spread: 3, a: 0.55, drag: 0.4, grav: 0, wind: 6 },
       spark: { col: null, life: [1.1, 1.8], size: [3.6, 5.6], grow: -1.2, rise: [34, 60], spread: 42, a: 1, drag: 1.1, grav: -55 },
+      glint: { col: '#ffd447', life: [0.5, 0.9], size: [1.8, 2.8], grow: -1.5, rise: [8, 14], spread: 5, a: 1, drag: 2, grav: -12 },
     };
     function init() {
       geo = new THREE.BufferGeometry();
@@ -2636,6 +2639,7 @@ import * as THREE from 'three';
           const h = t.houses[(Math.random() * Math.min(6, t.houses.length)) | 0] || t;
           emit('smoke', h.x, h.y, groundAt(h.x, h.y) + 5, 1);
         }
+        for (const m of mines) if (m.owner >= 0 && Math.random() < dt * 4) emit('glint', m.x + rand(-8, 8), m.y + rand(-6, 6), groundAt(m.x, m.y) + 6, 1);   // held mines glint
         for (const u of units) if (u.kind === 2 && !u.dead && u.vx * u.vx + u.vy * u.vy > 1400 && Math.random() < dt * 7) this.kick(u.x, u.y);
         // particles
         let n = 0;
@@ -2690,35 +2694,36 @@ import * as THREE from 'three';
   function buildTown(t, slots, filled) {
     const g = new THREE.Group(), x = t.x, z = t.y, y0 = groundAt(x, z), s = townSize(t), KH = keepH(t);
     const col = t.owner < 0 ? COL.neutral : COL.team[t.owner], roof = t.owner < 0 ? '#c4c0b3' : COL.mid[t.owner];
+    const keep = t.owner < 0 ? COL.neutral : KEEPC[t.owner];   // a deeper shade, so the soldiers stay the brightest team colour
     put(g, GEO.box, mat(STONE2), x, y0 - 1, z, s * 2 + 5, 2, s * 2 + 5);
-    put(g, GEO.box, mat(col), x, y0, z, s * 2, KH, s * 2);
+    put(g, GEO.box, mat(keep), x, y0, z, s * 2, KH, s * 2);
     const n = t.capital ? 5 : 3, mw = 2 * s / (2 * n - 1);
     for (let i = 0; i < n; i++) {
       const o = -s + mw / 2 + i * 2 * mw;
       for (const e of [-1, 1]) {
-        put(g, GEO.box, mat(col), x + o, y0 + KH, z + e * (s - 1.1), mw, 3, 2.2);
-        put(g, GEO.box, mat(col), x + e * (s - 1.1), y0 + KH, z + o, 2.2, 3, mw);
+        put(g, GEO.box, mat(keep), x + o, y0 + KH, z + e * (s - 1.1), mw, 3, 2.2);
+        put(g, GEO.box, mat(keep), x + e * (s - 1.1), y0 + KH, z + o, 2.2, 3, mw);
       }
     }
     put(g, GEO.box, mat(t.owner < 0 ? '#9a978b' : t.owner === 0 ? '#2f5fbd' : '#c4443a'), x, y0 + KH - 0.3, z, s * 2 - 4.4, 0.5, s * 2 - 4.4);
     if (t.capital) {
       for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-        put(g, GEO.cyl, mat(col), x + dx * s, y0, z + dz * s, 4.2, KH + 6, 4.2);
+        put(g, GEO.cyl, mat(keep), x + dx * s, y0, z + dz * s, 4.2, KH + 6, 4.2);
         put(g, GEO.cone, mat(roof), x + dx * s, y0 + KH + 6, z + dz * s, 5.2, 7, 5.2);
       }
       addFlag(g, x + s, y0 + KH + 13, z - s, 12, col, 1.3);
       // the city wall: one extruded ring, with towers
       const WR = 66;
-      put(g, GEO.wall, mat(STONE), x, y0 - 0.5, z, 1, 1, 1);
+      put(g, GEO.wall, mat(WALL), x, y0 - 0.5, z, 1, 1, 1);
       for (let i = 0; i < 8; i++) {
         const a = i * Math.PI / 4 + Math.PI / 8, tx = x + Math.cos(a) * WR, tz = z + Math.sin(a) * WR, ty = groundAt(tx, tz);
-        put(g, GEO.cyl, mat(STONE), tx, ty - 0.5, tz, 5.2, 12, 5.2);
+        put(g, GEO.cyl, mat(WALL2), tx, ty - 0.5, tz, 5.2, 12, 5.2);
         put(g, GEO.cone, mat(roof), tx, ty + 11.5, tz, 6.4, 6.5, 6.4);
       }
     } else addFlag(g, x + s - 2, y0 + KH + 3, z - s + 2, 9, col);
     for (let i = 0; i < slots && i < filled; i++) {
       const h = t.houses[i], hy = groundAt(h.x, h.y), ry = Math.atan2(h.x - x, h.y - z);
-      put(g, GEO.box, mat('#f7f4ec'), h.x, hy, h.y, h.s, 4.6, h.s * 0.85, ry);
+      put(g, GEO.box, mat(HOUSE), h.x, hy, h.y, h.s, 4.6, h.s * 0.85, ry);
       put(g, GEO.gable, mat(roof), h.x, hy + 4.6, h.y, h.s + 1.2, 3.8, h.s * 0.85 + 1, ry);
     }
     const hallSlots = [-Math.PI / 2 - 0.8, -Math.PI / 2 + 0.8, -Math.PI / 2 - 2, -Math.PI / 2 + 2];
@@ -2726,7 +2731,7 @@ import * as THREE from 'three';
       const ang = hallSlots[i], hr = s + 27, hall = new THREE.Group();
       hall.position.set(x + Math.cos(ang) * hr, groundAt(x + Math.cos(ang) * hr, z + Math.sin(ang) * hr), z + Math.sin(ang) * hr);
       hall.rotation.y = -(ang + Math.PI / 2);
-      put(hall, GEO.box, mat('#f7f4ec'), 0, 0, 0, 26, 6, 12);
+      put(hall, GEO.box, mat(HOUSE), 0, 0, 0, 26, 6, 12);
       put(hall, GEO.gable, mat(col), 0, 6, 0, 13, 4.5, 28, Math.PI / 2);
       addFlag(hall, 11, 6, -5, 10, col);
       g.add(hall);
@@ -2735,7 +2740,7 @@ import * as THREE from 'three';
     return g;
   }
   function buildStruct(s) {
-    const g = new THREE.Group(), y0 = groundAt(s.x, s.y), col = COL.team[s.team];
+    const g = new THREE.Group(), y0 = groundAt(s.x, s.y), col = KEEPC[s.team], flag = COL.team[s.team];
     if (s.type === 'fort') {
       for (const e of [-1, 1]) {
         put(g, GEO.box, mat(STONE), s.x, y0, s.y + e * 10, 23, 6, 3);
@@ -2747,13 +2752,13 @@ import * as THREE from 'three';
           put(g, GEO.cone, mat(col), s.x + e * 11, y0 + 9, s.y + f * 11, 4.2, 4.5, 4.2);
         }
       }
-      addFlag(g, s.x, y0, s.y, 16, col);
+      addFlag(g, s.x, y0, s.y, 16, flag);
     } else {
       put(g, GEO.cyl, mat(STONE2), s.x, y0, s.y, 6, 3, 6);
       put(g, GEO.cyl, mat(STONE), s.x, y0 + 3, s.y, 4, 22, 4);
       put(g, GEO.cyl, mat(col), s.x, y0 + 24, s.y, 6, 2.2, 6);
       put(g, GEO.cone, mat(col), s.x, y0 + 26, s.y, 6.4, 8, 6.4);
-      addFlag(g, s.x, y0 + 33.5, s.y, 6, col, 0.8);
+      addFlag(g, s.x, y0 + 33.5, s.y, 6, flag, 0.8);
     }
     return g;
   }
@@ -2810,8 +2815,8 @@ import * as THREE from 'three';
       if (!m._rock) continue;
       const owned = m.owner >= 0;
       m._rock.color.set(owned ? '#6a6a63' : '#7c7c75');
-      m._gold.emissiveIntensity = owned ? 0.6 + 0.5 * Math.sin(nowS * 3 + m.x) : 0.05;
-      m._gold.color.set(owned ? '#f0c53c' : '#bfae80');
+      m._gold.emissiveIntensity = owned ? 1.1 + 0.6 * Math.sin(nowS * 3 + m.x) : 0.05;
+      m._gold.color.set(owned ? '#ffd447' : '#9a8a5c');
       m._nug.forEach((o, i) => { o.rotation.y = nowS * (owned ? 1.2 : 0) + i; });
     }
     // soldiers: one instanced mesh per kind, facing where they march, bobbing as they go
@@ -2971,8 +2976,8 @@ import * as THREE from 'three';
     for (const t of towns) {
       if (!t.capital || t.owner < 0) continue;
       const g = ctx.createRadialGradient(t.x, t.y, 10, t.x, t.y, 64);
-      g.addColorStop(0, COL.light[t.owner]); g.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.globalAlpha = 0.6; ctx.fillStyle = g;
+      g.addColorStop(0, COL.team[t.owner]); g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.globalAlpha = 0.22; ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(t.x, t.y, 64, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
     }
@@ -3199,8 +3204,7 @@ import * as THREE from 'three';
         ctx.fillStyle = 'rgba(60,55,48,.35)'; ctx.fill();
         ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(120,118,108,.55)'; ctx.lineWidth = 1.2; ctx.stroke(); ctx.setLineDash([]);
       } else {
-        ctx.globalAlpha = 0.1; ctx.fillStyle = COL.team[owner]; ctx.fill();
-        ctx.globalAlpha = 0.7; ctx.strokeStyle = COL.team[owner]; ctx.lineWidth = 1.6; ctx.stroke(); ctx.globalAlpha = 1;
+        ctx.globalAlpha = 0.35; ctx.strokeStyle = COL.team[owner]; ctx.lineWidth = 1.2; ctx.stroke(); ctx.globalAlpha = 1;
       }
       ctx.restore();
     }
