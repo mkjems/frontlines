@@ -1804,15 +1804,18 @@ import * as THREE from 'three';
       dx = target.x - last.x; dy = target.y - last.y; dl = Math.hypot(dx, dy);
     }
   }
+  // How far from its centre a town counts as hit when a route ends there: what the player sees as the
+  // town, which for a capital is everything inside its city wall.
+  function townReach(t) { return t.capital ? 76 : townRing(t) + 10; }
   // The town a route will end on: the pointer is over it and the line has reached its outskirts,
-  // or the line itself ends close by.
+  // or the line itself ends inside it.
   function lockTarget(p) {
     const d = drawing, end = d.pts[d.pts.length - 1];
     let best = null, bd = Infinity;
     for (const o of towns) {
       if (o === d.town) continue;
-      const dp = Math.hypot(o.x - p.x, o.y - p.y), de = Math.hypot(o.x - end.x, o.y - end.y);
-      if (((dp < townRing(o) + 10 && de < 90) || de < 40) && dp < bd) { bd = dp; best = o; }
+      const R = townReach(o), dp = Math.hypot(o.x - p.x, o.y - p.y), de = Math.hypot(o.x - end.x, o.y - end.y);
+      if (((dp < R && de < R + 50) || de < Math.max(40, R - 10)) && dp < bd) { bd = dp; best = o; }
     }
     return best;
   }
@@ -3267,6 +3270,15 @@ import * as THREE from 'three';
       hitCapital: () => { enterTown(towns.find(t => t.capital && t.owner === 0), { team: 1, dead: false }); return FX.shakeAmount; },
       shake: () => FX.shakeAmount,
       buildings: () => structs.filter(st => st.team === 0).length,
+      // a blue army of n gathered just outside a town (as if a route had brought it there); returns its screen point
+      army: (name, n, dist) => {
+        const T = town(name), home = towns.find(t => t.capital && t.owner === 0), side = T.x > home.x ? -1 : 1;
+        const route = { id: ++routeSeq, pts: [{ x: T.x + side * dist, y: T.y }], target: null, len: 0 };
+        for (let i = 0; i < n; i++) { spawn(home); Object.assign(units[units.length - 1], { x: T.x + side * dist + rand(-12, 12), y: T.y + rand(-12, 12), kind: i % 3, town: null, route, arrived: true, rid: route.id }); }
+        return toScreen(T.x + side * dist, T.y, 0);
+      },
+      owner: n => town(n).owner,
+      state: () => state,
     };
   }
 

@@ -63,6 +63,23 @@ test('drawing routes', async () => {
   await page.close();
 });
 
+test('an army sent into the enemy capital takes it', async () => {
+  // Regression: a route released inside Redmarsh's city wall but away from the keep used to end on open
+  // ground, so the army camped inside the walls and the capital could never fall.
+  const page = await openGame();
+  await t(page, 'start');
+  const camp = await t(page, 'army', 'Redmarsh', 120, 110);
+  const inside = await t(page, 'pos', 'Redmarsh', 0, 50);   // within the wall, well off the keep
+  await dragTo(page, camp, inside);
+  await page.mouse.up();
+  await sleep(100);
+  for (let i = 0; i < 12 && await t(page, 'state') === 'play'; i++) await t(page, 'run', 5);
+  assert.equal(await t(page, 'owner', 'Redmarsh'), 0, 'Redmarsh falls to the army');
+  assert.equal(await t(page, 'state'), 'over', 'taking the capital ends the game');
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
 test('camera zoom and pan', async () => {
   const page = await openGame();
   await t(page, 'start');
