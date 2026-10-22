@@ -5,19 +5,25 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;600;700&display=swap">
 <style>
-  /* Layout: full-bleed map canvas, floating pastel HUD chips at the corners, centered modal cards. Single light look by design (Mini Motorways-style map). */
+  /* Layout: full-bleed map canvas, floating HUD chips at the corners, centered modal cards.
+     One dark look by design: a dark board and dark panels, with light text and light marks on top. */
   :root {
     --ground: #1c201f;
-    --panel: #fbfbf7;
-    --ink: #2e3735;
-    --muted: #6d7771;
-    --line: #dfe3d8;
-    --blue: #3b6fd4;
+    --panel: #262c2b;        /* panels, buttons, cards: a step lighter than the table */
+    --raised: #303736;       /* hover, selected, and surfaces inside cards */
+    --edge: rgba(230, 236, 226, .07);
+    --ink: #e6e9e3;
+    --muted: #9aa49d;
+    --line: #3b4342;
+    --blue: #3b6fd4;         /* filled buttons and team marks */
+    --blue-ink: #9fc0ff;     /* blue text and icons on dark */
     --blue-soft: #b7cbef;
     --red: #df5448;
+    --red-ink: #ff9a88;
     --red-soft: #f2bcb6;
+    --shadow: 0 1px 0 rgba(0, 0, 0, .25), 0 8px 22px rgba(0, 0, 0, .35);
     --font: "Lexend", "Avenir Next", "Segoe UI", system-ui, sans-serif;
-    color-scheme: light;
+    color-scheme: dark;
   }
   [hidden] { display: none !important; }
   html, body { height: 100%; margin: 0; overflow: hidden; background: var(--ground); color: var(--ink); font-family: var(--font); }
@@ -32,7 +38,7 @@
   }
   .panel {
     background: var(--panel); border-radius: 12px; padding: 8px 12px; min-width: 0;
-    box-shadow: 0 1px 0 rgba(46, 55, 53, .05), 0 6px 18px rgba(46, 60, 50, .10);
+    box-shadow: var(--shadow), inset 0 0 0 1px var(--edge);
     pointer-events: auto;
   }
   .label { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
@@ -57,10 +63,10 @@
   .controls button, .btn {
     font: 600 13px var(--font); color: var(--ink); background: var(--panel); border: 0; border-radius: 10px;
     padding: 9px 14px; cursor: pointer; font-variant-numeric: tabular-nums;
-    box-shadow: 0 1px 0 rgba(46, 55, 53, .05), 0 6px 18px rgba(46, 60, 50, .10);
+    box-shadow: var(--shadow), inset 0 0 0 1px var(--edge);
   }
-  .controls button:hover, .btn:hover { background: #fff; }
-  button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .controls button:hover, .btn:hover { background: var(--raised); }
+  button:focus-visible { outline: 2px solid var(--blue-ink); outline-offset: 2px; }
   .tray {
     position: fixed; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
     right: max(16px, env(safe-area-inset-right, 0px));
@@ -69,18 +75,19 @@
   .tray button {
     font: 600 13px var(--font); color: var(--ink); background: var(--panel); border: 0; border-radius: 10px;
     padding: 9px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums;
-    box-shadow: 0 1px 0 rgba(46, 55, 53, .05), 0 6px 18px rgba(46, 60, 50, .10);
+    box-shadow: var(--shadow), inset 0 0 0 1px var(--edge);
   }
-  .tray button .ico { width: 12px; height: 12px; border-radius: 3px; background: var(--blue); display: block; }
+  .tray button:hover:not(:disabled) { background: var(--raised); }
+  .tray button .ico { width: 12px; height: 12px; border-radius: 3px; background: var(--blue-ink); display: block; }
   .tray button .ico.tower { border-radius: 50%; }
-  .tray button .ico.fort { background: transparent; border: 2.5px solid var(--blue); box-sizing: border-box; }
-  .tray button .ico.bridge { border-radius: 2px; height: 6px; width: 16px; background: #c6ccbf; }
+  .tray button .ico.fort { background: transparent; border: 2.5px solid var(--blue-ink); box-sizing: border-box; }
+  .tray button .ico.bridge { border-radius: 2px; height: 6px; width: 16px; background: #8d806a; }
   .tray button.armed { background: var(--blue); color: #fff; }
   .tray button.armed .ico { background: #fff; }
   .tray button.armed .ico.fort { background: transparent; border-color: #fff; }
   .townmenu {
     position: fixed; z-index: 5; background: var(--panel); border-radius: 14px; padding: 10px; width: 230px; box-sizing: border-box;
-    box-shadow: 0 2px 0 rgba(46, 55, 53, .05), 0 14px 36px rgba(46, 60, 50, .20);
+    box-shadow: var(--shadow), inset 0 0 0 1px var(--edge);
     display: flex; flex-direction: column; gap: 6px;
   }
   .townmenu .label { padding: 2px 4px 0; }
@@ -89,12 +96,12 @@
     font: 400 12px var(--font); color: var(--ink); background: transparent; border: 1.5px solid transparent; border-radius: 10px;
     padding: 7px 8px; cursor: pointer; display: grid; grid-template-columns: 18px 1fr; gap: 2px 8px; text-align: left; align-items: center;
   }
-  .townmenu button:hover { background: #fff; border-color: var(--line); }
-  .townmenu button.on { border-color: var(--blue); background: #fff; }
+  .townmenu button:hover { background: var(--raised); border-color: var(--line); }
+  .townmenu button.on { border-color: var(--blue-ink); background: var(--raised); }
   .townmenu button b { font-weight: 600; font-size: 13px; }
   .townmenu button small { grid-column: 2; color: var(--muted); font-size: 11px; font-weight: 300; }
-  .townmenu .clear { display: block; text-align: center; color: var(--red); font-weight: 600; }
-  .shape { display: block; width: 12px; height: 12px; background: var(--blue); justify-self: center; }
+  .townmenu .clear { display: block; text-align: center; color: var(--red-ink); font-weight: 600; }
+  .shape { display: block; width: 12px; height: 12px; background: var(--blue-ink); justify-self: center; }
   .shape.k0 { clip-path: polygon(50% 0, 100% 100%, 0 100%); }
   .shape.k1 { border-radius: 50%; width: 11px; height: 11px; }
   .shape.k2 { width: 10px; height: 10px; border-radius: 1px; }
@@ -103,10 +110,10 @@
   #chargeBtn:disabled { opacity: .55; cursor: default; }
   #chargeBtn.armed { background: var(--blue); color: #fff; }
   .pulse { animation: pulse 1.4s ease-in-out infinite; }
-  @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(59, 111, 212, .55); } 50% { box-shadow: 0 0 0 7px rgba(59, 111, 212, 0); } }
+  @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(159, 192, 255, .55); } 50% { box-shadow: 0 0 0 7px rgba(159, 192, 255, 0); } }
   .inspect {
     position: fixed; z-index: 6; pointer-events: none; max-width: 250px; background: var(--panel); border-radius: 10px;
-    padding: 9px 11px; box-shadow: 0 2px 0 rgba(46, 55, 53, .05), 0 10px 26px rgba(46, 60, 50, .18);
+    padding: 9px 11px; box-shadow: var(--shadow), inset 0 0 0 1px var(--edge);
     display: grid; gap: 3px; font-size: 12px; line-height: 1.4;
   }
   .inspect b { font-size: 13px; font-weight: 600; }
@@ -115,9 +122,9 @@
   .coach {
     position: fixed; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 60px);
     max-width: 320px; background: var(--panel); border-radius: 12px; padding: 10px 34px 10px 12px; font-size: 12.5px; line-height: 1.45;
-    box-shadow: 0 2px 0 rgba(46, 55, 53, .05), 0 12px 30px rgba(46, 60, 50, .16); border-left: 4px solid var(--blue);
+    box-shadow: var(--shadow), inset 0 0 0 1px var(--edge); border-left: 4px solid var(--blue-ink);
   }
-  .coach .label { color: var(--blue); display: block; margin-bottom: 2px; }
+  .coach .label { color: var(--blue-ink); display: block; margin-bottom: 2px; }
   .coach button { position: absolute; top: 6px; right: 6px; border: 0; background: transparent; font: 600 16px var(--font); color: var(--muted); cursor: pointer; padding: 2px 6px; }
   .card.rules { max-width: 760px; }
   .rules .cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 22px; }
@@ -135,7 +142,7 @@
   .stats div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .stats b { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
   .stats span { font-size: 11px; color: var(--muted); }
-  .tag { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--blue); font-weight: 600; }
+  .tag { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--blue-ink); font-weight: 600; }
   #hint {
     position: fixed; bottom: calc(env(safe-area-inset-bottom, 0px) + 58px);
     left: 50%; transform: translateX(-50%); max-width: min(560px, calc(100vw - 32px));
@@ -144,12 +151,13 @@
   }
   #toast {
     position: fixed; top: calc(env(safe-area-inset-top, 0px) + 84px); left: 50%; transform: translate(-50%, -6px);
-    background: var(--ink); color: #fff; font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 999px;
+    background: var(--raised); color: var(--ink); font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 999px;
+    box-shadow: var(--shadow), inset 0 0 0 1px var(--edge);
     opacity: 0; transition: opacity .25s ease, transform .25s ease; pointer-events: none; white-space: nowrap;
   }
   #toast.show { opacity: 1; transform: translate(-50%, 0); }
-  #toast.bad { background: var(--red); }
-  #toast.good { background: var(--blue); }
+  #toast.bad { background: var(--red); color: #fff; }
+  #toast.good { background: var(--blue); color: #fff; }
 
   .overlay {
     position: fixed; inset: 0; display: flex; overflow-y: auto; padding-block: 16px;
@@ -158,7 +166,7 @@
   }
   .card {
     background: var(--panel); border-radius: 18px; padding: 28px; max-width: 440px; width: 100%;
-    box-shadow: 0 2px 0 rgba(46, 55, 53, .05), 0 24px 60px rgba(46, 60, 50, .18);
+    box-shadow: 0 2px 0 rgba(0, 0, 0, .3), 0 24px 60px rgba(0, 0, 0, .5), inset 0 0 0 1px var(--edge);
     display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; margin: auto;
   }
   .card h1 { margin: 0; font-size: 40px; font-weight: 700; letter-spacing: -.02em; line-height: 1; text-wrap: balance; }
@@ -166,20 +174,20 @@
   .card p { margin: 0; color: var(--muted); line-height: 1.5; font-size: 14px; font-weight: 300; }
   .card ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; font-size: 13px; line-height: 1.45; }
   .card li { display: grid; grid-template-columns: 14px 1fr; gap: 10px; align-items: start; }
-  .card li::before { content: ""; width: 10px; height: 10px; border-radius: 3px; margin-top: 4px; background: var(--blue); }
-  .card li.r::before { background: var(--red); }
-  .card li.n::before { background: #a8a497; }
+  .card li::before { content: ""; width: 10px; height: 10px; border-radius: 3px; margin-top: 4px; background: var(--blue-ink); }
+  .card li.r::before { background: var(--red-ink); }
+  .card li.n::before { background: #8e8d86; }
   .hero { margin: -28px -28px 0; border-radius: 18px 18px 0 0; overflow: hidden; line-height: 0; }
   .hero svg { width: 100%; height: auto; display: block; }
   .march { animation: march 1.8s linear infinite; }
   @keyframes march { from { transform: translate(0, 0); } to { transform: translate(var(--mx), var(--my)); } }
-  .icon-tile { width: 40px; height: 40px; border-radius: 10px; background: #e9eff9; color: var(--blue); display: grid; place-items: center; }
+  .icon-tile { width: 40px; height: 40px; border-radius: 10px; background: rgba(159, 192, 255, .12); color: var(--blue-ink); display: grid; place-items: center; }
   .icon-tile svg, .tray svg { display: block; }
-  .tray svg { width: 16px; height: 16px; color: var(--blue); }
+  .tray svg { width: 16px; height: 16px; color: var(--blue-ink); }
   .tray button.armed svg { color: #fff; }
   .tray button:disabled { opacity: .5; cursor: default; }
   .hud-right { display: flex; gap: 10px; align-items: flex-start; }
-  .tray .price { display: inline-flex; align-items: center; gap: 3px; color: #a07d12; font-weight: 600; }
+  .tray .price { display: inline-flex; align-items: center; gap: 3px; color: #e2b93b; font-weight: 600; }
   .tray button.armed .price { color: #fff; }
   .coin { width: 9px; height: 9px; border-radius: 50%; background: #e2b93b; box-shadow: inset 0 0 0 1.5px #c79a1e; display: inline-block; }
   #gold .big { display: flex; align-items: center; gap: 6px; }
@@ -189,22 +197,22 @@
   .diff { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .diff .label { margin-right: 4px; }
   .diff button {
-    font: 600 12px var(--font); color: var(--ink); background: #fff; border: 1.5px solid var(--line); border-radius: 999px;
+    font: 600 12px var(--font); color: var(--ink); background: var(--raised); border: 1.5px solid var(--line); border-radius: 999px;
     padding: 6px 12px; cursor: pointer;
   }
-  .diff button.on { background: var(--ink); border-color: var(--ink); color: #fff; }
-  .tips { background: #eef2f8; border-radius: 12px; padding: 12px 14px; display: grid; gap: 6px; }
-  .tips .label { color: var(--blue); }
+  .diff button.on { background: var(--ink); border-color: var(--ink); color: var(--ground); }
+  .tips { background: rgba(159, 192, 255, .08); border-radius: 12px; padding: 12px 14px; display: grid; gap: 6px; box-shadow: inset 0 0 0 1px rgba(159, 192, 255, .12); }
+  .tips .label { color: var(--blue-ink); }
   .tips ol { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: 12.5px; line-height: 1.45; color: var(--ink); }
   .tips p { font-size: 12.5px; }
-  .btn.primary:hover { background: #3264c4; }
+  .btn.primary:hover { background: #4a7fe6; }
   .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .choice {
-    text-align: left; font: inherit; color: var(--ink); background: #fff; border: 1.5px solid var(--line);
+    text-align: left; font: inherit; color: var(--ink); background: var(--raised); border: 1.5px solid var(--line);
     border-radius: 14px; padding: 14px; cursor: pointer; display: flex; flex-direction: column; gap: 6px;
     transition: transform .15s ease, border-color .15s ease;
   }
-  .choice:hover { transform: translateY(-2px); border-color: var(--blue); }
+  .choice:hover { transform: translateY(-2px); border-color: var(--blue-ink); }
   .choice b { font-weight: 600; font-size: 15px; }
   .choice .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .choice span { font-size: 12px; color: var(--muted); line-height: 1.4; font-weight: 300; }
@@ -220,7 +228,7 @@
     .hero { margin: -22px -22px 0; }
     .card h1 { font-size: 32px; }
   }
-  @media (prefers-reduced-motion: reduce) { .march { animation: none; } * { transition: none !important; } .pulse { animation: none; outline: 2px solid var(--blue); } }
+  @media (prefers-reduced-motion: reduce) { .march { animation: none; } * { transition: none !important; } .pulse { animation: none; outline: 2px solid var(--blue-ink); } }
 </style>
 
 <canvas id="map"></canvas>
@@ -233,7 +241,7 @@
   <div class="panel" id="balance">
     <span class="label">Army strength</span>
     <div class="split"><i id="balB" style="background:var(--blue);width:50%"></i><i id="balR" style="background:var(--red);width:50%"></i></div>
-    <div class="counts"><span id="cntB" style="color:var(--blue)">0</span><span id="cntR" style="color:var(--red)">0</span></div>
+    <div class="counts"><span id="cntB" style="color:var(--blue-ink)">0</span><span id="cntR" style="color:var(--red-ink)">0</span></div>
   </div>
   <div class="hud-right">
   <div class="panel" id="gold">
@@ -501,15 +509,15 @@ import * as THREE from 'three';
 
   // ---------- artwork: hero scenes and icons, drawn as inline SVG ----------
   function heroSVG(mode) {   // 'intro' | 'win' | 'lose'
-    const BL = '#3b6fd4', RD = '#df5448';
+    const BL = '#3b6fd4', RD = '#df5448', BLs = '#9fc0ff', RDs = '#ff9a88';   // castles in team colours, soldiers light
     const leftCol = mode === 'lose' ? RD : BL, rightCol = mode === 'win' ? BL : RD;
     const castle = (x, col, flip) => `
       <g transform="translate(${x} 62)">
-        <rect x="-21" y="-13" width="46" height="36" rx="5" fill="rgba(36,48,38,.15)"/>
+        <rect x="-21" y="-13" width="46" height="36" rx="5" fill="rgba(0,0,0,.3)"/>
         <rect x="-24" y="-16" width="46" height="36" rx="5" fill="${col}"/>
         ${[-24, -12, 0, 12].map(dx => `<rect x="${dx}" y="-22" width="8" height="8" rx="1.5" fill="${col}"/>`).join('')}
         <rect x="-6" y="2" width="10" height="18" rx="5" fill="rgba(255,255,255,.85)"/>
-        <line x1="${flip ? -20 : 18}" y1="-22" x2="${flip ? -20 : 18}" y2="-44" stroke="#5c6460" stroke-width="1.6"/>
+        <line x1="${flip ? -20 : 18}" y1="-22" x2="${flip ? -20 : 18}" y2="-44" stroke="#9aa49d" stroke-width="1.6"/>
         <path d="M${flip ? -20 : 18} -44 l${flip ? -14 : 14} 4 l${flip ? 14 : -14} 4z" fill="${col}"/>
       </g>`;
     const march = (pts, col, shape, n) => {
@@ -524,28 +532,28 @@ import * as THREE from 'three';
       return `<g class="march" style="--mx:${dx}px;--my:${dy}px">${g}</g>`;
     };
     const trees = [[24, 112, 9], [36, 120, 7], [128, 22, 8], [140, 30, 6], [262, 120, 8], [276, 128, 6], [372, 112, 9], [360, 24, 7], [384, 34, 6]]
-      .map(([x, y, r]) => `<circle cx="${x + 2}" cy="${y + 3}" r="${r}" fill="rgba(36,48,38,.12)"/><circle cx="${x}" cy="${y}" r="${r}" fill="${r > 7 ? '#c1d3b3' : '#cddbc1'}"/>`).join('');
+      .map(([x, y, r]) => `<circle cx="${x + 2}" cy="${y + 3}" r="${r}" fill="rgba(0,0,0,.25)"/><circle cx="${x}" cy="${y}" r="${r}" fill="${r > 7 ? '#4d6745' : '#435d3d'}"/>`).join('');
     const pines = [[110, 120], [120, 128], [292, 18], [304, 26]]
-      .map(([x, y]) => `<path d="M${x} ${y - 10}l7 14h-14z" fill="#b5caa9"/>`).join('');
-    const field = (x, y, rot, col) => `<g transform="translate(${x} ${y}) rotate(${rot})"><rect x="-18" y="-11" width="36" height="22" rx="3" fill="${col}"/>${[-6, 0, 6].map(o => `<line x1="-16" y1="${o}" x2="16" y2="${o}" stroke="rgba(120,110,70,.18)" stroke-width="1.4"/>`).join('')}</g>`;
+      .map(([x, y]) => `<path d="M${x} ${y - 10}l7 14h-14z" fill="#38513a"/>`).join('');
+    const field = (x, y, rot, col) => `<g transform="translate(${x} ${y}) rotate(${rot})"><rect x="-18" y="-11" width="36" height="22" rx="3" fill="${col}"/>${[-6, 0, 6].map(o => `<line x1="-16" y1="${o}" x2="16" y2="${o}" stroke="rgba(0,0,0,.22)" stroke-width="1.4"/>`).join('')}</g>`;
     let armies = '';
-    if (mode === 'intro') armies = march([96, 104, 168, 82], BL, 'tri', 7) + march([304, 104, 232, 82], RD, 'circ', 7) + march([110, 32, 170, 74], BL, 'sq', 5);
-    else if (mode === 'win') armies = march([96, 104, 300, 92], BL, 'tri', 18);
-    else armies = march([304, 104, 100, 92], RD, 'circ', 18);
-    const clash = mode === 'intro' ? `<circle cx="200" cy="80" r="9" fill="none" stroke="rgba(46,55,53,.3)" stroke-width="1.4"/><circle cx="200" cy="80" r="16" fill="none" stroke="rgba(46,55,53,.15)" stroke-width="1.2"/>` : '';
+    if (mode === 'intro') armies = march([96, 104, 168, 82], BLs, 'tri', 7) + march([304, 104, 232, 82], RDs, 'circ', 7) + march([110, 32, 170, 74], BLs, 'sq', 5);
+    else if (mode === 'win') armies = march([96, 104, 300, 92], BLs, 'tri', 18);
+    else armies = march([304, 104, 100, 92], RDs, 'circ', 18);
+    const clash = mode === 'intro' ? `<circle cx="200" cy="80" r="9" fill="none" stroke="rgba(230,236,226,.4)" stroke-width="1.4"/><circle cx="200" cy="80" r="16" fill="none" stroke="rgba(230,236,226,.2)" stroke-width="1.2"/>` : '';
     return `<svg viewBox="0 0 400 150" role="img" aria-label="Two castles facing each other across a river">
-      <rect width="400" height="150" fill="#e8ebe2"/>
-      <ellipse cx="62" cy="30" rx="80" ry="40" fill="#e1e6d8"/><ellipse cx="62" cy="30" rx="50" ry="24" fill="#d9dfcf"/><ellipse cx="62" cy="30" rx="22" ry="10" fill="#d0d7c4"/>
-      <ellipse cx="350" cy="132" rx="90" ry="40" fill="#e1e6d8"/><ellipse cx="350" cy="132" rx="56" ry="24" fill="#d9dfcf"/>
-      ${field(130, 100, -8, '#e9e3c4')}${field(280, 44, 10, '#dfe6c8')}${field(286, 104, -12, '#e9e3c4')}
-      <path d="M95 104 Q140 96 168 82 M304 104 Q262 96 232 82" stroke="#e2dbc5" stroke-width="5" fill="none" stroke-linecap="round"/>
-      <path d="M222 -10 C 190 40, 215 100, 182 160" stroke="#efeadb" stroke-width="40" fill="none"/>
-      <path d="M222 -10 C 190 40, 215 100, 182 160" stroke="#a9cfe2" stroke-width="30" fill="none"/>
-      <path d="M222 -10 C 190 40, 215 100, 182 160" stroke="#9dc6dc" stroke-width="12" fill="none"/>
-      <path d="M205 20 l8 3 M196 50 l7 3 M206 118 l8 3" stroke="rgba(255,255,255,.6)" stroke-width="1.4" stroke-linecap="round"/>
-      <rect x="172" y="73" width="60" height="18" rx="4" fill="rgba(36,48,38,.15)"/>
-      <rect x="170" y="71" width="60" height="18" rx="4" fill="#fbfaf6" stroke="#c6ccbf" stroke-width="1.5"/>
-      ${[178, 186, 194, 202, 210, 218].map(x => `<line x1="${x}" y1="73" x2="${x}" y2="87" stroke="rgba(150,160,140,.4)"/>`).join('')}
+      <rect width="400" height="150" fill="#353b36"/>
+      <ellipse cx="62" cy="30" rx="80" ry="40" fill="#3a413a"/><ellipse cx="62" cy="30" rx="50" ry="24" fill="#3f463e"/><ellipse cx="62" cy="30" rx="22" ry="10" fill="#444b42"/>
+      <ellipse cx="350" cy="132" rx="90" ry="40" fill="#3a413a"/><ellipse cx="350" cy="132" rx="56" ry="24" fill="#3f463e"/>
+      ${field(130, 100, -8, '#4d4a3c')}${field(280, 44, 10, '#3c4535')}${field(286, 104, -12, '#4d4a3c')}
+      <path d="M95 104 Q140 96 168 82 M304 104 Q262 96 232 82" stroke="#444840" stroke-width="5" fill="none" stroke-linecap="round"/>
+      <path d="M222 -10 C 190 40, 215 100, 182 160" stroke="#403f37" stroke-width="40" fill="none"/>
+      <path d="M222 -10 C 190 40, 215 100, 182 160" stroke="#365f74" stroke-width="30" fill="none"/>
+      <path d="M222 -10 C 190 40, 215 100, 182 160" stroke="#2c4f62" stroke-width="12" fill="none"/>
+      <path d="M205 20 l8 3 M196 50 l7 3 M206 118 l8 3" stroke="rgba(255,255,255,.25)" stroke-width="1.4" stroke-linecap="round"/>
+      <rect x="172" y="73" width="60" height="18" rx="4" fill="rgba(0,0,0,.3)"/>
+      <rect x="170" y="71" width="60" height="18" rx="4" fill="#5f5545" stroke="#51493c" stroke-width="1.5"/>
+      ${[178, 186, 194, 202, 210, 218].map(x => `<line x1="${x}" y1="73" x2="${x}" y2="87" stroke="rgba(0,0,0,.25)"/>`).join('')}
       ${trees}${pines}
       ${castle(70, leftCol, false)}${castle(330, rightCol, true)}
       ${armies}${clash}
@@ -958,18 +966,18 @@ import * as THREE from 'three';
     }
     // compass rose
     const cp = compass;
-    c.beginPath(); c.arc(cp.x, cp.y, 24, 0, Math.PI * 2); c.fillStyle = 'rgba(251,250,246,.75)'; c.fill();
-    c.strokeStyle = '#c6ccbf'; c.lineWidth = 1.2; c.stroke();
-    c.beginPath(); c.arc(cp.x, cp.y, 18, 0, Math.PI * 2); c.strokeStyle = 'rgba(198,204,191,.7)'; c.stroke();
+    c.beginPath(); c.arc(cp.x, cp.y, 24, 0, Math.PI * 2); c.fillStyle = 'rgba(22,26,25,.55)'; c.fill();
+    c.strokeStyle = 'rgba(200,206,196,.35)'; c.lineWidth = 1.2; c.stroke();
+    c.beginPath(); c.arc(cp.x, cp.y, 18, 0, Math.PI * 2); c.strokeStyle = 'rgba(200,206,196,.2)'; c.stroke();
     for (let i = 0; i < 4; i++) {
       const a = i * Math.PI / 2 - Math.PI / 2, L = i === 0 ? 17 : 13;
       c.beginPath();
       c.moveTo(cp.x + Math.cos(a) * L, cp.y + Math.sin(a) * L);
       c.lineTo(cp.x + Math.cos(a + Math.PI / 2) * 3.5, cp.y + Math.sin(a + Math.PI / 2) * 3.5);
       c.lineTo(cp.x + Math.cos(a - Math.PI / 2) * 3.5, cp.y + Math.sin(a - Math.PI / 2) * 3.5);
-      c.closePath(); c.fillStyle = i === 0 ? '#5c6460' : '#aab2a6'; c.fill();
+      c.closePath(); c.fillStyle = i === 0 ? '#d8ddd4' : '#6f7871'; c.fill();
     }
-    c.fillStyle = '#5c6460'; c.font = '600 9px Lexend, system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'bottom';
+    c.fillStyle = '#d8ddd4'; c.font = '600 9px Lexend, system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'bottom';
     c.fillText('N', cp.x, cp.y - 25);
     buildWorld();
   }
@@ -1976,7 +1984,7 @@ import * as THREE from 'three';
 
   // ---------- hover to inspect: what is under the pointer and what it does ----------
   let inspectAt = null, lastPointer = null;
-  const OWN = o => o === 0 ? ['Yours', COL.team[0]] : o === 1 ? ['Enemy', COL.team[1]] : ['Unclaimed', '#8a877c'];
+  const OWN = o => o === 0 ? ['Yours', '#9fc0ff'] : o === 1 ? ['Enemy', '#ff9a88'] : ['Unclaimed', '#9aa49d'];
   function inField(f, x, y) {
     const dx = x - f.x, dy = y - f.y, c = Math.cos(-f.rot), s2 = Math.sin(-f.rot);
     const lx = dx * c - dy * s2, ly = dx * s2 + dy * c;
