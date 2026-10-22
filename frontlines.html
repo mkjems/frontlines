@@ -220,10 +220,18 @@
   .btn.primary { background: var(--blue); color: #fff; padding: 12px 18px; font-size: 14px; align-self: flex-start; }
   .diff { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .diff .label { margin-right: 4px; min-width: 70px; }
-  .land { display: grid; grid-template-columns: 74px auto 1fr; align-items: center; gap: 2px 6px; }
+  .land { display: grid; grid-template-columns: 74px auto 1fr; align-items: center; gap: 4px 6px; }
   .land b { font-size: 14px; font-weight: 600; }
+  /* the landscapes as a little carousel: arrows round the name, a dot for each */
+  .landnav { display: flex; align-items: center; }
+  .landnav b { min-width: 118px; text-align: center; }
+  .landnav .cbtn { padding: 0 8px 3px; }
+  .land .dots { grid-column: 2 / -1; padding-left: 9px; }
+  #newLayout { font: 600 12px var(--font); color: var(--muted); background: none; border: 0; padding: 0; cursor: pointer; }
+  #newLayout:hover { color: var(--ink); }
   .land p { grid-column: 2 / -1; margin: 0; font-size: 12px; line-height: 1.4; color: var(--muted); }
-  .land .mapno { display: flex; gap: 12px; align-items: center; font-variant-numeric: tabular-nums; }
+  .land .mapno { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: center; font-variant-numeric: tabular-nums; }
+  .land .mapno > * { white-space: nowrap; }
   .land .mapno label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
   .land .mapno input { margin: 0; accent-color: var(--blue); }
   .mapbtns { display: flex; gap: 6px; justify-self: start; margin-left: 4px; }
@@ -235,7 +243,7 @@
     padding: 8px 16px; border-radius: 999px; background: var(--panel); box-shadow: var(--shadow), inset 0 0 0 1px var(--edge);
     font-size: 13px; font-weight: 600; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .15s ease; }
   #intro.peeking .peekbar { opacity: 1; }
-  #newMap, #peekBtn { font: 600 12px var(--font); color: var(--ink); background: var(--raised); border: 1.5px solid var(--line); border-radius: 999px; padding: 5px 11px; cursor: pointer; }
+  #peekBtn { font: 600 12px var(--font); color: var(--ink); background: var(--raised); border: 1.5px solid var(--line); border-radius: 999px; padding: 5px 11px; cursor: pointer; }
   .diff button {
     font: 600 12px var(--font); color: var(--ink); background: var(--raised); border: 1.5px solid var(--line); border-radius: 999px;
     padding: 6px 12px; cursor: pointer;
@@ -380,13 +388,18 @@
       <button type="button" id="diff-hard" data-d="hard">Hard</button>
     </div>
     <div class="land">
-      <span class="label">Map</span><b id="landName"></b>
-      <span class="mapbtns">
-        <button type="button" id="newMap" title="Deal a different landscape and layout">New map</button>
-        <button type="button" id="peekBtn" title="Hold to see the whole map (or tap, then tap again to come back)">Peek</button>
-      </span>
+      <span class="label">Map</span>
+      <div class="landnav">
+        <button type="button" class="cbtn" id="landPrev" aria-label="Previous landscape">‹</button>
+        <b id="landName"></b>
+        <button type="button" class="cbtn" id="landNext" aria-label="Next landscape">›</button>
+      </div>
+      <span class="mapbtns"><button type="button" id="peekBtn" title="Hold to see the whole map (or tap, then tap again to come back)">Peek</button></span>
+      <div class="dots" id="landDots"></div>
       <p id="landDesc"></p>
-      <p class="mapno"><span id="mapNo"></span> <label><input type="checkbox" id="classicTowns"> Classic towns</label></p>
+      <p class="mapno"><span id="mapNo"></span>
+        <button type="button" id="newLayout" title="The same landscape with another town layout">↻ Another layout</button>
+        <label><input type="checkbox" id="classicTowns"> Classic towns</label></p>
     </div>
     <label class="fold"><input type="checkbox" id="showTips"><span id="foldLabel">Show how to win</span></label>
     <div class="tips" id="diffTips" aria-live="polite" hidden>
@@ -851,6 +864,7 @@ import * as THREE from 'three';
     if (!last) try { last = localStorage.getItem('frontlines-land') || ''; } catch (e) {}
     landKey = LANDS[force] ? force : keys[(keys.indexOf(last) + 1) % keys.length];
     try { localStorage.setItem('frontlines-land', landKey); } catch (e) {}
+    [...$('landDots').children].forEach((d, i) => d.classList.toggle('on', LAND_KEYS[i] === landKey));
     land = LANDS[landKey];
     $('landName').textContent = land.name; $('landDesc').textContent = land.desc;
   }
@@ -2558,7 +2572,13 @@ import * as THREE from 'three';
     stats.train[0] = D().blueTrain; stats.train[1] = D().redTrain;
   };
   renderDiff();
-  $('newMap').onclick = () => newGame();
+  // the map carousel: arrows step through the landscapes, a dot jumps to one, and each gets a fresh layout
+  const LAND_KEYS = Object.keys(LANDS);
+  $('landDots').innerHTML = LAND_KEYS.map(k => `<button type="button" aria-label="${LANDS[k].name}" title="${LANDS[k].name}"></button>`).join('');
+  [...$('landDots').children].forEach((d, i) => d.onclick = () => newGame(LAND_KEYS[i]));
+  $('landNext').onclick = () => newGame();
+  $('landPrev').onclick = () => newGame(LAND_KEYS[(LAND_KEYS.indexOf(landKey) + LAND_KEYS.length - 1) % LAND_KEYS.length]);
+  $('newLayout').onclick = () => newGame(landKey);
   // Peek: hold to see the whole map, release to come back; a quick tap keeps the card away until the next tap
   {
     let downAt = 0, held = false;

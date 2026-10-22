@@ -203,9 +203,18 @@ test('every landscape builds and plays: towns stay dry and nobody walks through 
   assert.ok((await t(page, 'newMap', 'marsh'), await t(page, 'terrain')).marshes > 0, 'the marshes have bogs');
   // New map steps through every landscape once, in order, then starts over
   const seen = [];
-  for (let i = 0; i < 9; i++) { await page.evaluate(() => document.getElementById('newMap').click()); seen.push(await t(page, 'land')); }
+  for (let i = 0; i < 9; i++) { await page.evaluate(() => document.getElementById('landNext').click()); seen.push(await t(page, 'land')); }
   assert.equal(new Set(seen).size, 9, 'nine presses visit all nine landscapes');
   assert.equal(seen[8], 'marsh', 'and the ninth comes back round to where it started');
+  await page.evaluate(() => document.getElementById('landPrev').click());
+  assert.equal(await t(page, 'land'), 'highlands', 'the back arrow goes the other way');
+  await page.evaluate(() => document.querySelectorAll('#landDots button')[3].click());
+  assert.equal(await t(page, 'land'), 'mountains', 'a dot jumps straight to its landscape');
+  assert.equal(await page.$eval('#landDots button.on', b => b.getAttribute('aria-label')), 'Mountain Pass', 'and lights up');
+  const layout = JSON.stringify(await t(page, 'layout'));
+  await page.evaluate(() => document.getElementById('newLayout').click());
+  assert.equal(await t(page, 'land'), 'mountains', 'Another layout keeps the landscape');
+  assert.notEqual(JSON.stringify(await t(page, 'layout')), layout, 'but deals a new layout');
   assert.deepEqual(page.errors, []);
   await page.close();
 });
