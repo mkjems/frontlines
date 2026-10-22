@@ -128,7 +128,9 @@ test('battles, captures and attacks on your capital', async () => {
   await sleep(300);
   assert.ok((await t(page, 'smouldering')).includes('Larkspur'), 'a captured town smoulders');
 
-  assert.ok(await t(page, 'hitCapital') > 0, 'an enemy reaching your capital shakes the camera');
+  const hit = await t(page, 'hitCapital');
+  assert.ok(hit.hold < hit.before, 'an enemy reaching your capital weakens its hold');
+  assert.equal(hit.shake, 0, 'attacks on your capital do not shake the camera');
   assert.equal(await t(page, 'capture', 'Brindle', 1), 1, 'losing a town works');
   assert.ok(await t(page, 'shake') > 0, 'losing a town shakes the camera');
 

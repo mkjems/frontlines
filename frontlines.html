@@ -7,7 +7,7 @@
 <style>
   /* Layout: full-bleed map canvas, floating pastel HUD chips at the corners, centered modal cards. Single light look by design (Mini Motorways-style map). */
   :root {
-    --ground: #d9ded2;
+    --ground: #3d423c;
     --panel: #fbfbf7;
     --ink: #2e3735;
     --muted: #6d7771;
@@ -377,10 +377,10 @@ import * as THREE from 'three';
   const STEP = 1 / 40, SPEED = 34, WEEK = 45, CELL = 32;
   const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const COL = {
-    outside: '#d9ded2', land: '#e8ebe2', land2: '#e2e7da', river: '#a9cfe2', riverDeep: '#9dc6dc', shore: '#efeadb', shadow: 'rgba(36,48,38,.15)', bridge: '#fbfaf6', bridgeEdge: '#c6ccbf',
+    outside: '#3d423c', land: '#e8ebe2', land2: '#e2e7da', river: '#a9cfe2', riverDeep: '#9dc6dc', shore: '#7d6550', shadow: 'rgba(36,48,38,.15)', bridge: '#fbfaf6', bridgeEdge: '#c6ccbf',
     tree: '#cddbc1', tree2: '#c1d3b3', text: '#2e3735',
     team: ['#3b6fd4', '#df5448'], light: ['#bccfef', '#f3c3bd'], mid: ['#86a6e4', '#ec958b'],
-    neutral: '#a8a497', neutralLight: '#d8d5cc', track: 'rgba(46,55,53,.10)'
+    neutral: '#a8a497', neutralLight: '#d8d5cc', track: 'rgba(30,36,30,.22)'
   };
 
   // ---------- sound: everything is synthesized, no audio files ----------
@@ -896,7 +896,7 @@ import * as THREE from 'three';
   function onFord(x, y) { if (!inBand(x, y)) return false; const br = bridgeAt(B(x, y)); return !!(br && br.ford); }
 
   function makeField(x, y, town) {
-    return { x, y, town, acc: rand(0, 1), w: rand(34, 48), h: rand(22, 30), rot: rand(-0.6, 0.6), c: Math.random() < 0.55 ? '#ebe5c6' : '#dde6c6' };
+    return { x, y, town, acc: rand(0, 1), w: rand(34, 48), h: rand(22, 30), rot: rand(-0.6, 0.6), c: Math.random() < 0.55 ? '#a8945e' : '#6f7f4c' };
   }
   function riverPath(c) {
     c.beginPath();
@@ -911,30 +911,30 @@ import * as THREE from 'three';
     }
     const c = bg.getContext('2d');
     c.setTransform(TS, 0, 0, TS, 0, 0);
-    c.fillStyle = '#e3e9d6'; c.fillRect(0, 0, W, H);
-    c.fillStyle = '#dbe3cc';
+    c.fillStyle = '#6b5141'; c.fillRect(0, 0, W, H);
+    c.fillStyle = '#634a3b';
     for (const p of patches) { c.beginPath(); c.arc(p.x, p.y, p.r, 0, Math.PI * 2); c.fill(); }
     // speckled grass so the ground has some grain up close
     for (let i = 0; i < W * H / 90; i++) {
-      c.fillStyle = Math.random() < 0.5 ? 'rgba(150,170,120,.10)' : 'rgba(255,255,240,.12)';
+      c.fillStyle = Math.random() < 0.5 ? 'rgba(40,25,18,.18)' : 'rgba(215,185,155,.09)';
       c.fillRect(Math.random() * W, Math.random() * H, rand(0.6, 1.6), rand(0.6, 1.6));
     }
     for (const h of hills) {
-      [[1, '#d5dfc4'], [0.68, '#cad6b6'], [0.36, '#bfcda9']].forEach(([k, col]) => {
+      [[1, '#654c3c'], [0.68, '#5d4536'], [0.36, '#553f31']].forEach(([k, col]) => {
         c.beginPath();
         h.pts.forEach((m, i) => { const a = i / h.pts.length * Math.PI * 2, rr2 = h.r * k * m; const x = h.x + Math.cos(a) * rr2, y = h.y + Math.sin(a) * rr2 * 0.8; i ? c.lineTo(x, y) : c.moveTo(x, y); });
-        c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = 'rgba(150,165,140,.35)'; c.lineWidth = 1; c.stroke();
+        c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = 'rgba(35,20,14,.35)'; c.lineWidth = 1; c.stroke();
       });
     }
     for (const f of fields) {
       c.save(); c.translate(f.x, f.y); c.rotate(f.rot);
       rr(c, -f.w / 2, -f.h / 2, f.w, f.h, 3); c.fillStyle = f.c; c.fill();
-      c.strokeStyle = 'rgba(120,110,70,.22)'; c.lineWidth = 1.4;
+      c.strokeStyle = 'rgba(55,45,25,.3)'; c.lineWidth = 1.4;
       for (let o = -f.h / 2 + 5; o < f.h / 2 - 2; o += 5) { c.beginPath(); c.moveTo(-f.w / 2 + 3, o); c.lineTo(f.w / 2 - 3, o); c.stroke(); }
       c.restore();
     }
     c.lineCap = 'round';
-    for (const [col, wdt] of [['#d6cdb2', 8], ['#ebe4cf', 4.5]]) {
+    for (const [col, wdt] of [['#755c48', 8], ['#806852', 4.5]]) {
       c.strokeStyle = col; c.lineWidth = wdt;
       for (const r of roads) {
         const mx = (r.a.x + r.b.x) / 2 - (r.b.y - r.a.y) * r.bend, my = (r.a.y + r.b.y) / 2 + (r.b.x - r.a.x) * r.bend;
@@ -944,13 +944,13 @@ import * as THREE from 'three';
     // the river bed, seen through the water: sandy banks, darker towards the middle
     c.lineJoin = 'round';
     riverPath(c); c.strokeStyle = COL.shore; c.lineWidth = river.hw * 2 + 16; c.stroke();
-    riverPath(c); c.strokeStyle = '#b9c7b4'; c.lineWidth = river.hw * 2 - 2; c.stroke();
-    riverPath(c); c.strokeStyle = '#8fa9a6'; c.lineWidth = river.hw * 1.2; c.stroke();
-    riverPath(c); c.strokeStyle = '#7b979a'; c.lineWidth = river.hw * 0.5; c.stroke();
+    riverPath(c); c.strokeStyle = '#6c705c'; c.lineWidth = river.hw * 2 - 2; c.stroke();
+    riverPath(c); c.strokeStyle = '#56645d'; c.lineWidth = river.hw * 1.2; c.stroke();
+    riverPath(c); c.strokeStyle = '#47555a'; c.lineWidth = river.hw * 0.5; c.stroke();
     for (const br of bridges) {
       if (!br.ford) continue;
       const ca = riverA(br.b);
-      c.fillStyle = '#e1dac0';
+      c.fillStyle = '#8f7a5d';
       c.beginPath();
       for (let a = ca - river.hw - 4; a <= ca + river.hw + 4; a += 4) { const q = XY(a, br.b - br.span + Math.sin(a * 0.3) * 2); a === ca - river.hw - 4 ? c.moveTo(q.x, q.y) : c.lineTo(q.x, q.y); }
       for (let a = ca + river.hw + 4; a >= ca - river.hw - 4; a -= 4) { const q = XY(a, br.b + br.span + Math.sin(a * 0.3) * 2); c.lineTo(q.x, q.y); }
@@ -1227,7 +1227,7 @@ import * as THREE from 'three';
     t.hold -= 1; t.hit = 0.6;
     puff(t.x, t.y, COL.team[u.team], 20);
     FX.dust(t.x + rand(-10, 10), t.y + rand(-10, 10), 2);
-    if (t.capital && t.owner === 0) { FX.shake(0.45); Sound.horn(); }   // your capital is under attack
+    if (t.capital && t.owner === 0) Sound.horn();   // your capital is under attack (rate-limited inside)
     if (t.hold <= 0) capture(t, u.team);
   }
 
@@ -2180,7 +2180,7 @@ import * as THREE from 'three';
     if (!matCache.has(k)) matCache.set(k, new THREE.MeshStandardMaterial({ color: hex, roughness: 0.85, flatShading: true, ...o }));
     return matCache.get(k);
   }
-  const STONE = '#f1ede3', STONE2 = '#ddd8ca', WOOD = '#7d6a52', POLE = '#5c6460';
+  const STONE = '#cfcabd', STONE2 = '#aaa597', WOOD = '#7d6a52', POLE = '#5c6460';
 
   function init3D() {
     if (renderer) return;
@@ -2238,7 +2238,7 @@ import * as THREE from 'three';
 
     dcv = document.createElement('canvas'); dctx = dcv.getContext('2d');
     const water = waterNormals();
-    waterMat = new THREE.MeshStandardMaterial({ color: '#86bfdc', roughness: 0.12, metalness: 0.1, transparent: true, opacity: 0.8, side: THREE.DoubleSide, normalMap: water, normalScale: new THREE.Vector2(0.45, 0.45) });
+    waterMat = new THREE.MeshStandardMaterial({ color: '#4f7d93', roughness: 0.12, metalness: 0.1, transparent: true, opacity: 0.8, side: THREE.DoubleSide, normalMap: water, normalScale: new THREE.Vector2(0.45, 0.45) });
   }
   const MAXU = 3000, WHITE = new THREE.Color('#ffffff'), TEAMC = [new THREE.Color('#3b6fd4'), new THREE.Color('#df5448')];
   let unitMeshes = [];
@@ -2322,7 +2322,7 @@ import * as THREE from 'three';
   // the board's sides: earth below the grass, water where the river runs off the edge
   function skirtGeometry() {
     const pos = [], col = [], idx = [], C = h => new THREE.Color(h);
-    const grass = C('#93ad74'), soil = C('#b09772'), clay = C('#9b8262'), rock = C('#76664f'), wet = C('#86b9d3'), deep = C('#6a98b0');
+    const grass = C('#6b5141'), soil = C('#5c4334'), clay = C('#5a4b3a'), rock = C('#3e352c'), wet = C('#4f7d93'), deep = C('#3c6478');
     const edge = (x0, y0, x1, y1) => {
       const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / GS), s = pos.length / 3;
       for (let i = 0; i <= n; i++) {
@@ -2434,17 +2434,17 @@ import * as THREE from 'three';
     world.add(instanced(GEO.trunk, mat(WOOD), trees, (t, d, c) => { d.position.set(t.x, groundAt(t.x, t.y), t.y); d.scale.set(t.r * 0.16, t.pine ? t.r * 0.6 : t.r * 1.1, t.r * 0.16); c.set('#ffffff'); }));
     world.add(instanced(GEO.canopy, mat('#ffffff'), leafy, (t, d, c) => {
       d.position.set(t.x, groundAt(t.x, t.y) + t.r * 1.55, t.y); d.scale.set(t.r, t.r * 0.92, t.r); d.rotation.set(rand(0, 3), rand(0, 3), 0);
-      tint(c, t.c === COL.tree ? '#a6c98c' : '#8fb97a', 0.04);
+      tint(c, t.c === COL.tree ? '#62894a' : '#527b3f', 0.04);
     }));
-    world.add(instanced(GEO.pine, mat('#ffffff'), pines, (t, d, c) => { d.position.set(t.x, groundAt(t.x, t.y) + t.r * 0.45, t.y); d.scale.set(t.r * 0.95, t.r * 1.7, t.r * 0.95); tint(c, '#7ea679', 0.03); }));
-    world.add(instanced(GEO.pine, mat('#ffffff'), pines, (t, d, c) => { d.position.set(t.x, groundAt(t.x, t.y) + t.r * 1.45, t.y); d.scale.set(t.r * 0.68, t.r * 1.45, t.r * 0.68); tint(c, '#8db487', 0.03); }));
+    world.add(instanced(GEO.pine, mat('#ffffff'), pines, (t, d, c) => { d.position.set(t.x, groundAt(t.x, t.y) + t.r * 0.45, t.y); d.scale.set(t.r * 0.95, t.r * 1.7, t.r * 0.95); tint(c, '#3f6744', 0.03); }));
+    world.add(instanced(GEO.pine, mat('#ffffff'), pines, (t, d, c) => { d.position.set(t.x, groundAt(t.x, t.y) + t.r * 1.45, t.y); d.scale.set(t.r * 0.68, t.r * 1.45, t.r * 0.68); tint(c, '#4b7550', 0.03); }));
     clouds = Array.from({ length: 5 }, () => ({ x: rand(0, W + 600), y: rand(0, H), r: rand(120, 230), v: rand(6, 11) }));
     // crop rows on the fields, and low bushes dotted about the open country
     const rows = [];
     for (const f of fields) for (let o = -f.h / 2 + 5; o < f.h / 2 - 2; o += 5) rows.push({ f, o });
     world.add(instanced(GEO.box, mat('#ffffff'), rows, ({ f, o }, d, c) => {
       d.position.set(f.x - o * Math.sin(f.rot), groundAt(f.x, f.y), f.y + o * Math.cos(f.rot)); d.rotation.set(0, -f.rot, 0); d.scale.set(f.w - 7, 1.3, 2.2);
-      tint(c, f.c === '#ebe5c6' ? '#e2d49a' : '#b9cf96', 0.03);
+      tint(c, f.c === '#a8945e' ? '#bca86c' : '#7f9156', 0.03);
     }));
     const bushes = [];
     for (let tries = 0; tries < 900 && bushes.length < 90; tries++) {
@@ -2454,8 +2454,8 @@ import * as THREE from 'three';
       if (Math.hypot(compass.x - x, compass.y - y) < 40) continue;
       bushes.push({ x, y, r: rand(1.8, 3.4) });
     }
-    world.add(instanced(GEO.canopy, mat('#ffffff'), bushes, (b, d, c) => { d.position.set(b.x, groundAt(b.x, b.y) + b.r * 0.4, b.y); d.scale.set(b.r * 1.3, b.r, b.r * 1.3); d.rotation.set(0, rand(0, 6), 0); tint(c, '#a9c48f', 0.05); }));
-    world.add(instanced(GEO.rock, mat('#ffffff'), rocks, (r, d, c) => { d.position.set(r.x, groundAt(r.x, r.y) + r.r * 0.2, r.y); d.scale.set(r.r, r.r * 0.6, r.r * 0.8); d.rotation.set(0, rand(0, 6), 0); tint(c, '#cfcec2', 0.04); }));
+    world.add(instanced(GEO.canopy, mat('#ffffff'), bushes, (b, d, c) => { d.position.set(b.x, groundAt(b.x, b.y) + b.r * 0.4, b.y); d.scale.set(b.r * 1.3, b.r, b.r * 1.3); d.rotation.set(0, rand(0, 6), 0); tint(c, '#5e7b45', 0.05); }));
+    world.add(instanced(GEO.rock, mat('#ffffff'), rocks, (r, d, c) => { d.position.set(r.x, groundAt(r.x, r.y) + r.r * 0.2, r.y); d.scale.set(r.r, r.r * 0.6, r.r * 0.8); d.rotation.set(0, rand(0, 6), 0); tint(c, '#8e8d85', 0.04); }));
 
     // bridges: a stone deck with parapets and piers; the ford gets stepping stones
     const stones = [];
@@ -2470,15 +2470,15 @@ import * as THREE from 'three';
       put(g, GEO.box, mat(STONE), 0, DECK_Y - 2.4, 0, len, 2.4, wid);
       for (const s of [-1, 1]) put(g, GEO.box, mat(STONE2), 0, DECK_Y, s * (wid / 2 - 1.2), len, 1.8, 2.4);
       for (const s of [-0.5, 0, 0.5]) put(g, GEO.box, mat(STONE2), s * river.hw * 1.3, BED_Y, 0, 5, DECK_Y - 2.4 - BED_Y, wid - 6);
-      for (let x = -len / 2 + 4; x < len / 2 - 2; x += 4.5) put(g, GEO.box, mat('#e6e1d4'), x, DECK_Y - 0.02, 0, 0.5, 0.06, wid - 5);
+      for (let x = -len / 2 + 4; x < len / 2 - 2; x += 4.5) put(g, GEO.box, mat('#bdb7a8'), x, DECK_Y - 0.02, 0, 0.5, 0.06, wid - 5);
       world.add(mergeGroup(g));
     }
-    world.add(instanced(GEO.cyl, mat('#d6d5c9'), stones, (p, d, c) => { d.position.set(p.x, FORD_Y, p.y); d.scale.set(3.2, WATER_Y - FORD_Y + 0.7, 2.6); c.set('#ffffff'); }));
+    world.add(instanced(GEO.cyl, mat('#9c9a90'), stones, (p, d, c) => { d.position.set(p.x, FORD_Y, p.y); d.scale.set(3.2, WATER_Y - FORD_Y + 0.7, 2.6); c.set('#ffffff'); }));
 
     // gold mines: a heap of rock with nuggets that glint when someone holds the land
     for (const m of mines) {
       const g = new THREE.Group(), y0 = groundAt(m.x, m.y);
-      m._rock = new THREE.MeshStandardMaterial({ color: '#d2d1ca', roughness: 0.9, flatShading: true });
+      m._rock = new THREE.MeshStandardMaterial({ color: '#9a998f', roughness: 0.9, flatShading: true });
       m._gold = new THREE.MeshStandardMaterial({ color: '#e2b93b', emissive: '#7a5600', emissiveIntensity: 0.2, roughness: 0.3, metalness: 0.6, flatShading: true });
       [[-6, 3, 8], [6, 4, 7], [0, -4, 7.5]].forEach(([dx, dy, r], i) => { const o = put(g, GEO.rock, m._rock, m.x + dx, y0 + r * 0.3, m.y + dy, r, r * 0.75, r); o.rotation.set(0, i * 2.1, 0); });
       m._nug = [[-7, 1], [5, 2], [-1, -6], [8, -2], [-3, 6]].map(([dx, dy], i) => { const o = put(g, GEO.nugget, m._gold, m.x + dx * 0.8, y0 + 5.5 + (i % 2) * 1.2, m.y + dy * 0.8, 1.7, 1.7, 1.7); o.rotation.set(i, i * 1.3, 0); return o; });
@@ -2730,7 +2730,7 @@ import * as THREE from 'three';
     for (const m of mines) {
       if (!m._rock) continue;
       const owned = m.owner >= 0;
-      m._rock.color.set(owned ? '#b9b8aa' : '#d2d1ca');
+      m._rock.color.set(owned ? '#7f7e74' : '#9a998f');
       m._gold.emissiveIntensity = owned ? 0.6 + 0.5 * Math.sin(nowS * 3 + m.x) : 0.05;
       m._gold.color.set(owned ? '#f0c53c' : '#bfae80');
       m._nug.forEach((o, i) => { o.rotation.y = nowS * (owned ? 1.2 : 0) + i; });
@@ -2861,7 +2861,7 @@ import * as THREE from 'three';
     if (!odd) renderer.shadowMap.needsUpdate = true;
     sync3D(nowS);
     FX.update(fxDt, nowS);
-    const sh = FX.shakeAmount * baseDist / view.z * 0.006;   // a short shake when your capital is hit or a town falls
+    const sh = FX.shakeAmount * baseDist / view.z * 0.006;   // a short shake when one of your towns falls
     if (sh > 0.01) { camera.position.x += rand(-sh, sh); camera.position.y += rand(-sh, sh) * 0.5; camera.updateMatrixWorld(); }
     renderer.render(scene, camera);
     drawOverlay(nowS);
@@ -3160,7 +3160,7 @@ import * as THREE from 'three';
       (armed === 'fort' ? drawFort : drawTower)(ghost.x, ghost.y, col, 0.6);
     }
     else if (armed === 'farm') {
-      ctx.globalAlpha = 0.6; rr(ctx, ghost.x - 20, ghost.y - 13, 40, 26, 3); ctx.fillStyle = ok ? '#ebe5c6' : COL.light[1]; ctx.fill();
+      ctx.globalAlpha = 0.6; rr(ctx, ghost.x - 20, ghost.y - 13, 40, 26, 3); ctx.fillStyle = ok ? '#a8945e' : COL.light[1]; ctx.fill();
       ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke(); ctx.globalAlpha = 1;
     }
     else if (armed === 'charge') {
@@ -3267,7 +3267,7 @@ import * as THREE from 'three';
         return toScreen(cx, cy, 0);
       },
       capture: (n, team) => { capture(town(n), team); return town(n).owner; },
-      hitCapital: () => { enterTown(towns.find(t => t.capital && t.owner === 0), { team: 1, dead: false }); return FX.shakeAmount; },
+      hitCapital: () => { const c = towns.find(t => t.capital && t.owner === 0), h = c.hold; enterTown(c, { team: 1, dead: false }); return { hold: c.hold, before: h, shake: FX.shakeAmount }; },
       shake: () => FX.shakeAmount,
       buildings: () => structs.filter(st => st.team === 0).length,
       // a blue army of n gathered just outside a town (as if a route had brought it there); returns its screen point
