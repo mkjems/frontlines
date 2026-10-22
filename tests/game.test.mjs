@@ -11,7 +11,9 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 
-const GAME = new URL('../site/index.html?test&land=valley', import.meta.url).href;
+// the tests run on the classic town layout, whose towns have known names and places
+const GAME = new URL('../site/index.html?test&land=valley&layout=classic', import.meta.url).href;
+const RANDOM = new URL('../site/index.html?test', import.meta.url).href;
 const CHROME = process.env.CHROME_PATH || [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser',
@@ -29,12 +31,12 @@ before(async () => {
 after(async () => { await browser?.close(); });
 
 // Opens the game and starts a campaign; collects page errors so each test can assert there were none.
-async function openGame(viewport = { width: 1440, height: 900 }) {
+async function openGame(viewport = { width: 1440, height: 900 }, url = GAME) {
   const page = await browser.newPage();
   await page.setViewport(viewport);
   page.errors = [];
   page.on('pageerror', e => page.errors.push(e.message));
-  await page.goto(GAME);
+  await page.goto(url);
   await page.waitForFunction(() => window.__t, { timeout: 20000 });
   await sleep(500);
   return page;
@@ -201,6 +203,31 @@ test('armies find their way over two rivers and through a mountain pass', async 
     assert.ok(await t(page, 'dry'), `${k}: nobody ends up in the water or on a mountainside`);
   }
   assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test('random layouts: the same for both sides, the same for the same map number, and playable', async () => {
+  const page = await openGame(undefined, RANDOM);
+  const lands = ['valley', 'lake', 'tworivers', 'mountains', 'open', 'highlands', 'marsh', 'forest', 'plains'];
+  for (let i = 0; i < lands.length * 3; i++) {
+    const k = lands[i % lands.length];
+    await t(page, 'newMap', k, 100 + i);
+    assert.ok(await t(page, 'mirrored'), `${k} map ${100 + i}: towns, mines, fields, hills, woods and crossings mirror each other`);
+  }
+  assert.equal(await t(page, 'fallbacks'), 0, 'every random layout fits without falling back to the classic one');
+  await t(page, 'newMap', 'highlands', 4821);
+  const first = JSON.stringify(await t(page, 'layout'));
+  await t(page, 'newMap', 'highlands', 4821);
+  assert.equal(JSON.stringify(await t(page, 'layout')), first, 'a map number always rebuilds the same map');
+  assert.match(await page.$eval('#mapNo', e => e.textContent), /Map 4821/, 'the start screen shows the map number');
+  await page.click('#classicTowns');
+  assert.ok((await t(page, 'layout')).some(o => o.name === 'Millbrook') && (await t(page, 'layout')).length === 10, 'Classic towns brings back the original layout');
+  await page.click('#classicTowns');
+  await t(page, 'newMap', 'valley', 77);
+  await t(page, 'start'); await t(page, 'run', 30);
+  assert.ok(await t(page, 'dry') && await t(page, 'alive') > 20, 'a random map plays');
+  assert.deepEqual(page.errors, []);
+  await page.evaluate(() => localStorage.removeItem('frontlines-classic'));
   await page.close();
 });
 

@@ -20,6 +20,10 @@ march on, and thousands of soldiers clash on a 3D tabletop battlefield.
   Highlands, Marshes, Old Forest or Open Plains. Press **New map** on the start screen for another, or add
   `?land=mountains` (or `valley`, `lake`, `tworivers`, `open`, `highlands`, `marsh`, `forest`, `plains`) to
   the address to pick one.
+- **Every map is random but fair:** the towns, mines, farms, hills, woods, crags and bogs are laid out at
+  random on your half and mirrored, turned about the centre, onto the enemy's. Each map has a number shown on
+  the start screen; `?map=4821` (with `?land=`) rebuilds the same one. Tick **Classic towns** for the
+  original hand-made town layout.
 - **Camera:**
   - scroll or pinch to zoom;
   - drag open ground to look around;
