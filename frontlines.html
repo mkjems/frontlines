@@ -241,8 +241,10 @@
   #intro.peeking .card { opacity: 0; transform: scale(.98); pointer-events: none; }
   .peekbar { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 112px); transform: translateX(-50%); z-index: 1;
     padding: 8px 16px; border-radius: 999px; background: var(--panel); box-shadow: var(--shadow), inset 0 0 0 1px var(--edge);
-    font-size: 13px; font-weight: 600; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .15s ease; }
-  #intro.peeking .peekbar { opacity: 1; }
+    font-size: 13px; font-weight: 600; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .15s ease;
+    display: flex; align-items: center; gap: 4px; padding: 4px 6px; }
+  #intro.peeking .peekbar { opacity: 1; pointer-events: auto; }
+  .peekbar span { padding: 0 6px; }
   #peekBtn { font: 600 12px var(--font); color: var(--ink); background: var(--raised); border: 1.5px solid var(--line); border-radius: 999px; padding: 5px 11px; cursor: pointer; }
   .diff button {
     font: 600 12px var(--font); color: var(--ink); background: var(--raised); border: 1.5px solid var(--line); border-radius: 999px;
@@ -359,7 +361,11 @@
 <button id="tutSkip" type="button" hidden>Skip tips</button>
 
 <div class="overlay" id="intro">
-  <div class="peekbar" id="peekBar" aria-live="polite"></div>
+  <div class="peekbar" id="peekBar">
+    <button type="button" class="cbtn" id="peekPrev" aria-label="Previous landscape">‹</button>
+    <span id="peekText" aria-live="polite"></span>
+    <button type="button" class="cbtn" id="peekNext" aria-label="Next landscape">›</button>
+  </div>
   <div class="card">
     <div class="hero art" id="introHero"><h1>Frontlines</h1></div>
     <p>Two kingdoms, one river. You never command a soldier. You draw the paths they march on, and the armies sort out the rest.</p>
@@ -2580,21 +2586,29 @@ import * as THREE from 'three';
   $('landPrev').onclick = () => newGame(LAND_KEYS[(LAND_KEYS.indexOf(landKey) + LAND_KEYS.length - 1) % LAND_KEYS.length]);
   $('newLayout').onclick = () => newGame(landKey);
   // Peek: hold to see the whole map, release to come back; a quick tap keeps the card away until the next tap
+  // outside the bar. While peeking, the bar's arrows (or the arrow keys) step through the landscapes.
   {
     let downAt = 0, held = false;
-    const peek = on => {
-      $('intro').classList.toggle('peeking', on);
-      $('peekBar').textContent = on ? `${land.name} · Map ${mapSeed}${held ? '' : ' · tap to go back'}` : '';
-    };
+    const peeking = () => $('intro').classList.contains('peeking');
+    const label = () => { $('peekText').textContent = `${land.name} · Map ${mapSeed}${held ? '' : ' · tap the map to go back'}`; };
+    const peek = on => { $('intro').classList.toggle('peeking', on); if (on) label(); };
+    const step = d => { if (d > 0) $('landNext').click(); else $('landPrev').click(); label(); };
     $('peekBtn').addEventListener('pointerdown', e => { e.preventDefault(); downAt = performance.now(); held = true; peek(true); });
     addEventListener('pointerup', () => {
       if (!held) return;
       held = false;
       if (performance.now() - downAt > 300) peek(false);   // it was held: back to the card
-      else { peek(true); setTimeout(() => addEventListener('pointerdown', () => peek(false), { once: true }), 0); }   // a tap: stay until the next one
+      else label();   // a tap: stay until the next tap outside the bar
     });
-    $('peekBtn').addEventListener('click', e => { if (e.detail === 0) { held = false; peek(!$('intro').classList.contains('peeking')); } });   // keyboard
-    addEventListener('keydown', e => { if (e.key === 'Escape' && $('intro').classList.contains('peeking')) peek(false); });
+    addEventListener('pointerdown', e => { if (peeking() && !held && !$('peekBar').contains(e.target)) peek(false); });
+    $('peekPrev').onclick = () => step(-1);
+    $('peekNext').onclick = () => step(1);
+    $('peekBtn').addEventListener('click', e => { if (e.detail === 0) { held = false; peek(!peeking()); } });   // keyboard
+    addEventListener('keydown', e => {
+      if (!peeking()) return;
+      if (e.key === 'Escape') peek(false);
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); e.stopImmediatePropagation(); step(e.key === 'ArrowRight' ? 1 : -1); }
+    }, true);
   }
   // Classic towns: the original hand-made layout instead of a random one (the same map number otherwise)
   $('classicTowns').checked = classic;

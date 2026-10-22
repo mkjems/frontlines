@@ -80,6 +80,13 @@ test('Peek: hold to see the whole map, or tap and tap again', async () => {
   assert.ok(!(await peeking()), 'letting go brings it back');
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2); await sleep(50);
   assert.ok(await peeking(), 'a quick tap keeps the map in view');
+  const land = await t(page, 'land');
+  await page.click('#peekNext'); await sleep(50);
+  assert.ok(await peeking(), 'the arrows in the peek bar keep the map in view');
+  assert.notEqual(await t(page, 'land'), land, 'and step to the next landscape');
+  assert.match(await page.$eval('#peekText', e => e.textContent), new RegExp(await page.$eval('#landName', e => e.textContent)), 'the bar names the new landscape');
+  await page.keyboard.press('ArrowLeft'); await sleep(50);
+  assert.equal(await t(page, 'land'), land, 'the arrow keys step back too');
   await page.mouse.click(700, 450); await sleep(50);
   assert.ok(!(await peeking()), 'the next tap brings the card back');
   assert.deepEqual(page.errors, []);
