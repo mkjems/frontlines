@@ -197,7 +197,7 @@ test('battles, captures and attacks on your capital', async () => {
 
 test('every landscape builds and plays: towns stay dry and nobody walks through crags', async () => {
   const page = await openGame();
-  for (const k of ['valley', 'lake', 'tworivers', 'mountains', 'open', 'steppe', 'highlands', 'marsh', 'forest', 'plains']) {
+  for (const k of ['valley', 'lake', 'tworivers', 'mountains', 'open', 'steppe', 'greenwood', 'highlands', 'marsh', 'forest', 'plains']) {
     assert.equal(await t(page, 'newMap', k), k);
     assert.equal(await page.$eval('#landName', e => e.textContent.length > 0), true, 'the intro names the landscape');
     await t(page, 'start'); await t(page, 'run', 40);
@@ -210,9 +210,9 @@ test('every landscape builds and plays: towns stay dry and nobody walks through 
   assert.ok((await t(page, 'newMap', 'marsh'), await t(page, 'terrain')).marshes > 0, 'the marshes have bogs');
   // the arrows step through every landscape once, in order, then starts over
   const seen = [];
-  for (let i = 0; i < 10; i++) { await page.evaluate(() => document.getElementById('landNext').click()); seen.push(await t(page, 'land')); }
-  assert.equal(new Set(seen).size, 10, 'ten presses visit all ten landscapes');
-  assert.equal(seen[9], 'marsh', 'and the tenth comes back round to where it started');
+  for (let i = 0; i < 11; i++) { await page.evaluate(() => document.getElementById('landNext').click()); seen.push(await t(page, 'land')); }
+  assert.equal(new Set(seen).size, 11, 'eleven presses visit all eleven landscapes');
+  assert.equal(seen[10], 'marsh', 'and the eleventh comes back round to where it started');
   await page.evaluate(() => document.getElementById('landPrev').click());
   assert.equal(await t(page, 'land'), 'highlands', 'the back arrow goes the other way');
   await page.evaluate(() => document.querySelectorAll('#landDots button')[3].click());
@@ -243,7 +243,7 @@ test('armies find their way over two rivers and through a mountain pass', async 
 
 test('random layouts: the same for both sides, the same for the same map number, and playable', async () => {
   const page = await openGame(undefined, RANDOM);
-  const lands = ['valley', 'lake', 'tworivers', 'mountains', 'open', 'steppe', 'highlands', 'marsh', 'forest', 'plains'];
+  const lands = ['valley', 'lake', 'tworivers', 'mountains', 'open', 'steppe', 'greenwood', 'highlands', 'marsh', 'forest', 'plains'];
   for (let i = 0; i < lands.length * 3; i++) {
     const k = lands[i % lands.length];
     await t(page, 'newMap', k, 100 + i);

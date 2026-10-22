@@ -828,6 +828,7 @@ import * as THREE from 'three';
   // hills and woods: [how many, smallest radius, largest radius]. fields: a multiple of the usual farms per town.
   // middle: where neutral towns may stand, as [nearest, furthest] from blue's edge (0..0.5).
   // roads: how many neighbours each town has a road to (2 if not given); bushes and rocks: how many (90, 22).
+  // thick: how densely each wood is planted (1 if not given). scatter: lone trees and copses on top of the woods.
   // Each map is point-symmetric about the board's centre, so a pair of barriers or crossings must mirror
   // each other (c and 1 - c, b and 1 - b); the far one of each pair is made from the near one.
   const RIVER = (o, cross) => ({ kind: 'water', c: 0.5, amp: 0.028, freq: 1.15, wide: 1, ...o, cross });
@@ -849,6 +850,8 @@ import * as THREE from 'three';
       lines: [], hills: [5, 55, 95], woods: [5, 45, 70], trees: 190, fields: 1 },
     steppe: { name: 'The Steppe', desc: 'Wide open grassland: hardly a hill, wood or road. Room to flank, encircle and outmanoeuvre.',
       lines: [], hills: [1, 45, 60], woods: [0, 0, 0], trees: 24, fields: 1, roads: 1, bushes: 30, rocks: 8 },
+    greenwood: { name: 'The Greenwood', desc: 'Open country grown over with forest: woods everywhere, slow going and cover from arrows, with glades between.',
+      lines: [], hills: [1, 45, 60], woods: [22, 35, 95], thick: 2.4, trees: 0, scatter: 700, fields: 1, roads: 1, bushes: 260, rocks: 10 },
     highlands: { name: 'Highlands', desc: 'Big hills and rocky crags no army can climb. Hold the passes between them.',
       lines: [RIVER({ amp: 0.035, freq: 1.6, wide: 0.8 }, [[0.2, 0], [0.5, 1], [0.8, 0]])],
       hills: [8, 60, 105], woods: [2, 40, 60], trees: 110, fields: 0.7, crags: 7 },
@@ -1076,10 +1079,10 @@ import * as THREE from 'three';
       if (nearRiver(x, y, R + 20) || nearCrag(x, y, R + 20) || marshes.some(m => Math.hypot(m.x - x, m.y - y) < m.r + R) || !twinGap(x, y, 2 * R)) continue;
       if (towns.some(t => Math.hypot(t.x - x, t.y - y) < R + 70) || fields.some(f => Math.hypot(f.x - x, f.y - y) < R + 30)) continue;
       if (nearCompass(x, y, R + 40) || nearMine(x, y, R + 40) || hills.some(h => Math.hypot(h.x - x, h.y - y) < h.r + R)) continue;
-      for (let k = 0; k < 26; k++) { const a = rand(0, Math.PI * 2), d = Math.sqrt(rng()) * R; tree(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.85, rand(7, 12), rng() < 0.45); }
+      for (let k = 0, n = Math.round(26 * (land.thick ?? 1) * (R / 60) ** (land.thick ? 2 : 0)); k < n; k++) { const a = rand(0, Math.PI * 2), d = Math.sqrt(rng()) * R; tree(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.85, rand(7, 12), rng() < 0.45); }
       w++;
     }
-    for (let tries = 0; tries < 2000 && trees.length < land.trees; tries++) {
+    for (let tries = 0, want = Math.max(land.trees, trees.length + (land.scatter ?? 0)); tries < 3000 && trees.length < want; tries++) {
       const { x, y } = blueSpot(20);
       if (nearRiver(x, y, 26) || nearCrag(x, y, 14) || inMarsh(x, y) || !twinGap(x, y, 30)) continue;
       if (towns.some(t => Math.hypot(t.x - x, t.y - y) < 80)) continue;
