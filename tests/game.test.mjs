@@ -11,7 +11,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 
-const GAME = new URL('../site/index.html?test', import.meta.url).href;
+const GAME = new URL('../site/index.html?test&land=valley', import.meta.url).href;
 const CHROME = process.env.CHROME_PATH || [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser',
@@ -158,6 +158,26 @@ test('battles, captures and attacks on your capital', async () => {
   await t(page, 'run', 40);
   await sleep(300);
   assert.deepEqual(page.errors, [], 'a long stretch of play runs without errors');
+  await page.close();
+});
+
+test('every landscape builds and plays: towns stay dry and nobody walks through crags', async () => {
+  const page = await openGame();
+  for (const k of ['valley', 'lake', 'highlands', 'marsh', 'forest', 'plains']) {
+    assert.equal(await t(page, 'newMap', k), k);
+    assert.equal(await page.$eval('#landName', e => e.textContent.length > 0), true, 'the intro names the landscape');
+    await t(page, 'start'); await t(page, 'run', 40);
+    assert.ok(await t(page, 'dry'), `${k}: no town or soldier is in the water`);
+    assert.equal(await t(page, 'onCrag'), 0, `${k}: nobody stands inside a crag`);
+    assert.ok(await t(page, 'alive') > 20, `${k}: both kingdoms field armies`);
+  }
+  const terrain = await t(page, 'newMap', 'highlands') && await t(page, 'terrain');
+  assert.ok(terrain.crags > 0, 'the highlands have crags');
+  assert.ok((await t(page, 'newMap', 'marsh'), await t(page, 'terrain')).marshes > 0, 'the marshes have bogs');
+  const before = await t(page, 'land');
+  await page.evaluate(() => document.getElementById('newMap').click());
+  assert.notEqual(await t(page, 'land'), before, 'New map deals a different landscape');
+  assert.deepEqual(page.errors, []);
   await page.close();
 });
 

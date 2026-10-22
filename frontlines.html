@@ -201,7 +201,11 @@
   #goldRate { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .btn.primary { background: var(--blue); color: #fff; padding: 12px 18px; font-size: 14px; align-self: flex-start; }
   .diff { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-  .diff .label { margin-right: 4px; }
+  .diff .label { margin-right: 4px; min-width: 70px; }
+  .land { display: grid; grid-template-columns: 74px auto 1fr; align-items: center; gap: 2px 6px; }
+  .land b { font-size: 14px; font-weight: 600; }
+  .land p { grid-column: 2 / -1; margin: 0; font-size: 12px; line-height: 1.4; color: var(--muted); }
+  #newMap { justify-self: start; margin-left: 4px; font: 600 12px var(--font); color: var(--ink); background: var(--raised); border: 1.5px solid var(--line); border-radius: 999px; padding: 5px 11px; cursor: pointer; }
   .diff button {
     font: 600 12px var(--font); color: var(--ink); background: var(--raised); border: 1.5px solid var(--line); border-radius: 999px;
     padding: 6px 12px; cursor: pointer;
@@ -342,6 +346,11 @@
       <button type="button" id="diff-easy" data-d="easy">Easy</button>
       <button type="button" id="diff-normal" data-d="normal">Normal</button>
       <button type="button" id="diff-hard" data-d="hard">Hard</button>
+    </div>
+    <div class="land">
+      <span class="label">Map</span><b id="landName"></b>
+      <button type="button" id="newMap" title="Deal a different landscape">New map</button>
+      <p id="landDesc"></p>
     </div>
     <label class="fold"><input type="checkbox" id="showTips"><span id="foldLabel">Show how to win</span></label>
     <div class="tips" id="diffTips" aria-live="polite" hidden>
@@ -627,7 +636,7 @@ import * as THREE from 'three';
   // ---------- world ----------
   let W, H, P, LA, LB, dpr = 1, bg = null;
   let river, bridges, towns, units, deaths, puffs, trees, patches;
-  let scars = [], waves = [], ripples = [], fields = [], hills = [], roads = [], rocks = [], compass = { x: 0, y: 0 };
+  let scars = [], waves = [], ripples = [], fields = [], hills = [], roads = [], rocks = [], crags = [], marshes = [], compass = { x: 0, y: 0 };
   let state = 'intro', paused = false, speed = 1, time = 0, week = 1, weekT = 0, aiT = 6, ink = 0;
   let uid = 0, routeSeq = 0, frameNo = 0, routesDrawn = 0;
   let stats, structs = [], tracers = [], inventory = {}, armed = null, ghost = null, plan = null, hintBase = '';
@@ -663,13 +672,21 @@ import * as THREE from 'three';
   const XY = (a, b) => P ? { x: b, y: a } : { x: a, y: b };
   const blueSide = () => P ? 1 : -1;
 
-  function riverA(b) { return LA * (0.5 + river.amp * Math.sin(b / LB * Math.PI * 2 * 1.15 + river.phase)); }
+  function riverA(b) { return LA * (0.5 + river.amp * Math.sin(b / LB * Math.PI * 2 * river.freq + river.phase)); }
+  // half the river's width at b: on the Great Lake it swells into a lake in the middle of the board
+  function hwAt(b) {
+    if (!river.lake) return river.hw;
+    const x = (b / LB - 0.5) / 0.22;
+    return river.hw + (x * x < 1 ? river.lake * LA * (1 - x * x) ** 2 : 0);
+  }
+  // how far (x,y) is from the water's edge; negative in the water
+  function riverGap(x, y) { const b = B(x, y); return Math.abs(A(x, y) - riverA(b)) - hwAt(b); }
   function sideOf(x, y) { return A(x, y) < riverA(B(x, y)) ? -1 : 1; }
   function bridgeAt(b) { for (const br of bridges) if (Math.abs(b - br.b) < br.span) return br; return null; }
-  function inBand(x, y) { return Math.abs(A(x, y) - riverA(B(x, y))) < river.hw; }
+  function inBand(x, y) { return riverGap(x, y) < 0; }
   function onBridge(x, y) { return inBand(x, y) && !!bridgeAt(B(x, y)); }
   function isWater(x, y) { return inBand(x, y) && !bridgeAt(B(x, y)); }
-  function bridgeEnd(br, s) { return XY(riverA(br.b) + s * (river.hw + 14), br.b); }
+  function bridgeEnd(br, s) { return XY(riverA(br.b) + s * (hwAt(br.b) + 14), br.b); }
 
   function bestBridge(x0, y0, x1, y1) {
     const s0 = sideOf(x0, y0), s1 = sideOf(x1, y1);
@@ -695,15 +712,19 @@ import * as THREE from 'three';
   // River is solid except on bridges; bridge rails keep units on the deck.
   function constrain(u) {
     let a = A(u.x, u.y), b = B(u.x, u.y);
-    const c = riverA(b), d = a - c;
-    if (Math.abs(d) < river.hw) {
+    const c = riverA(b), d = a - c, hw = hwAt(b);
+    if (Math.abs(d) < hw) {
       let near = null;
       for (const br of bridges) if (Math.abs(b - br.b) < br.span + 10) { near = br; break; }
       if (near) { if (Math.abs(b - near.b) > near.span - 3) b = near.b + Math.sign(b - near.b) * (near.span - 3); }
-      else a = c + (d < 0 ? -1 : 1) * river.hw;
+      else a = c + (d < 0 ? -1 : 1) * hw;
     }
     a = clamp(a, 6, LA - 6); b = clamp(b, 6, LB - 6);
     const p = XY(a, b); u.x = p.x; u.y = p.y;
+    for (const k of crags) {   // and nobody climbs a crag
+      const dx = u.x - k.x, dy = u.y - k.y, d2 = dx * dx + dy * dy;
+      if (d2 < k.r * k.r) { const dd = Math.sqrt(d2) || 1; u.x = k.x + dx / dd * k.r; u.y = k.y + dy / dd * k.r; }
+    }
   }
 
   const LAYOUT = [
@@ -713,18 +734,54 @@ import * as THREE from 'three';
     ['Millbrook', 0.38, 0.38, -1], ['Oakhollow', 0.36, 0.92, -1], ['Fennick', 0.62, 0.62, -1], ['Larkspur', 0.64, 0.08, -1],
   ];
 
+  // Landscapes: every game is dealt one, so the shape and character of the land change from game to game.
+  // river: how far it bends (amp), how many bends (freq), width (wide, a multiple) and a lake in the middle
+  // (lake, extra half-width as a share of the board). cross: the crossings, [position along the river, ford?].
+  // hills and woods: [how many, smallest radius, largest radius]. fields: a multiple of the usual farms per town.
+  const LANDS = {
+    valley: { name: 'River Valley', desc: 'A gentle river with two bridges and a ford between them.',
+      river: { amp: 0.028, freq: 1.15, wide: 1 }, cross: [[0.27, 0], [0.73, 0], [0.5, 1]],
+      hills: [5, 55, 95], woods: [4, 45, 70], trees: 175, fields: 1 },
+    lake: { name: 'The Great Lake', desc: 'A lake fills the middle of the land, so the war has two fronts: north and south.',
+      river: { amp: 0.012, freq: 1, wide: 0.9, lake: 0.085 }, cross: [[0.11, 0], [0.89, 1]],
+      hills: [4, 50, 85], woods: [4, 45, 70], trees: 170, fields: 1 },
+    highlands: { name: 'Highlands', desc: 'Big hills and rocky crags no army can climb. Hold the passes between them.',
+      river: { amp: 0.035, freq: 1.6, wide: 0.8 }, cross: [[0.2, 0], [0.5, 1], [0.8, 0]],
+      hills: [8, 60, 105], woods: [2, 40, 60], trees: 110, fields: 0.7, crags: 7 },
+    marsh: { name: 'Marshes', desc: 'A wide, winding river with three fords, and bogs that slow everyone down.',
+      river: { amp: 0.05, freq: 1.9, wide: 1.15 }, cross: [[0.2, 1], [0.5, 0], [0.8, 1]],
+      hills: [1, 50, 75], woods: [2, 40, 60], trees: 120, fields: 1, marsh: 9 },
+    forest: { name: 'Old Forest', desc: 'Dense woods everywhere: slow marching, and arrows struggle under the trees.',
+      river: { amp: 0.02, freq: 1, wide: 0.85 }, cross: [[0.18, 0], [0.5, 0], [0.82, 0]],
+      hills: [3, 50, 80], woods: [11, 60, 95], trees: 460, fields: 0.8 },
+    plains: { name: 'Open Plains', desc: 'Rich farmland with little cover: more gold, and room for cavalry to charge.',
+      river: { amp: 0.015, freq: 0.8, wide: 1.25 }, cross: [[0.14, 0], [0.38, 0], [0.62, 1], [0.86, 0]],
+      hills: [2, 45, 70], woods: [0, 0, 0], trees: 45, fields: 1.4 },
+  };
+  let land = LANDS.valley, landKey = '';
+  // a different landscape from last time, unless one is asked for (?land=highlands in the address works too)
+  function pickLand(force) {
+    const keys = Object.keys(LANDS).filter(k => k !== landKey);
+    landKey = LANDS[force] ? force : keys[Math.random() * keys.length | 0];
+    land = LANDS[landKey];
+    $('landName').textContent = land.name; $('landDesc').textContent = land.desc;
+  }
+
   function baseHold(t) { return t.capital ? 40 : 20; }
 
-  function newGame() {
+  function newGame(force) {
+    pickLand(force);
     const vw = innerWidth, vh = innerHeight;
     P = vh > vw * 1.1;
     const long = clamp(Math.max(vw, vh), 1000, 1500), ratio = Math.min(vw, vh) / Math.max(vw, vh);
     const short = Math.max(long * ratio, long * 0.56);
     LA = long; LB = short;
     if (P) { W = short; H = long; } else { W = long; H = short; }
-    river = { amp: 0.028, phase: rand(0, Math.PI * 2), hw: Math.round(LA * 0.02 + 12) };
-    bridges = [{ b: LB * rand(0.22, 0.32), span: 20 }, { b: LB * rand(0.68, 0.78), span: 20 },
-      { b: LB * rand(0.46, 0.54), span: 22, ford: true }];   // a shallow ford: anyone can wade across, slowly
+    const lr = land.river;
+    river = { amp: lr.amp, freq: lr.freq, lake: lr.lake || 0, phase: rand(0, Math.PI * 2), hw: Math.round((LA * 0.02 + 12) * lr.wide) };
+    // fords are shallow: anyone can wade across, slowly
+    bridges = land.cross.map(([bn, ford]) => ford ? { b: LB * clamp(bn + rand(-0.04, 0.04), 0.08, 0.92), span: 22, ford: true }
+      : { b: LB * clamp(bn + rand(-0.05, 0.05), 0.08, 0.92), span: 20 });
 
     towns = LAYOUT.map(([name, an, bn, owner, capital]) => {
       an += rand(-0.015, 0.015); bn += rand(-0.02, 0.02);
@@ -734,10 +791,14 @@ import * as THREE from 'three';
       t.holdMax = owner < 0 ? 10 : baseHold(t); t.hold = t.holdMax;
       return t;
     });
+    for (const t of towns) {   // keep every town, and the houses around it, clear of the water
+      const b = B(t.x, t.y), c = riverA(b), a = A(t.x, t.y), need = hwAt(b) + (t.capital ? 110 : 95);
+      if (Math.abs(a - c) < need) { const p = XY(clamp(c + Math.sign(a - c) * need, 60, LA - 60), b); t.x = p.x; t.y = p.y; }
+    }
 
     trees = []; patches = [];
     for (let i = 0; i < 14; i++) patches.push({ x: rand(0, W), y: rand(0, H), r: rand(60, 160) });
-    const nearRiver = (x, y, m) => Math.abs(A(x, y) - riverA(B(x, y))) < river.hw + m;
+    const nearRiver = (x, y, m) => riverGap(x, y) < m;
     compass = { x: 54, y: H - 54 };
     // gold mines: one deep on each side, two contested near the river
     mines = [];
@@ -755,7 +816,7 @@ import * as THREE from 'three';
     // crop fields outside each town
     fields = [];
     for (const t of towns) {
-      for (let k = 0, tries = 0; k < (t.capital ? 3 : 2) && tries < 60; tries++) {
+      for (let k = 0, tries = 0, want = Math.round((t.capital ? 3 : 2) * land.fields); k < want && tries < 90; tries++) {
         const ang = rand(0, Math.PI * 2), r = t.capital ? rand(100, 128) : rand(80, 112), x = t.x + Math.cos(ang) * r, y = t.y + Math.sin(ang) * r;
         if (x < 30 || y < 30 || x > W - 30 || y > H - 30 || nearRiver(x, y, 34)) continue;
         if (towns.some(o => Math.hypot(o.x - x, o.y - y) < 72) || fields.some(f => Math.hypot(f.x - x, f.y - y) < 46) || nearMine(x, y, 50)) continue;
@@ -764,8 +825,8 @@ import * as THREE from 'three';
     }
     // hills with contour rings
     hills = [];
-    for (let tries = 0; tries < 200 && hills.length < 5; tries++) {
-      const x = rand(60, W - 60), y = rand(60, H - 60), r = rand(55, 95);
+    for (let tries = 0; tries < 300 && hills.length < land.hills[0]; tries++) {
+      const x = rand(60, W - 60), y = rand(60, H - 60), r = rand(land.hills[1], land.hills[2]);
       if (nearRiver(x, y, r + 30) || towns.some(t => Math.hypot(t.x - x, t.y - y) < r + 60) || hills.some(h => Math.hypot(h.x - x, h.y - y) < h.r + r)) continue;
       if (fields.some(f => Math.hypot(f.x - x, f.y - y) < r + 20) || nearMine(x, y, r + 30)) continue;
       const pts = Array.from({ length: 20 }, (_, i) => 1 + 0.16 * Math.sin(i * 0.9 + x) + rand(-0.06, 0.06));
@@ -783,15 +844,35 @@ import * as THREE from 'three';
       const near = towns.filter(o => sideOf(o.x, o.y) === sd).sort((p, q) => Math.hypot(p.x - e.x, p.y - e.y) - Math.hypot(q.x - e.x, q.y - e.y))[0];
       if (near) link(near, e);
     }
+    // crags: rocky outcrops nobody can cross, kept off the roads so the old ways stay open
+    crags = [];
+    const roadPts = roads.flatMap(roadCurve);
+    for (let tries = 0; tries < 400 && crags.length < (land.crags || 0); tries++) {
+      const x = rand(70, W - 70), y = rand(70, H - 70), r = rand(30, 46);
+      if (nearRiver(x, y, r + 40) || towns.some(t => Math.hypot(t.x - x, t.y - y) < r + 95) || nearMine(x, y, r + 50)) continue;
+      if (fields.some(f => Math.hypot(f.x - x, f.y - y) < r + 34) || crags.some(c => Math.hypot(c.x - x, c.y - y) < c.r + r + 50)) continue;
+      if (roadPts.some(q => Math.hypot(q.x - x, q.y - y) < r + 18) || Math.hypot(compass.x - x, compass.y - y) < r + 60) continue;
+      crags.push({ x, y, r });
+    }
+    // marshes: boggy ground that slows everyone (a road across one is a causeway, and stays quick)
+    marshes = [];
+    for (let tries = 0; tries < 400 && marshes.length < (land.marsh || 0); tries++) {
+      const x = rand(60, W - 60), y = rand(60, H - 60), r = rand(42, 72);
+      if (nearRiver(x, y, -8) || towns.some(t => Math.hypot(t.x - x, t.y - y) < r + 80) || nearMine(x, y, r + 40)) continue;
+      if (fields.some(f => Math.hypot(f.x - x, f.y - y) < r + 26) || marshes.some(m => Math.hypot(m.x - x, m.y - y) < m.r + r + 20)) continue;
+      if (hills.some(h => Math.hypot(h.x - x, h.y - y) < h.r + r) || Math.hypot(compass.x - x, compass.y - y) < r + 50) continue;
+      if (bridges.some(br => { const q = XY(riverA(br.b), br.b); return Math.hypot(q.x - x, q.y - y) < r + 70; })) continue;
+      marshes.push({ x, y, r, pts: Array.from({ length: 18 }, (_, i) => 1 + 0.18 * Math.sin(i * 1.3 + x) + rand(-0.08, 0.08)) });
+    }
     rocks = [];
     for (let tries = 0; tries < 200 && rocks.length < 22; tries++) {
       const x = rand(20, W - 20), y = rand(20, H - 20);
-      if (nearRiver(x, y, 20) || towns.some(t => Math.hypot(t.x - x, t.y - y) < 80) || fields.some(f => Math.hypot(f.x - x, f.y - y) < 36) || nearMine(x, y, 40)) continue;
+      if (nearRiver(x, y, 20) || towns.some(t => Math.hypot(t.x - x, t.y - y) < 80) || fields.some(f => Math.hypot(f.x - x, f.y - y) < 36) || nearMine(x, y, 40) || nearCrag(x, y, 8) || inMarsh(x, y)) continue;
       rocks.push({ x, y, r: rand(2.5, 5) });
     }
-    for (let w = 0, tries = 0; w < 4 && tries < 200; tries++) {   // a few proper woods, big enough to matter
-      const x = rand(80, W - 80), y = rand(80, H - 80), R = rand(45, 70);
-      if (Math.abs(A(x, y) - riverA(B(x, y))) < river.hw + R + 20) continue;
+    for (let w = 0, tries = 0; w < land.woods[0] && tries < 600; tries++) {   // proper woods, big enough to matter
+      const x = rand(80, W - 80), y = rand(80, H - 80), R = rand(land.woods[1], land.woods[2]);
+      if (nearRiver(x, y, R + 20) || nearCrag(x, y, R + 20) || marshes.some(m => Math.hypot(m.x - x, m.y - y) < m.r + R)) continue;
       if (towns.some(t => Math.hypot(t.x - x, t.y - y) < R + 70) || fields.some(f => Math.hypot(f.x - x, f.y - y) < R + 30)) continue;
       if (Math.hypot(compass.x - x, compass.y - y) < R + 40 || nearMine(x, y, R + 40) || hills.some(h => Math.hypot(h.x - x, h.y - y) < h.r + R)) continue;
       for (let k = 0; k < 26; k++) {
@@ -800,9 +881,9 @@ import * as THREE from 'three';
       }
       w++;
     }
-    for (let tries = 0; tries < 400 && trees.length < 175; tries++) {
+    for (let tries = 0; tries < 2000 && trees.length < land.trees; tries++) {
       const x = rand(20, W - 20), y = rand(20, H - 20);
-      if (Math.abs(A(x, y) - riverA(B(x, y))) < river.hw + 26) continue;
+      if (nearRiver(x, y, 26) || nearCrag(x, y, 14) || inMarsh(x, y)) continue;
       if (towns.some(t => Math.hypot(t.x - x, t.y - y) < 80)) continue;
       if (fields.some(f => Math.hypot(f.x - x, f.y - y) < 44) || Math.hypot(compass.x - x, compass.y - y) < 70 || nearMine(x, y, 45)) continue;
       if (bridges.some(br => { const p = XY(riverA(br.b), br.b); return Math.hypot(p.x - x, p.y - y) < 120; })) continue;
@@ -921,7 +1002,7 @@ import * as THREE from 'three';
     }
     bridges.forEach((br, i) => {
       if (via && br !== via) return;
-      const a = key.get('B' + i + '-1'), b = key.get('B' + i + '1'), c = river.hw * 2 / (br.ford ? 0.45 : 1) + (br.ford ? 40 : 0);
+      const a = key.get('B' + i + '-1'), b = key.get('B' + i + '1'), c = hwAt(br.b) * 2 / (br.ford ? 0.45 : 1) + (br.ford ? 40 : 0);
       edges[a].push({ to: b, cost: c }); edges[b].push({ to: a, cost: c });
     });
     const dist = new Array(N).fill(Infinity), prev = new Array(N).fill(null), done = new Array(N).fill(false);
@@ -945,6 +1026,12 @@ import * as THREE from 'three';
   }
 
   const inForest = (x, y) => forestGrid[(x / FC | 0) + (y / FC | 0) * fgw] === 1;
+  function inMarsh(x, y) {
+    for (const m of marshes) if (Math.hypot(x - m.x, (y - m.y) / 0.8) < m.r * 0.92) return true;
+    return false;
+  }
+  const MARSH_SPEED = 0.55;
+  const nearCrag = (x, y, m) => crags.some(c => Math.hypot(c.x - x, c.y - y) < c.r + m);
   function hillLevel(x, y) {   // 0 = flat ground, 3 = hilltop
     for (const h of hills) {
       const q = Math.hypot(x - h.x, (y - h.y) / 0.8) / h.r;
@@ -957,9 +1044,12 @@ import * as THREE from 'three';
   function makeField(x, y, town) {
     return { x, y, town, acc: rand(0, 1), w: rand(34, 48), h: rand(22, 30), rot: rand(-0.6, 0.6), c: Math.random() < 0.55 ? '#4d4a3c' : '#3c4535' };
   }
-  function riverPath(c) {
+  // the river as a filled shape: k times its width, plus extra on each bank
+  function riverBand(c, k = 1, extra = 0) {
     c.beginPath();
-    for (let b = -40; b <= LB + 40; b += 8) { const p = XY(riverA(b), b); if (b === -40) c.moveTo(p.x, p.y); else c.lineTo(p.x, p.y); }
+    for (let b = -40; b <= LB + 40; b += 8) { const p = XY(riverA(b) - hwAt(b) * k - extra, b); b === -40 ? c.moveTo(p.x, p.y) : c.lineTo(p.x, p.y); }
+    for (let b = LB + 40; b >= -40; b -= 8) { const p = XY(riverA(b) + hwAt(b) * k + extra, b); c.lineTo(p.x, p.y); }
+    c.closePath();
   }
   // The ground texture: everything flat that never changes during a game. Trees, rocks, bridges and buildings are 3D.
   function buildStatic() {
@@ -992,6 +1082,23 @@ import * as THREE from 'three';
       for (let o = -f.h / 2 + 5; o < f.h / 2 - 2; o += 5) { c.beginPath(); c.moveTo(-f.w / 2 + 3, o); c.lineTo(f.w / 2 - 3, o); c.stroke(); }
       c.restore();
     }
+    // marshes: dark wet ground with standing pools
+    for (const m of marshes) {
+      const blob = (k, jit) => { c.beginPath(); m.pts.forEach((q, i) => { const a = i / m.pts.length * Math.PI * 2, r = m.r * k * q * (1 + jit * Math.sin(i * 2.1 + m.x)); const x = m.x + Math.cos(a) * r, y = m.y + Math.sin(a) * r * 0.8; i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.closePath(); };
+      blob(1, 0); c.fillStyle = '#2a3330'; c.fill(); c.strokeStyle = 'rgba(120,130,90,.3)'; c.lineWidth = 1.5; c.stroke();
+      blob(0.82, 0.05); c.fillStyle = '#26302d'; c.fill();
+      for (let i = 0; i < 12; i++) {
+        const a = rand(0, Math.PI * 2), d = rand(0, m.r * 0.65), x = m.x + Math.cos(a) * d, y = m.y + Math.sin(a) * d * 0.8;
+        c.beginPath(); c.ellipse(x, y, rand(6, 15), rand(3.5, 8), rand(0, 3), 0, Math.PI * 2); c.fillStyle = '#31525f'; c.fill();
+        c.strokeStyle = 'rgba(20,26,24,.5)'; c.lineWidth = 1; c.stroke();
+      }
+    }
+    // crags stand on a skirt of broken, stony ground
+    for (const k of crags) {
+      const g = c.createRadialGradient(k.x, k.y, k.r * 0.5, k.x, k.y, k.r * 1.5);
+      g.addColorStop(0, '#2c2f2c'); g.addColorStop(1, 'rgba(44,47,44,0)');
+      c.fillStyle = g; c.beginPath(); c.arc(k.x, k.y, k.r * 1.5, 0, Math.PI * 2); c.fill();
+    }
     c.lineCap = 'round';
     for (const [col, wdt] of [['#3e423b', 8], ['#444840', 4.5]]) {
       c.strokeStyle = col; c.lineWidth = wdt;
@@ -1002,17 +1109,17 @@ import * as THREE from 'three';
     }
     // the river bed, seen through the water: sandy banks, darker towards the middle
     c.lineJoin = 'round';
-    riverPath(c); c.strokeStyle = COL.shore; c.lineWidth = river.hw * 2 + 16; c.stroke();
-    riverPath(c); c.strokeStyle = '#384039'; c.lineWidth = river.hw * 2 - 2; c.stroke();
-    riverPath(c); c.strokeStyle = '#2d3a3b'; c.lineWidth = river.hw * 1.2; c.stroke();
-    riverPath(c); c.strokeStyle = '#243238'; c.lineWidth = river.hw * 0.5; c.stroke();
+    riverBand(c, 1, 8); c.fillStyle = COL.shore; c.fill();
+    riverBand(c, 1, -1); c.fillStyle = '#384039'; c.fill();
+    riverBand(c, 0.6); c.fillStyle = '#2d3a3b'; c.fill();
+    riverBand(c, 0.25); c.fillStyle = '#243238'; c.fill();
     for (const br of bridges) {
       if (!br.ford) continue;
-      const ca = riverA(br.b);
+      const ca = riverA(br.b), hw = hwAt(br.b);
       c.fillStyle = '#4c4a40';
       c.beginPath();
-      for (let a = ca - river.hw - 4; a <= ca + river.hw + 4; a += 4) { const q = XY(a, br.b - br.span + Math.sin(a * 0.3) * 2); a === ca - river.hw - 4 ? c.moveTo(q.x, q.y) : c.lineTo(q.x, q.y); }
-      for (let a = ca + river.hw + 4; a >= ca - river.hw - 4; a -= 4) { const q = XY(a, br.b + br.span + Math.sin(a * 0.3) * 2); c.lineTo(q.x, q.y); }
+      for (let a = ca - hw - 4; a <= ca + hw + 4; a += 4) { const q = XY(a, br.b - br.span + Math.sin(a * 0.3) * 2); a === ca - hw - 4 ? c.moveTo(q.x, q.y) : c.lineTo(q.x, q.y); }
+      for (let a = ca + hw + 4; a >= ca - hw - 4; a -= 4) { const q = XY(a, br.b + br.span + Math.sin(a * 0.3) * 2); c.lineTo(q.x, q.y); }
       c.closePath(); c.fill();
     }
     // compass rose
@@ -1341,6 +1448,7 @@ import * as THREE from 'three';
       let tx, ty, spd = SPEED * K_SPEED[u.kind] * (u.boost > 0 ? 1.5 : 1);
       if (onRoad(u.x, u.y)) spd *= ROAD_SPEED;
       else if (inForest(u.x, u.y)) spd *= 0.65;
+      else if (inMarsh(u.x, u.y)) spd *= MARSH_SPEED;
       else if (onFord(u.x, u.y)) spd *= 0.45;
       if (u.enemy) {
         const e = u.enemy, dx = e.x - u.x, dy = e.y - u.y, d = Math.hypot(dx, dy) || 1;
@@ -1357,7 +1465,17 @@ import * as THREE from 'three';
         [tx, ty] = nav(u.x, u.y, g.x, g.y);
         if (g.hold) { const d = Math.hypot(g.x - u.x, g.y - u.y); if (d < 10) spd *= d / 10; }
       }
-      const dx = tx - u.x, dy = ty - u.y, dl = Math.hypot(dx, dy) || 1;
+      let dx = tx - u.x, dy = ty - u.y;
+      const dl = Math.hypot(dx, dy) || 1;
+      for (const c of crags) {   // a crag in the way: turn along its face, on whichever side the goal lies
+        const ox = c.x - u.x, oy = c.y - u.y, od = Math.hypot(ox, oy) || 1;
+        if (od > c.r + 30 || od > dl + c.r) continue;
+        const ux = ox / od, uy = oy / od, along = (dx * ux + dy * uy) / dl;
+        if (along <= 0 || Math.abs(dx * oy - dy * ox) / dl > c.r + 6) continue;
+        let px = dx / dl - along * ux, py = dy / dl - along * uy, pl = Math.hypot(px, py);
+        if (pl < 0.05) { const s = u.id % 2 ? 1 : -1; px = -uy * s; py = ux * s; pl = 1; }
+        dx = px / pl * dl; dy = py / pl * dl;
+      }
       const dvx = dx / dl * spd + sx * 55, dvy = dy / dl * spd + sy * 55;
       u.vx += (dvx - u.vx) * 0.18; u.vy += (dvy - u.vy) * 0.18;
       u.x += u.vx * dt; u.y += u.vy * dt;
@@ -1428,7 +1546,7 @@ import * as THREE from 'three';
 
   // ---------- red AI: gathers at a bridge, hunts weak towns, sometimes feints ----------
   const redSide = () => -blueSide();
-  function stagingPoint(br) { return XY(riverA(br.b) + redSide() * (river.hw + 70), br.b); }
+  function stagingPoint(br) { return XY(riverA(br.b) + redSide() * (hwAt(br.b) + 70), br.b); }
   function pickTarget(from) {
     let best = null, bs = Infinity;
     for (const o of towns) {
@@ -1556,7 +1674,7 @@ import * as THREE from 'three';
   const RED_ORDER = ['farm', 'tower', 'barracks', 'fort', 'farm', 'tower', 'fort', 'barracks'];
   function aiSpotOk(p, side) {
     if (p.x < 30 || p.y < 30 || p.x > W - 30 || p.y > H - 30) return false;
-    if (Math.abs(A(p.x, p.y) - riverA(B(p.x, p.y))) < river.hw + 14) return false;
+    if (riverGap(p.x, p.y) < 14) return false;
     if (towns.some(t => Math.hypot(t.x - p.x, t.y - p.y) < 55) || structs.some(st => Math.hypot(st.x - p.x, st.y - p.y) < 40)) return false;
     if (fields.some(f => Math.hypot(f.x - p.x, f.y - p.y) < 40) || mines.some(m => Math.hypot(m.x - p.x, m.y - p.y) < 34)) return false;
     return sideOf(p.x, p.y) === side || towns.some(t => t.owner === 1 && Math.hypot(t.x - p.x, t.y - p.y) < 160);
@@ -1604,9 +1722,9 @@ import * as THREE from 'three';
   function aiBuild() {
     for (let tries = 0; tries < 20; tries++) {
       const br = bridges[Math.random() * bridges.length | 0];
-      const p = XY(riverA(br.b) + redSide() * (river.hw + rand(80, 140)), br.b + rand(-60, 60));
+      const p = XY(riverA(br.b) + redSide() * (hwAt(br.b) + rand(80, 140)), br.b + rand(-60, 60));
       if (p.x < 20 || p.y < 20 || p.x > W - 20 || p.y > H - 20) continue;
-      if (Math.abs(A(p.x, p.y) - riverA(B(p.x, p.y))) < river.hw + 10) continue;
+      if (riverGap(p.x, p.y) < 10) continue;
       if (towns.some(t => Math.hypot(t.x - p.x, t.y - p.y) < 40) || structs.some(s => Math.hypot(s.x - p.x, s.y - p.y) < 40)) continue;
       structs.push({ type: week % 2 ? 'fort' : 'tower', x: p.x, y: p.y, team: 1, cd: 0 });
       return;
@@ -1662,17 +1780,19 @@ import * as THREE from 'three';
       const b = B(p.x, p.y);
       if (b < 50 || b > LB - 50) return 'Too close to the map edge';
       if (bridges.some(br => Math.abs(br.b - b) < 90)) return 'Too close to another bridge';
+      if (hwAt(b) > river.hw * 1.25) return 'Too wide to bridge here';
       return null;
     }
     if (kind === 'barracks') return townAt(p.x, p.y, 30, 0) ? null : 'Barracks go on one of your towns';
     if (kind === 'farm') {
-      if (Math.abs(A(p.x, p.y) - riverA(B(p.x, p.y))) < river.hw + 24) return 'Too close to the water';
+      if (riverGap(p.x, p.y) < 24) return 'Too close to the water';
       if (!towns.some(t => t.owner === 0 && Math.hypot(t.x - p.x, t.y - p.y) < 150)) return 'Farms go next to one of your towns';
       if (towns.some(t => Math.hypot(t.x - p.x, t.y - p.y) < 60)) return 'Too close to the town';
       if (fields.some(f => Math.hypot(f.x - p.x, f.y - p.y) < 40) || mines.some(m => Math.hypot(m.x - p.x, m.y - p.y) < 50)) return 'Too close to other fields';
       return null;
     }
-    if (Math.abs(A(p.x, p.y) - riverA(B(p.x, p.y))) < river.hw + 8) return 'Too close to the water';
+    if (riverGap(p.x, p.y) < 8) return 'Too close to the water';
+    if (crags.some(c => Math.hypot(c.x - p.x, c.y - p.y) < c.r + 12)) return 'Too close to the rocks';
     const own = sideOf(p.x, p.y) === blueSide() || towns.some(t => t.owner === 0 && Math.hypot(t.x - p.x, t.y - p.y) < 160);
     if (!own) return 'Build on your side of the river or near your towns';
     if (towns.some(t => Math.hypot(t.x - p.x, t.y - p.y) < 34)) return 'Too close to a town';
@@ -2069,6 +2189,7 @@ import * as THREE from 'three';
       const o = f.town ? f.town.owner : -1;
       return { title: 'Farm', own: OWN(o), lines: [f.town ? `Belongs to ${f.town.name}.` : '', o === 0 ? `+${Math.round(FARM_RATE * WEEK)} gold a week while you hold ${f.town.name}.` : o === 1 ? `Pays the enemy. Take ${f.town.name} to make it yours.` : `Fallow. Capture ${f.town.name} to work it.`].filter(Boolean) };
     }
+    for (const c of crags) if (Math.hypot(c.x - x, c.y - y) < c.r + 6) return { title: 'Crag', lines: ['Sheer rock: no army can cross it. Soldiers march around.'] };
     if (inBand(x, y)) {
       const br = bridgeAt(B(x, y));
       if (br && br.ford) return { title: 'Ford', lines: ['Shallow water: anyone can wade across at 45% speed.'] };
@@ -2079,6 +2200,7 @@ import * as THREE from 'three';
     let title = 'Open ground';
     if (onRoad(x, y)) { title = 'Road'; lines.push('Troops march 40% faster here.'); }
     else if (inForest(x, y)) { title = 'Woods'; lines.push('Troops move 35% slower, but arrows do half damage.'); }
+    else if (inMarsh(x, y)) { title = 'Marsh'; lines.push(`Boggy ground: troops move ${Math.round((1 - MARSH_SPEED) * 100)}% slower.`); }
     const h = hillLevel(x, y);
     if (h) {
       if (title === 'Open ground') title = 'Hill';
@@ -2217,6 +2339,7 @@ import * as THREE from 'three';
     stats.train[0] = D().blueTrain; stats.train[1] = D().redTrain;
   };
   renderDiff();
+  $('newMap').onclick = () => newGame();
   // The "how to win" box folds out from a checkbox; the choice is remembered.
   try { $('showTips').checked = localStorage.getItem('frontlines-show-tips') === '1'; } catch (e) {}
   $('diffTips').hidden = !$('showTips').checked;
@@ -2379,7 +2502,7 @@ import * as THREE from 'three';
   }
   function groundAt(x, y) {
     let h = hillHeight(x, y);
-    const d = Math.abs(A(x, y) - riverA(B(x, y))), hw = river.hw;
+    const d = Math.abs(A(x, y) - riverA(B(x, y))), hw = hwAt(B(x, y));
     if (d < hw + 12) {
       const br = bridgeAt(B(x, y));
       const bed = br && br.ford ? FORD_Y : lerp(BED_Y, -4, (d / hw) ** 2);
@@ -2388,7 +2511,7 @@ import * as THREE from 'three';
     return h;
   }
   function deckAt(x, y) {
-    if (Math.abs(A(x, y) - riverA(B(x, y))) > river.hw + 10) return false;
+    if (riverGap(x, y) > 10) return false;
     const br = bridgeAt(B(x, y));
     return !!br && !br.ford;
   }
@@ -2397,9 +2520,9 @@ import * as THREE from 'three';
   function decalAt(x, y) { return (deckAt(x, y) ? DECK_Y : Math.max(groundAt(x, y), WATER_Y)) + 0.12; }
 
   function riverDecalGeometry() {
-    const pos = [], uv = [], idx = [], hw = river.hw, n = 6;
+    const pos = [], uv = [], idx = [], n = 6;
     for (let b = -6, i = 0; b <= LB + 6; b += 3, i++) {
-      const bb = clamp(b, 0, LB), a = riverA(bb);
+      const bb = clamp(b, 0, LB), a = riverA(bb), hw = hwAt(bb);
       for (let j = 0; j <= n; j++) {
         const p = XY(clamp(a - hw + 2 * hw * j / n, 0, LA), bb);
         pos.push(p.x, decalAt(p.x, p.y), p.y); uv.push(p.x / W, 1 - p.y / H);
@@ -2449,9 +2572,9 @@ import * as THREE from 'three';
     return g;
   }
   function riverGeometry() {
-    const pos = [], uv = [], idx = [], hw = river.hw + 4;
+    const pos = [], uv = [], idx = [];
     for (let b = -10, i = 0; b <= LB + 10; b += 6, i++) {
-      const bb = Math.min(b, LB), a = riverA(bb);
+      const bb = Math.min(b, LB), a = riverA(bb), hw = hwAt(clamp(bb, 0, LB)) + 4;
       for (const s of [-1, 1]) { const p = XY(clamp(a + s * hw, 0, LA), clamp(bb, 0, LB)); pos.push(p.x, WATER_Y, p.y); uv.push(p.x / 70, p.y / 70); }
       if (i) { const k = i * 2; idx.push(k - 2, k - 1, k, k, k - 1, k + 1); }
     }
@@ -2556,28 +2679,51 @@ import * as THREE from 'three';
     const bushes = [];
     for (let tries = 0; tries < 900 && bushes.length < 90; tries++) {
       const x = rand(15, W - 15), y = rand(15, H - 15);
-      if (Math.abs(A(x, y) - riverA(B(x, y))) < river.hw + 16 || onRoad(x, y)) continue;
+      if (riverGap(x, y) < 16 || onRoad(x, y) || nearCrag(x, y, 10) || inMarsh(x, y)) continue;
       if (towns.some(t => Math.hypot(t.x - x, t.y - y) < (t.capital ? 80 : 60)) || fields.some(f => Math.hypot(f.x - x, f.y - y) < 32) || mines.some(m => Math.hypot(m.x - x, m.y - y) < 40)) continue;
       if (Math.hypot(compass.x - x, compass.y - y) < 40) continue;
       bushes.push({ x, y, r: rand(1.8, 3.4) });
     }
     world.add(instanced(GEO.canopy, mat('#ffffff'), bushes, (b, d, c) => { d.position.set(b.x, groundAt(b.x, b.y) + b.r * 0.4, b.y); d.scale.set(b.r * 1.3, b.r, b.r * 1.3); d.rotation.set(0, rand(0, 6), 0); tint(c, '#46583e', 0.05); }));
+    // crags: a heap of big boulders round a tall spire, each one a little different in shade
+    const boulders = [];
+    for (const k of crags) {
+      boulders.push({ x: k.x, y: k.y, s: k.r * 0.62, h: k.r * 1.5, rot: rand(0, 6) }, { x: k.x + k.r * 0.2, y: k.y - k.r * 0.15, s: k.r * 0.4, h: k.r * 1.9, rot: rand(0, 6) });
+      for (let i = 0, n = 7 + (k.r / 6 | 0); i < n; i++) {
+        const a = i / n * Math.PI * 2 + rand(-0.3, 0.3), d = k.r * rand(0.45, 0.78), s = k.r * rand(0.26, 0.42);
+        boulders.push({ x: k.x + Math.cos(a) * d, y: k.y + Math.sin(a) * d, s, h: s * rand(0.9, 1.6), rot: rand(0, 6) });
+      }
+    }
+    world.add(instanced(GEO.rock, mat('#ffffff'), boulders, (r, d, c) => {
+      d.position.set(r.x, groundAt(r.x, r.y) + r.h * 0.35, r.y); d.scale.set(r.s, r.h, r.s * 0.9); d.rotation.set(rand(-0.2, 0.2), r.rot, rand(-0.2, 0.2));
+      tint(c, '#5f605a', 0.06);
+    }));
+    // marsh reeds: thin tufts dotted over the bog
+    const reeds = [];
+    for (const m of marshes) for (let i = 0; i < 40; i++) {
+      const a = rand(0, Math.PI * 2), d = Math.sqrt(Math.random()) * m.r * 0.85, x = m.x + Math.cos(a) * d, y = m.y + Math.sin(a) * d * 0.8;
+      for (let j = 0; j < 3; j++) reeds.push({ x: x + rand(-2.5, 2.5), y: y + rand(-2.5, 2.5), h: rand(4, 8) });
+    }
+    world.add(instanced(GEO.pine, mat('#ffffff'), reeds, (r, d, c) => {
+      d.position.set(r.x, groundAt(r.x, r.y), r.y); d.scale.set(0.55, r.h, 0.55); d.rotation.set(rand(-0.25, 0.25), 0, rand(-0.25, 0.25));
+      tint(c, '#76804f', 0.07);
+    }));
     world.add(instanced(GEO.rock, mat('#ffffff'), rocks, (r, d, c) => { d.position.set(r.x, groundAt(r.x, r.y) + r.r * 0.2, r.y); d.scale.set(r.r, r.r * 0.6, r.r * 0.8); d.rotation.set(0, rand(0, 6), 0); tint(c, '#6b6c66', 0.04); }));
 
     // bridges: a stone deck with parapets and piers; the ford gets stepping stones
     const stones = [];
     for (const br of bridges) {
-      const ca = riverA(br.b);
+      const ca = riverA(br.b), hw = hwAt(br.b);
       if (br.ford) {
-        for (let a = ca - river.hw + 5, i = 0; a < ca + river.hw - 2; a += 9, i++) for (const off of [-9, 0, 9]) stones.push(XY(a + (i % 2) * 3, br.b + off + Math.sin(a + off) * 2));
+        for (let a = ca - hw + 5, i = 0; a < ca + hw - 2; a += 9, i++) for (const off of [-9, 0, 9]) stones.push(XY(a + (i % 2) * 3, br.b + off + Math.sin(a + off) * 2));
         continue;
       }
-      const len = river.hw * 2 + 24, wid = br.span * 2, c = XY(ca, br.b), g = new THREE.Group();
+      const len = hw * 2 + 24, wid = br.span * 2, c = XY(ca, br.b), g = new THREE.Group();
       g.position.set(c.x, 0, c.y); if (P) g.rotation.y = Math.PI / 2;
       // a timber deck and railings in warm, weathered wood, standing on grey stone piers
       put(g, GEO.box, mat(DECK), 0, DECK_Y - 2.4, 0, len, 2.4, wid);
       for (const s of [-1, 1]) put(g, GEO.box, mat(RAIL), 0, DECK_Y, s * (wid / 2 - 1.2), len, 1.8, 2.4);
-      for (const s of [-0.5, 0, 0.5]) put(g, GEO.box, mat(STONE2), s * river.hw * 1.3, BED_Y, 0, 5, DECK_Y - 2.4 - BED_Y, wid - 6);
+      for (const s of [-0.5, 0, 0.5]) put(g, GEO.box, mat(STONE2), s * hw * 1.3, BED_Y, 0, 5, DECK_Y - 2.4 - BED_Y, wid - 6);
       for (let x = -len / 2 + 4; x < len / 2 - 2; x += 4.5) put(g, GEO.box, mat(SEAM), x, DECK_Y - 0.02, 0, 0.5, 0.06, wid - 5);
       world.add(mergeGroup(g));
     }
@@ -3008,7 +3154,7 @@ import * as THREE from 'three';
       ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, c.y, c.r, c.r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
     }
     ctx.globalCompositeOperation = 'destination-out';   // no territory tint on open water
-    riverPath(ctx); ctx.lineWidth = river.hw * 2; ctx.lineCap = 'butt'; ctx.stroke();
+    riverBand(ctx); ctx.fill();
     ctx.globalCompositeOperation = 'source-over';
 
     // lamplight: a warm pool on the ground around every lived-in town, flickering a little
@@ -3313,7 +3459,7 @@ import * as THREE from 'three';
     }
     else if (armed === 'bridge') {
       const b = B(ghost.x, ghost.y), ca = riverA(b);
-      const p0 = XY(ca - river.hw - 10, b - 20), p1 = XY(ca + river.hw + 10, b + 20);
+      const p0 = XY(ca - hwAt(b) - 10, b - 20), p1 = XY(ca + hwAt(b) + 10, b + 20);
       ctx.globalAlpha = 0.6; ctx.fillStyle = ok ? COL.bridge : COL.light[1]; ctx.strokeStyle = col; ctx.lineWidth = 2;
       rr(ctx, Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.abs(p1.x - p0.x), Math.abs(p1.y - p0.y), 6); ctx.fill(); ctx.stroke();
       ctx.globalAlpha = 1;
@@ -3423,11 +3569,16 @@ import * as THREE from 'three';
         return toScreen(T.x + side * dist, T.y, 0);
       },
       owner: n => town(n).owner,
+      land: () => landKey,
+      newMap: k => { newGame(k); return landKey; },
+      dry: () => towns.every(t => riverGap(t.x, t.y) > 60) && units.every(u => u.dead || !isWater(u.x, u.y) || onFord(u.x, u.y)),
+      onCrag: () => units.filter(u => !u.dead && crags.some(c => Math.hypot(c.x - u.x, c.y - u.y) < c.r - 1)).length,
+      terrain: () => ({ land: landKey, crags: crags.length, marshes: marshes.length, crossings: bridges.length, mid: Math.round(hwAt(LB / 2)), hw: river.hw }),
       state: () => state,
     };
   }
 
-  newGame();
+  newGame(new URLSearchParams(location.search).get('land'));
   requestAnimationFrame(frame);
 })();
 </script>
