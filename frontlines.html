@@ -635,7 +635,7 @@ import * as THREE from 'three';
 
   // ---------- world ----------
   let W, H, P, LA, LB, dpr = 1, bg = null;
-  let river, bridges, towns, units, deaths, puffs, trees, patches;
+  let lines = [], bridges, towns, units, deaths, puffs, trees, patches;
   let scars = [], waves = [], ripples = [], fields = [], hills = [], roads = [], rocks = [], crags = [], marshes = [], compass = { x: 0, y: 0 };
   let state = 'intro', paused = false, speed = 1, time = 0, week = 1, weekT = 0, aiT = 6, ink = 0;
   let uid = 0, routeSeq = 0, frameNo = 0, routesDrawn = 0;
@@ -672,50 +672,67 @@ import * as THREE from 'three';
   const XY = (a, b) => P ? { x: b, y: a } : { x: a, y: b };
   const blueSide = () => P ? 1 : -1;
 
-  function riverA(b) { return LA * (0.5 + river.amp * Math.sin(b / LB * Math.PI * 2 * river.freq + river.phase)); }
-  // half the river's width at b: on the Great Lake it swells into a lake in the middle of the board
-  function hwAt(b) {
-    if (!river.lake) return river.hw;
+  // Barriers run between the two kingdoms along the b axis: rivers, crossed at bridges and fords, and
+  // mountain ranges, crossed at passes. They cut the board into strips (regions), numbered from a = 0.
+  // Each crossing in bridges knows its barrier (line); a map can have none, one or two barriers.
+  function lineA(L, b) { return LA * (L.c + L.amp * Math.sin(b / LB * Math.PI * 2 * L.freq + L.phase)); }
+  // half a barrier's width at b: on the Great Lake the river swells into a lake in the middle of the board
+  function hwAt(L, b) {
+    if (!L.lake) return L.hw;
     const x = (b / LB - 0.5) / 0.22;
-    return river.hw + (x * x < 1 ? river.lake * LA * (1 - x * x) ** 2 : 0);
+    return L.hw + (x * x < 1 ? L.lake * LA * (1 - x * x) ** 2 : 0);
   }
-  // how far (x,y) is from the water's edge; negative in the water
-  function riverGap(x, y) { const b = B(x, y); return Math.abs(A(x, y) - riverA(b)) - hwAt(b); }
-  function sideOf(x, y) { return A(x, y) < riverA(B(x, y)) ? -1 : 1; }
-  function bridgeAt(b) { for (const br of bridges) if (Math.abs(b - br.b) < br.span) return br; return null; }
-  function inBand(x, y) { return riverGap(x, y) < 0; }
-  function onBridge(x, y) { return inBand(x, y) && !!bridgeAt(B(x, y)); }
-  function isWater(x, y) { return inBand(x, y) && !bridgeAt(B(x, y)); }
-  function bridgeEnd(br, s) { return XY(riverA(br.b) + s * (hwAt(br.b) + 14), br.b); }
+  function lineGap(L, x, y) { const b = B(x, y); return Math.abs(A(x, y) - lineA(L, b)) - hwAt(L, b); }
+  // how far (x,y) is from the nearest river bank or mountain foot; negative inside one
+  function riverGap(x, y) { let g = 1e9; for (const L of lines) g = Math.min(g, lineGap(L, x, y)); return g; }
+  function bandAt(x, y) { for (const L of lines) if (lineGap(L, x, y) < 0) return L; return null; }
+  function regionOf(x, y) { const a = A(x, y), b = B(x, y); let r = 0; for (const L of lines) if (a > lineA(L, b)) r++; return r; }
+  // which kingdom's half (x,y) is in: the river's bank on a one-river map, otherwise the middle of the board
+  function sideOf(x, y) { return A(x, y) < (lines.length === 1 ? lineA(lines[0], B(x, y)) : LA / 2) ? -1 : 1; }
+  // which side of barrier L (x,y) is on
+  function sideOfLine(L, x, y) { return A(x, y) < lineA(L, B(x, y)) ? -1 : 1; }
+  function crossingAt(L, b) { for (const br of bridges) if (br.line === L && Math.abs(b - br.b) < br.span) return br; return null; }
+  function crossingHere(x, y) { const L = bandAt(x, y); return L ? crossingAt(L, B(x, y)) : null; }
+  function onBridge(x, y) { return !!crossingHere(x, y); }
+  function isWater(x, y) { const L = bandAt(x, y); return !!L && L.kind === 'water' && !crossingAt(L, B(x, y)); }
+  // water or mountainside: somewhere nobody can stand
+  function blockedAt(x, y) { const L = bandAt(x, y); return L && !crossingAt(L, B(x, y)) ? L.kind : null; }
+  function bridgeEnd(br, s) { return XY(lineA(br.line, br.b) + s * (hwAt(br.line, br.b) + 14), br.b); }
 
-  function bestBridge(x0, y0, x1, y1) {
-    const s0 = sideOf(x0, y0), s1 = sideOf(x1, y1);
-    let best = bridges[0], bd = Infinity;
+  // the next barrier between two points, or null when nothing is in the way
+  function nextLine(x0, y0, x1, y1) { const r0 = regionOf(x0, y0), r1 = regionOf(x1, y1); return r0 === r1 ? null : lines[r1 > r0 ? r0 : r0 - 1]; }
+  // the best way over barrier L (by default the next one) when going from (x0,y0) towards (x1,y1)
+  function bestBridge(x0, y0, x1, y1, L = nextLine(x0, y0, x1, y1)) {
+    if (!L) return null;
+    const s0 = sideOfLine(L, x0, y0);
+    let best = null, bd = Infinity;
     for (const br of bridges) {
-      const en = bridgeEnd(br, s0), ex = bridgeEnd(br, s1);
+      if (br.line !== L) continue;
+      const en = bridgeEnd(br, s0), ex = bridgeEnd(br, -s0);
       const d = Math.hypot(en.x - x0, en.y - y0) + Math.hypot(x1 - ex.x, y1 - ex.y) + (br.ford ? 90 : 0);
       if (d < bd) { bd = d; best = br; }
     }
     return best;
   }
 
-  // Where should a unit at (x,y) head to reach (tx,ty)? Routes around the river via the best bridge.
+  // Where should a unit at (x,y) head to reach (tx,ty)? Over each barrier in turn, by its best crossing.
   function nav(x, y, tx, ty) {
-    const s0 = sideOf(x, y), s1 = sideOf(tx, ty);
-    if (s0 === s1 || onBridge(x, y)) return [tx, ty];
-    const br = bestBridge(x, y, tx, ty);
-    const en = bridgeEnd(br, s0);
-    if (Math.hypot(en.x - x, en.y - y) < 22) { const ex = bridgeEnd(br, s1); return [ex.x, ex.y]; }
+    if (onBridge(x, y)) return [tx, ty];
+    const L = nextLine(x, y, tx, ty), br = L && bestBridge(x, y, tx, ty, L);
+    if (!br) return [tx, ty];
+    const s0 = sideOfLine(L, x, y), en = bridgeEnd(br, s0);
+    if (Math.hypot(en.x - x, en.y - y) < 22) { const ex = bridgeEnd(br, -s0); return [ex.x, ex.y]; }
     return [en.x, en.y];
   }
 
-  // River is solid except on bridges; bridge rails keep units on the deck.
+  // Rivers and mountains are solid except at their crossings; bridge rails keep units on the deck.
   function constrain(u) {
     let a = A(u.x, u.y), b = B(u.x, u.y);
-    const c = riverA(b), d = a - c, hw = hwAt(b);
-    if (Math.abs(d) < hw) {
+    for (const L of lines) {
+      const c = lineA(L, b), d = a - c, hw = hwAt(L, b);
+      if (Math.abs(d) >= hw) continue;
       let near = null;
-      for (const br of bridges) if (Math.abs(b - br.b) < br.span + 10) { near = br; break; }
+      for (const br of bridges) if (br.line === L && Math.abs(b - br.b) < br.span + 10) { near = br; break; }
       if (near) { if (Math.abs(b - near.b) > near.span - 3) b = near.b + Math.sign(b - near.b) * (near.span - 3); }
       else a = c + (d < 0 ? -1 : 1) * hw;
     }
@@ -735,27 +752,39 @@ import * as THREE from 'three';
   ];
 
   // Landscapes: every game is dealt one, so the shape and character of the land change from game to game.
-  // river: how far it bends (amp), how many bends (freq), width (wide, a multiple) and a lake in the middle
-  // (lake, extra half-width as a share of the board). cross: the crossings, [position along the river, ford?].
+  // lines: the barriers between the kingdoms. kind: 'water' (a river) or 'ridge' (mountains); c: where it runs
+  // (0..1 across the board); amp and freq: how far and how often it bends; wide: its width (a multiple);
+  // lake: extra half-width in the middle; high: how tall the mountains are. cross: its crossings, as
+  // [position along it 0..1, type] with type 0 a bridge, 1 a ford, 2 a mountain pass.
   // hills and woods: [how many, smallest radius, largest radius]. fields: a multiple of the usual farms per town.
+  const RIVER = (o, cross) => ({ kind: 'water', c: 0.5, amp: 0.028, freq: 1.15, wide: 1, ...o, cross });
   const LANDS = {
     valley: { name: 'River Valley', desc: 'A gentle river with two bridges and a ford between them.',
-      river: { amp: 0.028, freq: 1.15, wide: 1 }, cross: [[0.27, 0], [0.73, 0], [0.5, 1]],
+      lines: [RIVER({}, [[0.27, 0], [0.73, 0], [0.5, 1]])],
       hills: [5, 55, 95], woods: [4, 45, 70], trees: 175, fields: 1 },
     lake: { name: 'The Great Lake', desc: 'A lake fills the middle of the land, so the war has two fronts: north and south.',
-      river: { amp: 0.012, freq: 1, wide: 0.9, lake: 0.085 }, cross: [[0.11, 0], [0.89, 1]],
+      lines: [RIVER({ amp: 0.012, freq: 1, wide: 0.9, lake: 0.085 }, [[0.11, 0], [0.89, 1]])],
       hills: [4, 50, 85], woods: [4, 45, 70], trees: 170, fields: 1 },
+    tworivers: { name: 'Two Rivers', desc: 'Two rivers cut the land in three. The towns on the strip between them are up for grabs.',
+      lines: [RIVER({ c: 0.34, amp: 0.02, freq: 1.3, wide: 0.8 }, [[0.2, 0], [0.55, 1], [0.86, 0]]),
+        RIVER({ c: 0.66, amp: 0.02, freq: 1.1, wide: 0.8 }, [[0.14, 0], [0.45, 1], [0.8, 0]])],
+      hills: [3, 45, 75], woods: [4, 40, 60], trees: 150, fields: 1 },
+    mountains: { name: 'Mountain Pass', desc: 'No river and no bridges: a wall of tall mountains, with three passes through it.',
+      lines: [{ kind: 'ridge', c: 0.5, amp: 0.03, freq: 1.2, wide: 1.9, high: 64, cross: [[0.18, 2], [0.5, 2], [0.82, 2]] }],
+      hills: [4, 50, 85], woods: [4, 45, 70], trees: 180, fields: 1 },
+    open: { name: 'Open Border', desc: 'No river, no mountains, no bridges: nothing at all stands between the two kingdoms.',
+      lines: [], hills: [5, 55, 95], woods: [5, 45, 70], trees: 190, fields: 1 },
     highlands: { name: 'Highlands', desc: 'Big hills and rocky crags no army can climb. Hold the passes between them.',
-      river: { amp: 0.035, freq: 1.6, wide: 0.8 }, cross: [[0.2, 0], [0.5, 1], [0.8, 0]],
+      lines: [RIVER({ amp: 0.035, freq: 1.6, wide: 0.8 }, [[0.2, 0], [0.5, 1], [0.8, 0]])],
       hills: [8, 60, 105], woods: [2, 40, 60], trees: 110, fields: 0.7, crags: 7 },
-    marsh: { name: 'Marshes', desc: 'A wide, winding river with three fords, and bogs that slow everyone down.',
-      river: { amp: 0.05, freq: 1.9, wide: 1.15 }, cross: [[0.2, 1], [0.5, 0], [0.8, 1]],
+    marsh: { name: 'Marshes', desc: 'A wide, winding river with two fords, and bogs that slow everyone down.',
+      lines: [RIVER({ amp: 0.05, freq: 1.9, wide: 1.15 }, [[0.2, 1], [0.5, 0], [0.8, 1]])],
       hills: [1, 50, 75], woods: [2, 40, 60], trees: 120, fields: 1, marsh: 9 },
     forest: { name: 'Old Forest', desc: 'Dense woods everywhere: slow marching, and arrows struggle under the trees.',
-      river: { amp: 0.02, freq: 1, wide: 0.85 }, cross: [[0.18, 0], [0.5, 0], [0.82, 0]],
+      lines: [RIVER({ amp: 0.02, freq: 1, wide: 0.85 }, [[0.18, 0], [0.5, 0], [0.82, 0]])],
       hills: [3, 50, 80], woods: [11, 60, 95], trees: 460, fields: 0.8 },
     plains: { name: 'Open Plains', desc: 'Rich farmland with little cover: more gold, and room for cavalry to charge.',
-      river: { amp: 0.015, freq: 0.8, wide: 1.25 }, cross: [[0.14, 0], [0.38, 0], [0.62, 1], [0.86, 0]],
+      lines: [RIVER({ amp: 0.015, freq: 0.8, wide: 1.25 }, [[0.14, 0], [0.38, 0], [0.62, 1], [0.86, 0]])],
       hills: [2, 45, 70], woods: [0, 0, 0], trees: 45, fields: 1.4 },
   };
   let land = LANDS.valley, landKey = '';
@@ -777,11 +806,10 @@ import * as THREE from 'three';
     const short = Math.max(long * ratio, long * 0.56);
     LA = long; LB = short;
     if (P) { W = short; H = long; } else { W = long; H = short; }
-    const lr = land.river;
-    river = { amp: lr.amp, freq: lr.freq, lake: lr.lake || 0, phase: rand(0, Math.PI * 2), hw: Math.round((LA * 0.02 + 12) * lr.wide) };
-    // fords are shallow: anyone can wade across, slowly
-    bridges = land.cross.map(([bn, ford]) => ford ? { b: LB * clamp(bn + rand(-0.04, 0.04), 0.08, 0.92), span: 22, ford: true }
-      : { b: LB * clamp(bn + rand(-0.05, 0.05), 0.08, 0.92), span: 20 });
+    lines = land.lines.map(l => ({ ...l, lake: l.lake || 0, phase: rand(0, Math.PI * 2), hw: Math.round((LA * 0.02 + 12) * l.wide) }));
+    // fords are shallow: anyone can wade across, slowly. Passes are gaps in the mountains.
+    bridges = lines.flatMap(L => L.cross.map(([bn, type]) => ({ line: L, b: LB * clamp(bn + rand(-0.04, 0.04), 0.08, 0.92),
+      span: type === 2 ? 30 : type === 1 ? 22 : 20, ford: type === 1, pass: type === 2 })));
 
     towns = LAYOUT.map(([name, an, bn, owner, capital]) => {
       an += rand(-0.015, 0.015); bn += rand(-0.02, 0.02);
@@ -791,8 +819,8 @@ import * as THREE from 'three';
       t.holdMax = owner < 0 ? 10 : baseHold(t); t.hold = t.holdMax;
       return t;
     });
-    for (const t of towns) {   // keep every town, and the houses around it, clear of the water
-      const b = B(t.x, t.y), c = riverA(b), a = A(t.x, t.y), need = hwAt(b) + (t.capital ? 110 : 95);
+    for (const t of towns) for (const L of lines) {   // keep every town, and the houses around it, clear of rivers and mountains
+      const b = B(t.x, t.y), c = lineA(L, b), a = A(t.x, t.y), need = hwAt(L, b) + (t.capital ? 110 : 95);
       if (Math.abs(a - c) < need) { const p = XY(clamp(c + Math.sign(a - c) * need, 60, LA - 60), b); t.x = p.x; t.y = p.y; }
     }
 
@@ -807,7 +835,7 @@ import * as THREE from 'three';
         const bn = rand(0.1, 0.9), a = blueSide() < 0 ? an * LA : (1 - an) * LA, p = XY(a + rand(-20, 20), bn * LB);
         if (p.x < 40 || p.y < 40 || p.x > W - 40 || p.y > H - 40 || nearRiver(p.x, p.y, 40)) continue;
         if (towns.some(t => Math.hypot(t.x - p.x, t.y - p.y) < 110) || mines.some(m => Math.hypot(m.x - p.x, m.y - p.y) < 220)) continue;
-        if (bridges.some(br => { const q = XY(riverA(br.b), br.b); return Math.hypot(q.x - p.x, q.y - p.y) < 90; })) continue;
+        if (bridges.some(br => { const q = XY(lineA(br.line, br.b), br.b); return Math.hypot(q.x - p.x, q.y - p.y) < 90; })) continue;
         mines.push({ x: p.x, y: p.y, owner: -1, acc: 0, glow: 0 });
         break;
       }
@@ -836,12 +864,12 @@ import * as THREE from 'three';
     roads = [];
     const link = (a, b) => { if (!roads.some(r => (r.a === a && r.b === b) || (r.a === b && r.b === a))) roads.push({ a, b, bend: rand(-0.12, 0.12) }); };
     for (const t of towns) {
-      towns.filter(o => o !== t && sideOf(o.x, o.y) === sideOf(t.x, t.y))
+      towns.filter(o => o !== t && regionOf(o.x, o.y) === regionOf(t.x, t.y))
         .sort((p, q) => Math.hypot(p.x - t.x, p.y - t.y) - Math.hypot(q.x - t.x, q.y - t.y)).slice(0, 2).forEach(o => link(t, o));
     }
     for (const br of bridges) for (const sd of [-1, 1]) {
-      const e = bridgeEnd(br, sd);
-      const near = towns.filter(o => sideOf(o.x, o.y) === sd).sort((p, q) => Math.hypot(p.x - e.x, p.y - e.y) - Math.hypot(q.x - e.x, q.y - e.y))[0];
+      const e = bridgeEnd(br, sd), reg = lines.indexOf(br.line) + (sd > 0 ? 1 : 0);
+      const near = towns.filter(o => regionOf(o.x, o.y) === reg).sort((p, q) => Math.hypot(p.x - e.x, p.y - e.y) - Math.hypot(q.x - e.x, q.y - e.y))[0];
       if (near) link(near, e);
     }
     // crags: rocky outcrops nobody can cross, kept off the roads so the old ways stay open
@@ -861,7 +889,7 @@ import * as THREE from 'three';
       if (nearRiver(x, y, -8) || towns.some(t => Math.hypot(t.x - x, t.y - y) < r + 80) || nearMine(x, y, r + 40)) continue;
       if (fields.some(f => Math.hypot(f.x - x, f.y - y) < r + 26) || marshes.some(m => Math.hypot(m.x - x, m.y - y) < m.r + r + 20)) continue;
       if (hills.some(h => Math.hypot(h.x - x, h.y - y) < h.r + r) || Math.hypot(compass.x - x, compass.y - y) < r + 50) continue;
-      if (bridges.some(br => { const q = XY(riverA(br.b), br.b); return Math.hypot(q.x - x, q.y - y) < r + 70; })) continue;
+      if (bridges.some(br => { const q = XY(lineA(br.line, br.b), br.b); return Math.hypot(q.x - x, q.y - y) < r + 70; })) continue;
       marshes.push({ x, y, r, pts: Array.from({ length: 18 }, (_, i) => 1 + 0.18 * Math.sin(i * 1.3 + x) + rand(-0.08, 0.08)) });
     }
     rocks = [];
@@ -886,7 +914,7 @@ import * as THREE from 'three';
       if (nearRiver(x, y, 26) || nearCrag(x, y, 14) || inMarsh(x, y)) continue;
       if (towns.some(t => Math.hypot(t.x - x, t.y - y) < 80)) continue;
       if (fields.some(f => Math.hypot(f.x - x, f.y - y) < 44) || Math.hypot(compass.x - x, compass.y - y) < 70 || nearMine(x, y, 45)) continue;
-      if (bridges.some(br => { const p = XY(riverA(br.b), br.b); return Math.hypot(p.x - x, p.y - y) < 120; })) continue;
+      if (bridges.some(br => { const p = XY(lineA(br.line, br.b), br.b); return Math.hypot(p.x - x, p.y - y) < 120; })) continue;
       const n = 2 + (Math.random() * 3 | 0);
       for (let k = 0; k < n; k++) trees.push({ x: x + rand(-14, 14), y: y + rand(-14, 14), r: rand(5, 11), c: Math.random() < .5 ? COL.tree : COL.tree2, pine: Math.random() < 0.3 });
     }
@@ -902,7 +930,7 @@ import * as THREE from 'three';
         const ang = rand(0, Math.PI * 2);
         if (Math.abs(((ang - Math.PI / 2 + Math.PI * 3) % (Math.PI * 2)) - Math.PI) < 1.05) continue;
         const r = rand(42, 68), hx = t.x + Math.cos(ang) * r, hy = t.y + Math.sin(ang) * r;
-        if (t.houses.some(h => Math.hypot(h.x - hx, h.y - hy) < 11.5) || isWater(hx, hy)) continue;
+        if (t.houses.some(h => Math.hypot(h.x - hx, h.y - hy) < 11.5) || bandAt(hx, hy)) continue;
         t.houses.push({ x: hx, y: hy, s: rand(7, 8.8), r });
       }
       t.houses.sort((a, b) => a.r - b.r);
@@ -979,9 +1007,9 @@ import * as THREE from 'three';
   function roadPath(x0, y0, x1, y1, via) {
     const nodes = [], key = new Map();
     const add = (id, x, y, side) => { if (!key.has(id)) { key.set(id, nodes.length); nodes.push({ x, y, side }); } return key.get(id); };
-    const S = add('start', x0, y0, sideOf(x0, y0)), E = add('end', x1, y1, sideOf(x1, y1));
-    towns.forEach((t, i) => add('T' + i, t.x, t.y, sideOf(t.x, t.y)));
-    bridges.forEach((br, i) => { for (const sd of [-1, 1]) { const e = bridgeEnd(br, sd); add('B' + i + sd, e.x, e.y, sd); } });
+    const S = add('start', x0, y0, regionOf(x0, y0)), E = add('end', x1, y1, regionOf(x1, y1));
+    towns.forEach((t, i) => add('T' + i, t.x, t.y, regionOf(t.x, t.y)));
+    bridges.forEach((br, i) => { for (const sd of [-1, 1]) { const e = bridgeEnd(br, sd); add('B' + i + sd, e.x, e.y, lines.indexOf(br.line) + (sd > 0 ? 1 : 0)); } });
     const idOf = p => {
       const ti = towns.indexOf(p);
       if (ti >= 0) return 'T' + ti;
@@ -1001,8 +1029,8 @@ import * as THREE from 'three';
       edges[a].push({ to: b, cost: c, road: r, fwd: true }); edges[b].push({ to: a, cost: c, road: r, fwd: false });
     }
     bridges.forEach((br, i) => {
-      if (via && br !== via) return;
-      const a = key.get('B' + i + '-1'), b = key.get('B' + i + '1'), c = hwAt(br.b) * 2 / (br.ford ? 0.45 : 1) + (br.ford ? 40 : 0);
+      if (via && br.line === via.line && br !== via) return;
+      const a = key.get('B' + i + '-1'), b = key.get('B' + i + '1'), c = hwAt(br.line, br.b) * 2 / (br.ford ? 0.45 : 1) + (br.ford ? 40 : 0);
       edges[a].push({ to: b, cost: c }); edges[b].push({ to: a, cost: c });
     });
     const dist = new Array(N).fill(Infinity), prev = new Array(N).fill(null), done = new Array(N).fill(false);
@@ -1039,18 +1067,19 @@ import * as THREE from 'three';
     }
     return 0;
   }
-  function onFord(x, y) { if (!inBand(x, y)) return false; const br = bridgeAt(B(x, y)); return !!(br && br.ford); }
+  function onFord(x, y) { const br = crossingHere(x, y); return !!(br && br.ford); }
 
   function makeField(x, y, town) {
     return { x, y, town, acc: rand(0, 1), w: rand(34, 48), h: rand(22, 30), rot: rand(-0.6, 0.6), c: Math.random() < 0.55 ? '#4d4a3c' : '#3c4535' };
   }
   // the river as a filled shape: k times its width, plus extra on each bank
-  function riverBand(c, k = 1, extra = 0) {
+  function riverBand(c, L, k = 1, extra = 0) {
     c.beginPath();
-    for (let b = -40; b <= LB + 40; b += 8) { const p = XY(riverA(b) - hwAt(b) * k - extra, b); b === -40 ? c.moveTo(p.x, p.y) : c.lineTo(p.x, p.y); }
-    for (let b = LB + 40; b >= -40; b -= 8) { const p = XY(riverA(b) + hwAt(b) * k + extra, b); c.lineTo(p.x, p.y); }
+    for (let b = -40; b <= LB + 40; b += 8) { const p = XY(lineA(L, b) - hwAt(L, b) * k - extra, b); b === -40 ? c.moveTo(p.x, p.y) : c.lineTo(p.x, p.y); }
+    for (let b = LB + 40; b >= -40; b -= 8) { const p = XY(lineA(L, b) + hwAt(L, b) * k + extra, b); c.lineTo(p.x, p.y); }
     c.closePath();
   }
+  const waterLines = () => lines.filter(L => L.kind === 'water');
   // The ground texture: everything flat that never changes during a game. Trees, rocks, bridges and buildings are 3D.
   function buildStatic() {
     init3D();
@@ -1109,13 +1138,29 @@ import * as THREE from 'three';
     }
     // the river bed, seen through the water: sandy banks, darker towards the middle
     c.lineJoin = 'round';
-    riverBand(c, 1, 8); c.fillStyle = COL.shore; c.fill();
-    riverBand(c, 1, -1); c.fillStyle = '#384039'; c.fill();
-    riverBand(c, 0.6); c.fillStyle = '#2d3a3b'; c.fill();
-    riverBand(c, 0.25); c.fillStyle = '#243238'; c.fill();
+    for (const L of waterLines()) {
+      riverBand(c, L, 1, 8); c.fillStyle = COL.shore; c.fill();
+      riverBand(c, L, 1, -1); c.fillStyle = '#384039'; c.fill();
+      riverBand(c, L, 0.6); c.fillStyle = '#2d3a3b'; c.fill();
+      riverBand(c, L, 0.25); c.fillStyle = '#243238'; c.fill();
+    }
+    // mountains: scree at their feet, bare rock and snow higher up, and a worn track through each pass
+    for (const L of lines) {
+      if (L.kind !== 'ridge') continue;
+      riverBand(c, L, 1, 26); c.fillStyle = '#383c37'; c.fill();
+      riverBand(c, L, 1, 4); c.fillStyle = '#464943'; c.fill();
+      riverBand(c, L, 0.55); c.fillStyle = '#55574f'; c.fill();
+      for (const br of bridges) {
+        if (br.line !== L) continue;
+        const p0 = bridgeEnd(br, -1), p1 = bridgeEnd(br, 1);
+        c.strokeStyle = '#3e423b'; c.lineWidth = br.span * 1.4; c.lineCap = 'round';
+        c.beginPath(); c.moveTo(p0.x, p0.y); c.lineTo(p1.x, p1.y); c.stroke();
+        c.strokeStyle = '#444840'; c.lineWidth = 5; c.beginPath(); c.moveTo(p0.x, p0.y); c.lineTo(p1.x, p1.y); c.stroke();
+      }
+    }
     for (const br of bridges) {
       if (!br.ford) continue;
-      const ca = riverA(br.b), hw = hwAt(br.b);
+      const ca = lineA(br.line, br.b), hw = hwAt(br.line, br.b);
       c.fillStyle = '#4c4a40';
       c.beginPath();
       for (let a = ca - hw - 4; a <= ca + hw + 4; a += 4) { const q = XY(a, br.b - br.span + Math.sin(a * 0.3) * 2); a === ca - hw - 4 ? c.moveTo(q.x, q.y) : c.lineTo(q.x, q.y); }
@@ -1253,8 +1298,12 @@ import * as THREE from 'three';
     const viaRoads = roadPath(x0, y0, x1, y1, via);
     if (viaRoads && viaRoads.length > 1) return resample(viaRoads, 14);
     const pts = [{ x: x0, y: y0 }];
-    const s0 = sideOf(x0, y0), s1 = sideOf(x1, y1);
-    if (s0 !== s1) { const br = via || bestBridge(x0, y0, x1, y1); pts.push(bridgeEnd(br, s0), bridgeEnd(br, s1)); }
+    for (let cx = x0, cy = y0, L = nextLine(cx, cy, x1, y1), n = 0; L && n < 4; L = nextLine(cx, cy, x1, y1), n++) {
+      const br = via && via.line === L ? via : bestBridge(cx, cy, x1, y1, L);
+      if (!br) break;
+      const s0 = sideOfLine(L, cx, cy), ex = bridgeEnd(br, -s0);
+      pts.push(bridgeEnd(br, s0), ex); cx = ex.x; cy = ex.y;
+    }
     pts.push({ x: x1, y: y1 });
     return resample(pts, 14);
   }
@@ -1295,13 +1344,13 @@ import * as THREE from 'three';
   function nearestEnemy(x, y, team, R, sameBank) {
     const cx = x / CELL | 0, cy = y / CELL | 0, k = Math.ceil(R / CELL);
     let best = null, bd = R * R;
-    const us = sideOf(x, y), ub = onBridge(x, y);
+    const us = regionOf(x, y), ub = onBridge(x, y);
     for (let j = Math.max(0, cy - k); j <= Math.min(grows - 1, cy + k); j++)
       for (let i = Math.max(0, cx - k); i <= Math.min(gcols - 1, cx + k); i++)
         for (const o of grid[i + j * gcols]) {
           if (o.team === team || o.dead) continue;
           const d = (o.x - x) ** 2 + (o.y - y) ** 2;
-          if (d < bd && (!sameBank || ub || sideOf(o.x, o.y) === us || onBridge(o.x, o.y))) { bd = d; best = o; }
+          if (d < bd && (!sameBank || ub || regionOf(o.x, o.y) === us || onBridge(o.x, o.y))) { bd = d; best = o; }
         }
     return best;
   }
@@ -1546,7 +1595,7 @@ import * as THREE from 'three';
 
   // ---------- red AI: gathers at a bridge, hunts weak towns, sometimes feints ----------
   const redSide = () => -blueSide();
-  function stagingPoint(br) { return XY(riverA(br.b) + redSide() * (hwAt(br.b) + 70), br.b); }
+  function stagingPoint(br) { return XY(lineA(br.line, br.b) + redSide() * (hwAt(br.line, br.b) + 70), br.b); }
   function pickTarget(from) {
     let best = null, bs = Infinity;
     for (const o of towns) {
@@ -1573,11 +1622,12 @@ import * as THREE from 'three';
     const home = red.find(t => t.capital) || red[0];
     const target = pickTarget(home);
     if (!target) return;
-    const cross = sideOf(target.x, target.y) !== sideOf(home.x, home.y);
-    const main = cross ? bestBridge(home.x, home.y, target.x, target.y) : null;
+    // mass at the last barrier before the target, at its best crossing
+    const rt = regionOf(target.x, target.y), rh = regionOf(home.x, home.y);
+    const main = rt === rh ? null : bestBridge(home.x, home.y, target.x, target.y, lines[rh > rt ? rt : rt - 1]);
     let decoy = null, decoyTarget = null;
-    if (main && bridges.length > 1 && red.length >= 3 && Math.random() < 0.45) {
-      const others = bridges.filter(b => b !== main);
+    const others = main ? bridges.filter(b => b !== main && b.line === main.line) : [];
+    if (others.length && red.length >= 3 && Math.random() < 0.45) {
       decoy = others[Math.random() * others.length | 0];
       const ex = bridgeEnd(decoy, blueSide());
       let bd = Infinity;
@@ -1662,7 +1712,9 @@ import * as THREE from 'three';
   function bridgeName(br) {
     const f = br.b / LB;
     const where = P ? (f < 0.4 ? 'west' : f > 0.6 ? 'east' : 'middle') : (f < 0.4 ? 'north' : f > 0.6 ? 'south' : 'middle');
-    return `${where} ${br.ford ? 'ford' : 'bridge'}`;
+    const kind = br.pass ? 'pass' : br.ford ? 'ford' : 'bridge';
+    if (lines.length < 2) return `${where} ${kind}`;
+    return `${where} ${kind} on the ${(br.line.c < 0.5) === (blueSide() < 0) ? 'near' : 'far'} river`;
   }
   function alertAt(p, msg, loud) {
     alerts.push({ x: p.x, y: p.y, t: 0, loud });
@@ -1695,6 +1747,7 @@ import * as THREE from 'three';
       return null;
     }
     const anchors = bridges.map(br => stagingPoint(br)).concat(mines.filter(m => m.owner === 1));
+    if (!anchors.length) anchors.push(...red);
     if (plan && plan.main) anchors.unshift(stagingPoint(plan.main), stagingPoint(plan.main));
     for (let tries = 0; tries < 40; tries++) {
       const a = anchors[Math.random() * anchors.length | 0];
@@ -1721,8 +1774,10 @@ import * as THREE from 'three';
   // Each week the enemy also fortifies one of its bridgeheads.
   function aiBuild() {
     for (let tries = 0; tries < 20; tries++) {
-      const br = bridges[Math.random() * bridges.length | 0];
-      const p = XY(riverA(br.b) + redSide() * (hwAt(br.b) + rand(80, 140)), br.b + rand(-60, 60));
+      const br = bridges[Math.random() * bridges.length | 0], t = !br && towns.filter(o => o.owner === 1)[0];
+      const p = br ? XY(lineA(br.line, br.b) + redSide() * (hwAt(br.line, br.b) + rand(80, 140)), br.b + rand(-60, 60))
+        : t ? XY(A(t.x, t.y) - redSide() * rand(60, 140), B(t.x, t.y) + rand(-80, 80)) : null;   // no crossings: guard the front of a town
+      if (!p) return;
       if (p.x < 20 || p.y < 20 || p.x > W - 20 || p.y > H - 20) continue;
       if (riverGap(p.x, p.y) < 10) continue;
       if (towns.some(t => Math.hypot(t.x - p.x, t.y - p.y) < 40) || structs.some(s => Math.hypot(s.x - p.x, s.y - p.y) < 40)) continue;
@@ -1776,11 +1831,12 @@ import * as THREE from 'three';
     if (p.x < 10 || p.y < 10 || p.x > W - 10 || p.y > H - 10) return 'Place it inside the map';
     if (kind === 'charge') return null;
     if (kind === 'bridge') {
-      if (!inBand(p.x, p.y)) return 'Bridges go on the river';
+      const L = bandAt(p.x, p.y);
+      if (!L || L.kind !== 'water') return 'Bridges go on a river';
       const b = B(p.x, p.y);
       if (b < 50 || b > LB - 50) return 'Too close to the map edge';
-      if (bridges.some(br => Math.abs(br.b - b) < 90)) return 'Too close to another bridge';
-      if (hwAt(b) > river.hw * 1.25) return 'Too wide to bridge here';
+      if (bridges.some(br => br.line === L && Math.abs(br.b - b) < 90)) return 'Too close to another bridge';
+      if (hwAt(L, b) > L.hw * 1.25) return 'Too wide to bridge here';
       return null;
     }
     if (kind === 'barracks') return townAt(p.x, p.y, 30, 0) ? null : 'Barracks go on one of your towns';
@@ -1810,7 +1866,7 @@ import * as THREE from 'three';
       toast(n ? `Charge! ${n} soldiers sprint forward` : 'No soldiers in range', n ? 'good' : '');
       return;
     }
-    if (kind === 'bridge') { bridges.push({ b: B(p.x, p.y), span: 20 }); buildStatic(); }
+    if (kind === 'bridge') { bridges.push({ line: bandAt(p.x, p.y), b: B(p.x, p.y), span: 20 }); buildStatic(); }
     else if (kind === 'barracks') { const t = townAt(p.x, p.y, 30, 0); t.barracks++; toast(`${t.name} now trains faster`, 'good'); }
     else if (kind === 'farm') {
       let near = null, bd = Infinity;
@@ -1947,7 +2003,8 @@ import * as THREE from 'three';
     const avail = d.town ? inkCap() - inkUsed(d.town) : Infinity;   // group orders are free
     let last = d.pts[d.pts.length - 1];
     const push = (nx, ny) => {
-      if (isWater(nx, ny) || isWater((nx + last.x) / 2, (ny + last.y) / 2)) { d.blocked = 'water'; d.tip = { x: nx, y: ny }; return false; }
+      const bk = blockedAt(nx, ny) || blockedAt((nx + last.x) / 2, (ny + last.y) / 2);
+      if (bk) { d.blocked = bk; d.tip = { x: nx, y: ny }; return false; }
       const step = Math.hypot(nx - last.x, ny - last.y);
       if (d.len + step > avail) { d.blocked = 'ink'; d.tip = { x: nx, y: ny }; return false; }
       if (nx < 6 || ny < 6 || nx > W - 6 || ny > H - 6) return false;
@@ -2190,8 +2247,13 @@ import * as THREE from 'three';
       return { title: 'Farm', own: OWN(o), lines: [f.town ? `Belongs to ${f.town.name}.` : '', o === 0 ? `+${Math.round(FARM_RATE * WEEK)} gold a week while you hold ${f.town.name}.` : o === 1 ? `Pays the enemy. Take ${f.town.name} to make it yours.` : `Fallow. Capture ${f.town.name} to work it.`].filter(Boolean) };
     }
     for (const c of crags) if (Math.hypot(c.x - x, c.y - y) < c.r + 6) return { title: 'Crag', lines: ['Sheer rock: no army can cross it. Soldiers march around.'] };
-    if (inBand(x, y)) {
-      const br = bridgeAt(B(x, y));
+    const band = bandAt(x, y);
+    if (band && band.kind === 'ridge') {
+      if (crossingAt(band, B(x, y))) return { title: 'Mountain pass', lines: ['The only way through the mountains.'] };
+      return { title: 'Mountains', lines: ['Far too steep for any army. Soldiers go round by the passes.'] };
+    }
+    if (band) {
+      const br = crossingAt(band, B(x, y));
       if (br && br.ford) return { title: 'Ford', lines: ['Shallow water: anyone can wade across at 45% speed.'] };
       if (br) return { title: 'Bridge', lines: ['The quick way across the river.'] };
       return { title: 'River', lines: ['Only bridges and fords cross it.'] };
@@ -2502,27 +2564,43 @@ import * as THREE from 'three';
   }
   function groundAt(x, y) {
     let h = hillHeight(x, y);
-    const d = Math.abs(A(x, y) - riverA(B(x, y))), hw = hwAt(B(x, y));
-    if (d < hw + 12) {
-      const br = bridgeAt(B(x, y));
-      const bed = br && br.ford ? FORD_Y : lerp(BED_Y, -4, (d / hw) ** 2);
-      h = lerp(h, bed, smooth(hw + 12, hw - 3, d));
+    const a = A(x, y), b = B(x, y);
+    for (const L of lines) {
+      const d = Math.abs(a - lineA(L, b)), hw = hwAt(L, b);
+      if (L.kind === 'ridge') { if (d < hw + 30) h = Math.max(h, ridgeHeight(L, a, b, d, hw)); continue; }
+      if (d < hw + 12) {
+        const br = crossingAt(L, b);
+        const bed = br && br.ford ? FORD_Y : lerp(BED_Y, -4, (d / hw) ** 2);
+        h = lerp(h, bed, smooth(hw + 12, hw - 3, d));
+      }
     }
     return h;
   }
+  // a mountain range: rising from its foot to a ragged crest of peaks, cut down to the ground at each pass
+  function ridgeHeight(L, a, b, d, hw) {
+    const rise = smooth(hw + 30, hw * 0.15, d) ** 1.4;
+    const crest = 0.62 + 0.24 * Math.sin(b * 0.045 + L.phase) + 0.14 * Math.sin(b * 0.11 + a * 0.05 + L.phase * 2);
+    let cut = 1;
+    for (const br of bridges) if (br.line === L) cut = Math.min(cut, smooth(br.span * 0.75, br.span + 26, Math.abs(b - br.b)));
+    return L.high * rise * crest * cut;
+  }
   function deckAt(x, y) {
     if (riverGap(x, y) > 10) return false;
-    const br = bridgeAt(B(x, y));
-    return !!br && !br.ford;
+    for (const L of lines) {
+      if (L.kind !== 'water' || lineGap(L, x, y) > 10) continue;
+      const br = crossingAt(L, B(x, y));
+      return !!br && !br.ford;
+    }
+    return false;
   }
   // where things stand: bridge decks, wading depth in the ford, otherwise the ground
   function surfaceAt(x, y) { return deckAt(x, y) ? DECK_Y : groundAt(x, y); }
   function decalAt(x, y) { return (deckAt(x, y) ? DECK_Y : Math.max(groundAt(x, y), WATER_Y)) + 0.12; }
 
-  function riverDecalGeometry() {
+  function riverDecalGeometry(L) {
     const pos = [], uv = [], idx = [], n = 6;
     for (let b = -6, i = 0; b <= LB + 6; b += 3, i++) {
-      const bb = clamp(b, 0, LB), a = riverA(bb), hw = hwAt(bb);
+      const bb = clamp(b, 0, LB), a = lineA(L, bb), hw = hwAt(L, bb);
       for (let j = 0; j <= n; j++) {
         const p = XY(clamp(a - hw + 2 * hw * j / n, 0, LA), bb);
         pos.push(p.x, decalAt(p.x, p.y), p.y); uv.push(p.x / W, 1 - p.y / H);
@@ -2571,10 +2649,10 @@ import * as THREE from 'three';
     g.setIndex(idx); g.computeVertexNormals();
     return g;
   }
-  function riverGeometry() {
+  function riverGeometry(L) {
     const pos = [], uv = [], idx = [];
     for (let b = -10, i = 0; b <= LB + 10; b += 6, i++) {
-      const bb = Math.min(b, LB), a = riverA(bb), hw = hwAt(clamp(bb, 0, LB)) + 4;
+      const bb = Math.min(b, LB), a = lineA(L, bb), hw = hwAt(L, clamp(bb, 0, LB)) + 4;
       for (const s of [-1, 1]) { const p = XY(clamp(a + s * hw, 0, LA), clamp(bb, 0, LB)); pos.push(p.x, WATER_Y, p.y); uv.push(p.x / 70, p.y / 70); }
       if (i) { const k = i * 2; idx.push(k - 2, k - 1, k, k, k - 1, k + 1); }
     }
@@ -2642,14 +2720,19 @@ import * as THREE from 'three';
     const caster = own(new THREE.Mesh(gridGeometry(groundAt, 10), new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false })));
     caster.castShadow = true; world.add(caster);
     // over the river the markings float on the water surface and bridge decks
-    const strip = own(new THREE.Mesh(riverDecalGeometry(), new THREE.MeshStandardMaterial({ map: decalTex, transparent: true, depthWrite: false, roughness: 0.9, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })));
-    strip.receiveShadow = true; strip.renderOrder = 3; world.add(strip);
+    const stripMat = new THREE.MeshStandardMaterial({ map: decalTex, transparent: true, depthWrite: false, roughness: 0.9, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    for (const L of waterLines()) {
+      const strip = own(new THREE.Mesh(riverDecalGeometry(L), stripMat));
+      strip.receiveShadow = true; strip.renderOrder = 3; world.add(strip);
+    }
 
     // the cut edge of the board is lit evenly so its earth layers read, whichever way the sun falls
     const skirt = own(new THREE.Mesh(skirtGeometry(), new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide })));
     skirt.castShadow = true; world.add(skirt);
-    const water = own(new THREE.Mesh(riverGeometry(), waterMat));
-    water.receiveShadow = true; water.renderOrder = 2; world.add(water);
+    for (const L of waterLines()) {
+      const water = own(new THREE.Mesh(riverGeometry(L), waterMat));
+      water.receiveShadow = true; water.renderOrder = 2; world.add(water);
+    }
     // a soft drop shadow on the table under the board
     const sc = document.createElement('canvas'), pad = 90; sc.width = 256; sc.height = Math.round(256 * (H + pad * 2) / (W + pad * 2));
     const sx = sc.getContext('2d'), k = sc.width / (W + pad * 2);
@@ -2685,6 +2768,24 @@ import * as THREE from 'three';
       bushes.push({ x, y, r: rand(1.8, 3.4) });
     }
     world.add(instanced(GEO.canopy, mat('#ffffff'), bushes, (b, d, c) => { d.position.set(b.x, groundAt(b.x, b.y) + b.r * 0.4, b.y); d.scale.set(b.r * 1.3, b.r, b.r * 1.3); d.rotation.set(0, rand(0, 6), 0); tint(c, '#46583e', 0.05); }));
+    // mountain ranges: tall rock peaks with snowy tops, standing on the raised ground, clear of the passes
+    const peaks = [];
+    for (const L of lines) {
+      if (L.kind !== 'ridge') continue;
+      for (let b = 8; b < LB - 4; b += rand(15, 22)) {
+        if (bridges.some(br => br.line === L && Math.abs(b - br.b) < br.span + 16)) continue;
+        const hw = hwAt(L, b);
+        for (const off of [-0.62, -0.22, 0.2, 0.6]) {
+          if (Math.random() < 0.2) continue;
+          const mid = 1 - Math.abs(off);   // the crest is tallest
+          const p = XY(lineA(L, b) + hw * (off + rand(-0.12, 0.12)), b + rand(-6, 6));
+          const r = hw * rand(0.32, 0.5) * (0.7 + mid * 0.5), h = groundAt(p.x, p.y) + L.high * rand(0.35, 0.8) * (0.55 + mid * 0.8);
+          peaks.push({ x: p.x, y: p.y, r, h, rot: rand(0, 6) });
+        }
+      }
+    }
+    world.add(instanced(GEO.pine, mat('#ffffff'), peaks, (k, d, c) => { d.position.set(k.x, -2, k.y); d.scale.set(k.r, k.h, k.r * 0.9); d.rotation.set(0, k.rot, 0); tint(c, '#62645c', 0.06); }));
+    world.add(instanced(GEO.pine, mat('#ffffff'), peaks, (k, d, c) => { d.position.set(k.x, -2 + k.h * 0.7, k.y); d.scale.set(k.r * 0.31, k.h * 0.3 + 0.4, k.r * 0.28); d.rotation.set(0, k.rot, 0); tint(c, '#d7dce0', 0.02); }));
     // crags: a heap of big boulders round a tall spire, each one a little different in shade
     const boulders = [];
     for (const k of crags) {
@@ -2713,7 +2814,8 @@ import * as THREE from 'three';
     // bridges: a stone deck with parapets and piers; the ford gets stepping stones
     const stones = [];
     for (const br of bridges) {
-      const ca = riverA(br.b), hw = hwAt(br.b);
+      if (br.pass) continue;
+      const ca = lineA(br.line, br.b), hw = hwAt(br.line, br.b);
       if (br.ford) {
         for (let a = ca - hw + 5, i = 0; a < ca + hw - 2; a += 9, i++) for (const off of [-9, 0, 9]) stones.push(XY(a + (i % 2) * 3, br.b + off + Math.sin(a + off) * 2));
         continue;
@@ -3154,7 +3256,7 @@ import * as THREE from 'three';
       ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, c.y, c.r, c.r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
     }
     ctx.globalCompositeOperation = 'destination-out';   // no territory tint on open water
-    riverBand(ctx); ctx.fill();
+    for (const L of waterLines()) { riverBand(ctx, L); ctx.fill(); }
     ctx.globalCompositeOperation = 'source-over';
 
     // lamplight: a warm pool on the ground around every lived-in town, flickering a little
@@ -3458,8 +3560,8 @@ import * as THREE from 'three';
       ctx.beginPath(); ctx.arc(ghost.x, ghost.y, 140, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
     }
     else if (armed === 'bridge') {
-      const b = B(ghost.x, ghost.y), ca = riverA(b);
-      const p0 = XY(ca - hwAt(b) - 10, b - 20), p1 = XY(ca + hwAt(b) + 10, b + 20);
+      const b = B(ghost.x, ghost.y), L = bandAt(ghost.x, ghost.y), ca = L ? lineA(L, b) : A(ghost.x, ghost.y);
+      const hw = L ? hwAt(L, b) : 30, p0 = XY(ca - hw - 10, b - 20), p1 = XY(ca + hw + 10, b + 20);
       ctx.globalAlpha = 0.6; ctx.fillStyle = ok ? COL.bridge : COL.light[1]; ctx.strokeStyle = col; ctx.lineWidth = 2;
       rr(ctx, Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.abs(p1.x - p0.x), Math.abs(p1.y - p0.y), 6); ctx.fill(); ctx.stroke();
       ctx.globalAlpha = 1;
@@ -3571,9 +3673,14 @@ import * as THREE from 'three';
       owner: n => town(n).owner,
       land: () => landKey,
       newMap: k => { newGame(k); return landKey; },
-      dry: () => towns.every(t => riverGap(t.x, t.y) > 60) && units.every(u => u.dead || !isWater(u.x, u.y) || onFord(u.x, u.y)),
+      dry: () => towns.every(t => riverGap(t.x, t.y) > 60) && units.every(u => u.dead || !blockedAt(u.x, u.y)),
+      march: (from, to, n) => {   // n soldiers set off from one town to another, finding their own way over rivers and mountains
+        const F = town(from), route = makeRoute(F, town(to));
+        for (let i = 0; i < n; i++) { spawn(F); Object.assign(units[units.length - 1], { kind: i % 3, town: null, route, rid: -1 }); }
+      },
+      furthest: () => Math.max(0, ...units.filter(u => !u.dead && u.team === 0).map(u => regionOf(u.x, u.y))),
       onCrag: () => units.filter(u => !u.dead && crags.some(c => Math.hypot(c.x - u.x, c.y - u.y) < c.r - 1)).length,
-      terrain: () => ({ land: landKey, crags: crags.length, marshes: marshes.length, crossings: bridges.length, mid: Math.round(hwAt(LB / 2)), hw: river.hw }),
+      terrain: () => ({ land: landKey, crags: crags.length, marshes: marshes.length, crossings: bridges.length, lines: lines.map(L => L.kind) }),
       state: () => state,
     };
   }

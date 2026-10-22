@@ -163,7 +163,7 @@ test('battles, captures and attacks on your capital', async () => {
 
 test('every landscape builds and plays: towns stay dry and nobody walks through crags', async () => {
   const page = await openGame();
-  for (const k of ['valley', 'lake', 'highlands', 'marsh', 'forest', 'plains']) {
+  for (const k of ['valley', 'lake', 'tworivers', 'mountains', 'open', 'highlands', 'marsh', 'forest', 'plains']) {
     assert.equal(await t(page, 'newMap', k), k);
     assert.equal(await page.$eval('#landName', e => e.textContent.length > 0), true, 'the intro names the landscape');
     await t(page, 'start'); await t(page, 'run', 40);
@@ -177,6 +177,21 @@ test('every landscape builds and plays: towns stay dry and nobody walks through 
   const before = await t(page, 'land');
   await page.evaluate(() => document.getElementById('newMap').click());
   assert.notEqual(await t(page, 'land'), before, 'New map deals a different landscape');
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test('armies find their way over two rivers and through a mountain pass', async () => {
+  const page = await openGame();
+  for (const [k, regions] of [['tworivers', 2], ['mountains', 1]]) {
+    await t(page, 'newMap', k);
+    await t(page, 'start');
+    await t(page, 'march', 'Ashford', 'Redmarsh', 90);
+    let reached = 0;
+    for (let i = 0; i < 16 && reached < regions && await t(page, 'state') === 'play'; i++) { await t(page, 'run', 5); reached = Math.max(reached, await t(page, 'furthest')); }
+    assert.ok(reached >= regions || await t(page, 'state') === 'over', `${k}: the army gets across`);
+    assert.ok(await t(page, 'dry'), `${k}: nobody ends up in the water or on a mountainside`);
+  }
   assert.deepEqual(page.errors, []);
   await page.close();
 });

@@ -16,9 +16,10 @@ march on, and thousands of soldiers clash on a 3D tabletop battlefield.
   - cavalry beat archers.
 - **Spend gold** from the tray on farms, watchtowers, forts, barracks and bridges. Farms and gold mines earn it.
 - **Take Redmarsh, the enemy capital, to win.** Lose Ashford and the war is over.
-- **Every game is dealt a landscape:** River Valley, The Great Lake, Highlands, Marshes, Old Forest or
-  Open Plains. Press **New map** on the start screen for another, or add `?land=highlands` (or `valley`,
-  `lake`, `marsh`, `forest`, `plains`) to the address to pick one.
+- **Every game is dealt a landscape:** River Valley, The Great Lake, Two Rivers, Mountain Pass, Open Border,
+  Highlands, Marshes, Old Forest or Open Plains. Press **New map** on the start screen for another, or add
+  `?land=mountains` (or `valley`, `lake`, `tworivers`, `open`, `highlands`, `marsh`, `forest`, `plains`) to
+  the address to pick one.
 - **Camera:**
   - scroll or pinch to zoom;
   - drag open ground to look around;
