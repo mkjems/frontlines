@@ -60,8 +60,8 @@ Use the game's palette so the art sits naturally on the card:
 
 | Role | Colour |
 | --- | --- |
-| Blue kingdom | `#3b6fd4`; soldiers and labels `#9fc0ff` |
-| Red kingdom | `#df5448`; soldiers and labels `#ff9a88` |
+| Blue kingdom | `#4a84f2`; soldiers `#5e98ff`, labels `#9fc0ff` |
+| Red kingdom | `#df5448`; soldiers `#ff5d47`, labels `#ff9a88` |
 | Open ground (cool, dark slate-green) | `#353b36`, `#323833` |
 | Hills (catching the light towards the top) | `#3a413a` → `#444b42` |
 | Faint roads | `#3e423b`, `#444840` |

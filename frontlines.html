@@ -15,7 +15,7 @@
     --ink: #e6e9e3;
     --muted: #9aa49d;
     --line: #3b4342;
-    --blue: #3b6fd4;         /* filled buttons and team marks */
+    --blue: #4a84f2;         /* filled buttons and team marks */
     --blue-ink: #9fc0ff;     /* blue text and icons on dark */
     --blue-soft: #b7cbef;
     --red: #df5448;
@@ -205,7 +205,7 @@
   .tips .label { color: var(--blue-ink); }
   .tips ol { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: 12.5px; line-height: 1.45; color: var(--ink); }
   .tips p { font-size: 12.5px; }
-  .btn.primary:hover { background: #4a7fe6; }
+  .btn.primary:hover { background: #5d93f7; }
   .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .choice {
     text-align: left; font: inherit; color: var(--ink); background: var(--raised); border: 1.5px solid var(--line);
@@ -387,7 +387,7 @@ import * as THREE from 'three';
   const COL = {
     outside: '#1c201f', land: '#e8ebe2', land2: '#e2e7da', river: '#a9cfe2', riverDeep: '#9dc6dc', shore: '#403f37', shadow: 'rgba(36,48,38,.15)', bridge: '#fbfaf6', bridgeEdge: '#c6ccbf',
     tree: '#cddbc1', tree2: '#c1d3b3', text: '#2e3735',
-    team: ['#3b6fd4', '#df5448'], light: ['#bccfef', '#f3c3bd'], mid: ['#86a6e4', '#ec958b'],
+    team: ['#4a84f2', '#df5448'], light: ['#c2d6fb', '#f3c3bd'], mid: ['#8fb2f5', '#ec958b'],
     neutral: '#a8a497', neutralLight: '#d8d5cc', track: 'rgba(230,236,226,.14)'
   };
 
@@ -509,7 +509,7 @@ import * as THREE from 'three';
 
   // ---------- artwork: hero scenes and icons, drawn as inline SVG ----------
   function heroSVG(mode) {   // 'intro' | 'win' | 'lose'
-    const BL = '#3b6fd4', RD = '#df5448', BLs = '#9fc0ff', RDs = '#ff9a88';   // castles in team colours, soldiers light
+    const BL = '#4a84f2', RD = '#df5448', BLs = '#5e98ff', RDs = '#ff5d47';   // castles in team colours, soldiers light
     const leftCol = mode === 'lose' ? RD : BL, rightCol = mode === 'win' ? BL : RD;
     const castle = (x, col, flip) => `
       <g transform="translate(${x} 62)">
@@ -2239,7 +2239,7 @@ import * as THREE from 'three';
       new THREE.BoxGeometry(6.2, 5.4, 7.2).translate(0, 2.7, 0),           // cavalry: a square
     ];
     unitMeshes = GEO.unit.map(g => {
-      const im = new THREE.InstancedMesh(g, mat('#ffffff', { roughness: 0.55, emissive: '#ffffff', emissiveIntensity: 0.14 }), MAXU);   // a slight glow keeps their shaded sides light
+      const im = new THREE.InstancedMesh(g, mat('#ffffff', { roughness: 0.5, emissive: '#ffffff', emissiveIntensity: 0.05 }), MAXU);   // strong team colour, with a hint of glow so shaded sides don't go dark
       im.castShadow = true; im.receiveShadow = true; im.frustumCulled = false; im.count = 0;
       for (let i = 0; i < MAXU; i++) im.setColorAt(i, WHITE);
       scene.add(im); return im;
@@ -2249,7 +2249,7 @@ import * as THREE from 'three';
     const water = waterNormals();
     waterMat = new THREE.MeshStandardMaterial({ color: '#365f74', roughness: 0.12, metalness: 0.1, transparent: true, opacity: 0.8, side: THREE.DoubleSide, normalMap: water, normalScale: new THREE.Vector2(0.45, 0.45) });
   }
-  const MAXU = 3000, WHITE = new THREE.Color('#ffffff'), TEAMC = [new THREE.Color('#9fc0ff'), new THREE.Color('#ff9a88')];   // soldiers: light so they read on the dark board
+  const MAXU = 3000, WHITE = new THREE.Color('#ffffff'), TEAMC = [new THREE.Color('#5e98ff'), new THREE.Color('#ff5d47')];   // soldiers: light so they read on the dark board
   let unitMeshes = [];
 
   function waterNormals() {   // a small tileable ripple normal map
@@ -2607,7 +2607,7 @@ import * as THREE from 'three';
       clear() { parts.length = 0; arrows.length = 0; shake = 0; },
     };
   })();
-  const ARROWC = [new THREE.Color('#2c4f96'), new THREE.Color('#9c3a30')];
+  const ARROWC = [new THREE.Color('#e3edff'), new THREE.Color('#ffe4dc')];   // light shafts, faintly tinted by team
 
   // ---- buildings: rebuilt only when what they show changes ----
   const townG = new Map(), structG = new Map(), fieldG = new Map();
