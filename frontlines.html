@@ -2989,13 +2989,14 @@ import * as THREE from 'three';
       ctx.beginPath(); ctx.arc(t.x, t.y, 64, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
     }
-    // drill yards: towns with barracks sit on a tinted parade ground that grows with each barracks
+    // drill yards: towns with barracks sit on a round, dark-tinted parade ground that grows with each
+    // barracks; a capital's fills the inside of its city wall
     for (const t of towns) {
       if (!t.barracks || t.owner < 0) continue;
-      const y = townSize(t) + 30 + 9 * Math.min(3, t.barracks);
-      rr(ctx, t.x - y, t.y - y, y * 2, y * 2, 14);
-      ctx.globalAlpha = 0.45; ctx.fillStyle = COL.light[t.owner]; ctx.fill();
-      ctx.globalAlpha = 0.7; ctx.strokeStyle = COL.mid[t.owner]; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
+      const y = t.capital ? 62 : townSize(t) + 24 + 7 * Math.min(3, t.barracks);
+      ctx.beginPath(); ctx.arc(t.x, t.y, y, 0, Math.PI * 2);
+      ctx.globalAlpha = 0.07 + 0.03 * Math.min(3, t.barracks); ctx.fillStyle = COL.team[t.owner]; ctx.fill();
+      ctx.globalAlpha = 0.5; ctx.strokeStyle = COL.mid[t.owner]; ctx.lineWidth = 1.2; ctx.setLineDash([6, 5]); ctx.stroke(); ctx.setLineDash([]);
       ctx.globalAlpha = 1;
     }
     // battle scars fade over 30 seconds
@@ -3351,6 +3352,7 @@ import * as THREE from 'three';
       view: () => ({ ...view }),
       resetView: () => { view.z = 1; view.x = view.y = 0; placeCamera(); },
       zoom: (x, y, z) => zoomTo(z, x, y),
+      barracks: (n, k) => { town(n).barracks = k; },
       run: secs => { for (let i = 0; i < secs * 40 && state === 'play'; i++) step(STEP); },
       alive: () => units.filter(u => !u.dead).length,
       smouldering: () => towns.filter(t => t.smokeUntil > performance.now() / 1000).map(t => t.name),
