@@ -2254,6 +2254,7 @@ import * as THREE from 'three';
   const STONE = '#b4b3ab', STONE2 = '#8e8d86', WOOD = '#7d6a52', POLE = '#5c6460';
   const DECK = '#5f5545', RAIL = '#51493c', SEAM = '#3f382e';   // bridge timber
   const WALL = '#6e6c65', WALL2 = '#7a7871', HOUSE = '#a8a49a';   // capital walls and towers, house and hall walls
+  const LIT = () => mat('#ffd892', { emissive: '#ff9a35', emissiveIntensity: 1.3, roughness: 1 });   // lamplit windows, flickering in render()
   const KEEPC = ['#3466c8', '#b8433a'];   // keeps, forts and tower roofs: deeper than the soldiers' colours
 
   function init3D() {
@@ -2274,8 +2275,8 @@ import * as THREE from 'three';
     scene = new THREE.Scene();
     scene.background = new THREE.Color(COL.outside);
     camera = new THREE.PerspectiveCamera(24, 1, 20, 12000);
-    scene.add(new THREE.HemisphereLight('#eef3ff', '#8f8a72', 1.05));
-    sun = new THREE.DirectionalLight('#fff1d8', 2.5);
+    scene.add(new THREE.HemisphereLight('#d0dcf8', '#737470', 0.95));   // a cool evening sky
+    sun = new THREE.DirectionalLight('#fff3e4', 2.7);   // and a low sun, only faintly warm so the board stays slate
     sun.castShadow = true;
     const big = Math.min(renderer.capabilities.maxTextureSize, matchMedia('(pointer: coarse)').matches ? 2048 : 4096);
     sun.shadow.mapSize.set(big, big);
@@ -2325,7 +2326,7 @@ import * as THREE from 'three';
 
     dcv = document.createElement('canvas'); dctx = dcv.getContext('2d');
     const water = waterNormals();
-    waterMat = new THREE.MeshStandardMaterial({ color: '#365f74', roughness: 0.12, metalness: 0.1, transparent: true, opacity: 0.8, side: THREE.DoubleSide, normalMap: water, normalScale: new THREE.Vector2(0.45, 0.45) });
+    waterMat = new THREE.MeshStandardMaterial({ color: '#365f74', roughness: 0.12, metalness: 0.1, transparent: true, opacity: 0.8, side: THREE.DoubleSide, normalMap: water, normalScale: new THREE.Vector2(0.22, 0.22) });
   }
   const MAXU = 3000, WHITE = new THREE.Color('#ffffff'), TEAMC = [new THREE.Color('#6cb0ff'), new THREE.Color('#ff5d47')];   // soldiers: light so they read on the dark board
   let unitMeshes = [], unitOutlines = [];
@@ -2714,6 +2715,15 @@ import * as THREE from 'three';
       }
     }
     put(g, GEO.box, mat(t.owner < 0 ? '#9a978b' : t.owner === 0 ? '#2f5fbd' : '#c4443a'), x, y0 + KH - 0.3, z, s * 2 - 4.4, 0.5, s * 2 - 4.4);
+    // lamplight in the keep's windows, a row on every side
+    const wn = t.capital ? 3 : 2, wy = y0 + KH * 0.5;
+    for (let i = 0; i < wn; i++) {
+      const o = (i - (wn - 1) / 2) * (s * 2 / wn);
+      for (const e of [-1, 1]) {
+        put(g, GEO.box, LIT(), x + o, wy, z + e * (s + 0.15), 1.8, 2.8, 0.6);
+        put(g, GEO.box, LIT(), x + e * (s + 0.15), wy, z + o, 0.6, 2.8, 1.8);
+      }
+    }
     if (t.capital) {
       for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
         put(g, GEO.cyl, mat(keep), x + dx * s, y0, z + dz * s, 4.2, KH + 6, 4.2);
@@ -2733,6 +2743,7 @@ import * as THREE from 'three';
       const h = t.houses[i], hy = groundAt(h.x, h.y), ry = Math.atan2(h.x - x, h.y - z);
       put(g, GEO.box, mat(HOUSE), h.x, hy, h.y, h.s, 4.6, h.s * 0.85, ry);
       put(g, GEO.gable, mat(roof), h.x, hy + 4.6, h.y, h.s + 1.2, 3.8, h.s * 0.85 + 1, ry);
+      for (const e of [-1, 1]) { const d = e * (h.s * 0.425 + 0.1); put(g, GEO.box, LIT(), h.x + Math.sin(ry) * d, hy + 1.4, h.y + Math.cos(ry) * d, 1.4, 1.8, 0.5, ry); }
     }
     const hallSlots = [-Math.PI / 2 - 0.8, -Math.PI / 2 + 0.8, -Math.PI / 2 - 2, -Math.PI / 2 + 2];
     for (let i = 0; i < Math.min(4, t.barracks); i++) {
@@ -2740,6 +2751,7 @@ import * as THREE from 'three';
       hall.position.set(x + Math.cos(ang) * hr, groundAt(x + Math.cos(ang) * hr, z + Math.sin(ang) * hr), z + Math.sin(ang) * hr);
       hall.rotation.y = -(ang + Math.PI / 2);
       put(hall, GEO.box, mat(HOUSE), 0, 0, 0, 26, 6, 12);
+      for (const wx of [-7, 0, 7]) for (const e of [-1, 1]) put(hall, GEO.box, LIT(), wx, 2.2, e * 6.1, 1.8, 2, 0.5);
       put(hall, GEO.gable, mat(col), 0, 6, 0, 13, 4.5, 28, Math.PI / 2);
       addFlag(hall, 11, 6, -5, 10, col);
       g.add(hall);
@@ -2912,7 +2924,7 @@ import * as THREE from 'three';
     camera.setViewOffset(vw, vh, (b.x0 + b.x1) / 2 - (side + aw / 2), (b.y0 + b.y1) / 2 - (top + ah / 2), vw, vh);
     placeCamera();
     const R = Math.max(W, H) * 0.8;
-    sun.position.set(W / 2 - 520, 1000, H / 2 - 640); sun.target.position.set(W / 2, 0, H / 2);
+    sun.position.set(W / 2 - 560, 640, H / 2 - 690);   // low in the north-west: long evening shadows sun.target.position.set(W / 2, 0, H / 2);
     Object.assign(sun.shadow.camera, { left: -R, right: R, top: R, bottom: -R, near: 300, far: 2600 });
     sun.shadow.camera.updateProjectionMatrix();
   }
@@ -2961,6 +2973,7 @@ import * as THREE from 'three';
     FX.update(fxDt, nowS);
     const sh = FX.shakeAmount * baseDist / view.z * 0.006;   // a short shake when one of your towns falls
     if (sh > 0.01) { camera.position.x += rand(-sh, sh); camera.position.y += rand(-sh, sh) * 0.5; camera.updateMatrixWorld(); }
+    LIT().emissiveIntensity = 1.25 + 0.12 * Math.sin(nowS * 7.3) + 0.08 * Math.sin(nowS * 12.9 + 1);
     renderer.render(scene, camera);
     drawOverlay(nowS);
     if (sh > 0.01) placeCamera();
@@ -2979,6 +2992,19 @@ import * as THREE from 'three';
     ctx.globalCompositeOperation = 'destination-out';   // no territory tint on open water
     riverPath(ctx); ctx.lineWidth = river.hw * 2; ctx.lineCap = 'butt'; ctx.stroke();
     ctx.globalCompositeOperation = 'source-over';
+
+    // lamplight: a warm pool on the ground around every lived-in town, flickering a little
+    ctx.globalCompositeOperation = 'lighter';
+    towns.forEach((t, i) => {
+      const r = t.capital ? 84 : townRing(t) + 34, f = 1 + 0.07 * Math.sin(nowS * 6.1 + i * 1.7) + 0.05 * Math.sin(nowS * 11.3 + i);
+      const g = ctx.createRadialGradient(t.x, t.y, 4, t.x, t.y, r * f);
+      g.addColorStop(0, `rgba(255,160,70,${0.17 * f})`); g.addColorStop(0.45, `rgba(255,140,60,${0.07 * f})`); g.addColorStop(1, 'rgba(255,130,50,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(t.x, t.y, r * f, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.globalCompositeOperation = 'source-over';
+    const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.42, W / 2, H / 2, Math.hypot(W, H) * 0.56);
+    vg.addColorStop(0, 'rgba(8,10,12,0)'); vg.addColorStop(1, 'rgba(8,10,12,.42)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
 
     // capitals: a soft glow of their colour inside the city wall
     for (const t of towns) {
