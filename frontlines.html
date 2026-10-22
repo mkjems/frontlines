@@ -422,7 +422,7 @@ import * as THREE from 'three';
     let bedGain = null, nextBeat = 0, beat = 0, nextBird = 0, lastHorn = -99;
     try { muted = localStorage.getItem('frontlines-muted') === '1'; } catch (e) {}
     function init() {
-      if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+      if (ac) { if (!muted && ac.state === 'suspended') ac.resume(); return; }
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
       try {
@@ -446,7 +446,12 @@ import * as THREE from 'three';
           n.connect(f); f.connect(g); g.connect(bedGain); n.start(0, Math.random() * 2);
         };
         bed(420, 0.6, 0.22, 0.07); bed(1100, 1.4, 0.08, 0.31);
-      } catch (e) { ac = null; }
+        if (muted) ac.suspend();
+      } catch (e) {
+        // A half-built context could keep playing out of reach of the mute button, so shut it down.
+        try { ac && ac.close(); } catch (e2) {}
+        ac = null;
+      }
     }
     function tone(freq, dur, o = {}) {
       if (!ac || muted) return;
@@ -473,9 +478,12 @@ import * as THREE from 'three';
     return {
       init,
       get muted() { return muted; },
+      get state() { return ac ? ac.state : 'none'; },
+      // Muting silences the master volume and pauses the whole audio context, so nothing can slip through.
       setMuted(m) {
         muted = m;
-        if (master) master.gain.value = m ? 0 : 0.5;
+        if (master) { master.gain.cancelScheduledValues(ac.currentTime); master.gain.setValueAtTime(m ? 0 : 0.5, ac.currentTime); }
+        if (ac) { if (m) ac.suspend(); else ac.resume(); }
         try { localStorage.setItem('frontlines-muted', m ? '1' : '0'); } catch (e) {}
       },
       click() { if (now() - lastClick > 45) { lastClick = now(); tone(1700, 0.025, { type: 'triangle', vol: 0.03 }); } },
@@ -3360,6 +3368,7 @@ import * as THREE from 'three';
       hitCapital: () => { const c = towns.find(t => t.capital && t.owner === 0), h = c.hold; enterTown(c, { team: 1, dead: false }); return { hold: c.hold, before: h, shake: FX.shakeAmount }; },
       shake: () => FX.shakeAmount,
       buildings: () => structs.filter(st => st.team === 0).length,
+      audio: () => Sound.state,
       // a blue army of n gathered just outside a town (as if a route had brought it there); returns its screen point
       army: (name, n, dist) => {
         const T = town(name), home = towns.find(t => t.capital && t.owner === 0), side = T.x > home.x ? -1 : 1;

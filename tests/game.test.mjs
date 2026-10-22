@@ -161,6 +161,26 @@ test('battles, captures and attacks on your capital', async () => {
   await page.close();
 });
 
+test('the Sound button silences everything', async () => {
+  const page = await openGame();
+  await page.click('#startBtn');
+  await t(page, 'melee');
+  await sleep(300);
+  if (await page.evaluate(() => document.getElementById('soundBtn').textContent) === 'Sound off') await page.click('#soundBtn');
+  await page.click('#soundBtn');
+  await sleep(200);
+  assert.equal(await page.evaluate(() => document.getElementById('soundBtn').textContent), 'Sound off');
+  assert.equal(await t(page, 'audio'), 'suspended', 'muting pauses the whole audio engine, so nothing can play');
+  await t(page, 'hitCapital');
+  await sleep(200);
+  assert.equal(await t(page, 'audio'), 'suspended', 'the war horn does not wake it up');
+  await page.click('#soundBtn');
+  await sleep(200);
+  assert.equal(await t(page, 'audio'), 'running', 'unmuting brings the sound back');
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
 test('phone layout with touch', async () => {
   const page = await openGame({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   await page.tap('#startBtn');
