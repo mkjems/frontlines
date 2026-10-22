@@ -226,7 +226,16 @@
   .land .mapno { display: flex; gap: 12px; align-items: center; font-variant-numeric: tabular-nums; }
   .land .mapno label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
   .land .mapno input { margin: 0; accent-color: var(--blue); }
-  #newMap { justify-self: start; margin-left: 4px; font: 600 12px var(--font); color: var(--ink); background: var(--raised); border: 1.5px solid var(--line); border-radius: 999px; padding: 5px 11px; cursor: pointer; }
+  .mapbtns { display: flex; gap: 6px; justify-self: start; margin-left: 4px; }
+  /* Peek: the card steps aside so the whole map can be seen */
+  #intro .card { transition: opacity .15s ease, transform .15s ease; }
+  #intro.peeking { background: transparent; }
+  #intro.peeking .card { opacity: 0; transform: scale(.98); pointer-events: none; }
+  .peekbar { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 112px); transform: translateX(-50%); z-index: 1;
+    padding: 8px 16px; border-radius: 999px; background: var(--panel); box-shadow: var(--shadow), inset 0 0 0 1px var(--edge);
+    font-size: 13px; font-weight: 600; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .15s ease; }
+  #intro.peeking .peekbar { opacity: 1; }
+  #newMap, #peekBtn { font: 600 12px var(--font); color: var(--ink); background: var(--raised); border: 1.5px solid var(--line); border-radius: 999px; padding: 5px 11px; cursor: pointer; }
   .diff button {
     font: 600 12px var(--font); color: var(--ink); background: var(--raised); border: 1.5px solid var(--line); border-radius: 999px;
     padding: 6px 12px; cursor: pointer;
@@ -342,6 +351,7 @@
 <button id="tutSkip" type="button" hidden>Skip tips</button>
 
 <div class="overlay" id="intro">
+  <div class="peekbar" id="peekBar" aria-live="polite"></div>
   <div class="card">
     <div class="hero art" id="introHero"><h1>Frontlines</h1></div>
     <p>Two kingdoms, one river. You never command a soldier. You draw the paths they march on, and the armies sort out the rest.</p>
@@ -371,7 +381,10 @@
     </div>
     <div class="land">
       <span class="label">Map</span><b id="landName"></b>
-      <button type="button" id="newMap" title="Deal a different landscape and layout">New map</button>
+      <span class="mapbtns">
+        <button type="button" id="newMap" title="Deal a different landscape and layout">New map</button>
+        <button type="button" id="peekBtn" title="Hold to see the whole map (or tap, then tap again to come back)">Peek</button>
+      </span>
       <p id="landDesc"></p>
       <p class="mapno"><span id="mapNo"></span> <label><input type="checkbox" id="classicTowns"> Classic towns</label></p>
     </div>
@@ -2546,6 +2559,23 @@ import * as THREE from 'three';
   };
   renderDiff();
   $('newMap').onclick = () => newGame();
+  // Peek: hold to see the whole map, release to come back; a quick tap keeps the card away until the next tap
+  {
+    let downAt = 0, held = false;
+    const peek = on => {
+      $('intro').classList.toggle('peeking', on);
+      $('peekBar').textContent = on ? `${land.name} · Map ${mapSeed}${held ? '' : ' · tap to go back'}` : '';
+    };
+    $('peekBtn').addEventListener('pointerdown', e => { e.preventDefault(); downAt = performance.now(); held = true; peek(true); });
+    addEventListener('pointerup', () => {
+      if (!held) return;
+      held = false;
+      if (performance.now() - downAt > 300) peek(false);   // it was held: back to the card
+      else { peek(true); setTimeout(() => addEventListener('pointerdown', () => peek(false), { once: true }), 0); }   // a tap: stay until the next one
+    });
+    $('peekBtn').addEventListener('click', e => { if (e.detail === 0) { held = false; peek(!$('intro').classList.contains('peeking')); } });   // keyboard
+    addEventListener('keydown', e => { if (e.key === 'Escape' && $('intro').classList.contains('peeking')) peek(false); });
+  }
   // Classic towns: the original hand-made layout instead of a random one (the same map number otherwise)
   $('classicTowns').checked = classic;
   $('classicTowns').onchange = () => {

@@ -69,6 +69,23 @@ test('intro: tip carousel and how-to-win fold-out', async () => {
   await page.close();
 });
 
+test('Peek: hold to see the whole map, or tap and tap again', async () => {
+  const page = await openGame();
+  const peeking = () => page.$eval('#intro', e => e.classList.contains('peeking'));
+  const box = await (await page.$('#peekBtn')).boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down(); await sleep(450);
+  assert.ok(await peeking(), 'holding Peek moves the card out of the way');
+  await page.mouse.up(); await sleep(50);
+  assert.ok(!(await peeking()), 'letting go brings it back');
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2); await sleep(50);
+  assert.ok(await peeking(), 'a quick tap keeps the map in view');
+  await page.mouse.click(700, 450); await sleep(50);
+  assert.ok(!(await peeking()), 'the next tap brings the card back');
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
 test('drawing routes', async () => {
   const page = await openGame();
   await t(page, 'start');
