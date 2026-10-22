@@ -2843,7 +2843,7 @@ import * as THREE from 'three';
     }
   }
   // Routes are dark lines under the light soldiers, with light chevrons showing the direction.
-  const ROUTE = ['#1f3d7a', '#7a2a22'], CHEVRON = ['#0f2147', '#45150f'];   // chevrons a shade darker than the line
+  const ROUTE = ['#1f3d7a', '#7a2a22'], CHEVRON = ['#5a7cc0', '#b5584a'];   // chevrons: lighter than the line, darker than the soldiers
   function drawRoute(r, team) {
     strokeRoute(r.pts, ROUTE[team], 8);
     chevrons(r.pts, CHEVRON[team]);
