@@ -827,6 +827,7 @@ import * as THREE from 'three';
   // [position along it 0..1, type] with type 0 a bridge, 1 a ford, 2 a mountain pass.
   // hills and woods: [how many, smallest radius, largest radius]. fields: a multiple of the usual farms per town.
   // middle: where neutral towns may stand, as [nearest, furthest] from blue's edge (0..0.5).
+  // roads: how many neighbours each town has a road to (2 if not given); bushes and rocks: how many (90, 22).
   // Each map is point-symmetric about the board's centre, so a pair of barriers or crossings must mirror
   // each other (c and 1 - c, b and 1 - b); the far one of each pair is made from the near one.
   const RIVER = (o, cross) => ({ kind: 'water', c: 0.5, amp: 0.028, freq: 1.15, wide: 1, ...o, cross });
@@ -846,6 +847,8 @@ import * as THREE from 'three';
       hills: [4, 50, 85], woods: [4, 45, 70], trees: 180, fields: 1 },
     open: { name: 'Open Border', desc: 'No river, no mountains, no bridges: nothing at all stands between the two kingdoms.',
       lines: [], hills: [5, 55, 95], woods: [5, 45, 70], trees: 190, fields: 1 },
+    steppe: { name: 'The Steppe', desc: 'Wide open grassland: hardly a hill, wood or road. Room to flank, encircle and outmanoeuvre.',
+      lines: [], hills: [1, 45, 60], woods: [0, 0, 0], trees: 24, fields: 1, roads: 1, bushes: 30, rocks: 8 },
     highlands: { name: 'Highlands', desc: 'Big hills and rocky crags no army can climb. Hold the passes between them.',
       lines: [RIVER({ amp: 0.035, freq: 1.6, wide: 0.8 }, [[0.2, 0], [0.5, 1], [0.8, 0]])],
       hills: [8, 60, 105], woods: [2, 40, 60], trees: 110, fields: 0.7, crags: 7 },
@@ -1032,7 +1035,7 @@ import * as THREE from 'three';
     const link = (a, b) => { if (!roads.some(r => (r.a === a && r.b === b) || (r.a === b && r.b === a))) roads.push({ a, b, bend: 0.12 * Math.sin(Math.hypot(b.x - a.x, b.y - a.y) * 0.037) }); };
     for (const t of towns) {
       towns.filter(o => o !== t && regionOf(o.x, o.y) === regionOf(t.x, t.y))
-        .sort((p, q) => Math.hypot(p.x - t.x, p.y - t.y) - Math.hypot(q.x - t.x, q.y - t.y)).slice(0, 2).forEach(o => link(t, o));
+        .sort((p, q) => Math.hypot(p.x - t.x, p.y - t.y) - Math.hypot(q.x - t.x, q.y - t.y)).slice(0, land.roads ?? 2).forEach(o => link(t, o));
     }
     for (const br of bridges) for (const sd of [-1, 1]) {
       const e = bridgeEnd(br, sd), reg = lines.indexOf(br.line) + (sd > 0 ? 1 : 0);
@@ -1061,7 +1064,7 @@ import * as THREE from 'three';
       marshes.push({ x, y, r, pts }, { ...mirror({ x, y }), r, pts: turn(pts) });
     }
     rocks = [];
-    for (let tries = 0; tries < 200 && rocks.length < 22; tries++) {
+    for (let tries = 0; tries < 200 && rocks.length < (land.rocks ?? 22); tries++) {
       const { x, y } = blueSpot(20);
       if (nearRiver(x, y, 20) || towns.some(t => Math.hypot(t.x - x, t.y - y) < 80) || fields.some(f => Math.hypot(f.x - x, f.y - y) < 36) || nearMine(x, y, 40) || nearCrag(x, y, 8) || inMarsh(x, y)) continue;
       const r = rand(2.5, 5);
@@ -2975,7 +2978,7 @@ import * as THREE from 'three';
       tint(c, f.c === '#4d4a3c' ? '#57533f' : '#434c39', 0.03);
     }));
     const bushes = [];
-    for (let tries = 0; tries < 900 && bushes.length < 90; tries++) {
+    for (let tries = 0; tries < 900 && bushes.length < (land.bushes ?? 90); tries++) {
       const x = rand(15, W - 15), y = rand(15, H - 15);
       if (riverGap(x, y) < 16 || onRoad(x, y) || nearCrag(x, y, 10) || inMarsh(x, y)) continue;
       if (towns.some(t => Math.hypot(t.x - x, t.y - y) < (t.capital ? 80 : 60)) || fields.some(f => Math.hypot(f.x - x, f.y - y) < 32) || mines.some(m => Math.hypot(m.x - x, m.y - y) < 40)) continue;
