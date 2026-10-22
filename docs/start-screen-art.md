@@ -67,7 +67,8 @@ Use the game's palette so the art sits naturally on the card:
 | River | `#4f7d93`, riverbed `#47555a` |
 | Muddy riverbanks | `#7d6550` |
 | Dirt roads (only a little lighter than the ground) | `#755c48`, `#806852` |
-| Fields | wheat `#a8945e`, green crops `#6f7f4c` |
+| Fields (muted, they sit back) | wheat `#857547`, green crops `#56633b` |
+| Soldiers (the lightest marks on the board) | blue `#7aa6ff`, red `#ff7a66` |
 | Trees | `#62894a`, `#527b3f`; pines `#3f6744` |
 | Stone (walls, bridges, houses) | `#cfcabd`, `#aaa597` |
 | Board edge (earth layers) | `#6b5141` → `#5c4334` → `#3e352c` |
