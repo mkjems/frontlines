@@ -2538,7 +2538,7 @@ import * as THREE from 'three';
         t.smokeUntil = performance.now() / 1000 + 12;   // the town smoulders for a while
       },
       shake(v) { shake = Math.max(shake, v); },
-      get shake() { return shake; },
+      get shakeAmount() { return shake; },
       update(dt, nowS) {
         // new arrows: give each tracer a visible flight along an arc
         for (const tr of tracers) {
@@ -2858,7 +2858,7 @@ import * as THREE from 'three';
     if (!odd) renderer.shadowMap.needsUpdate = true;
     sync3D(nowS);
     FX.update(fxDt, nowS);
-    const sh = FX.shake * baseDist / view.z * 0.006;   // a short shake when your capital is hit or a town falls
+    const sh = FX.shakeAmount * baseDist / view.z * 0.006;   // a short shake when your capital is hit or a town falls
     if (sh > 0.01) { camera.position.x += rand(-sh, sh); camera.position.y += rand(-sh, sh) * 0.5; camera.updateMatrixWorld(); }
     renderer.render(scene, camera);
     drawOverlay(nowS);
