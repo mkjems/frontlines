@@ -46,6 +46,24 @@ async function dragTo(page, a, b) {
   for (let i = 1; i <= 25; i++) { await page.mouse.move(a.x + (b.x - a.x) * i / 25, a.y + (b.y - a.y) * i / 25); await sleep(16); }
 }
 
+test('intro: tip carousel and how-to-win fold-out', async () => {
+  const page = await openGame();
+  const active = () => page.evaluate(() => [...document.querySelectorAll('#carousel .slide')].findIndex(s => s.classList.contains('on')));
+  assert.equal(await active(), 0, 'the first tip shows');
+  await page.click('#tipNext');
+  assert.equal(await active(), 1, 'the next arrow moves on');
+  await page.click('#tipPrev'); await page.click('#tipPrev');
+  assert.equal(await active(), 6, 'going back from the first tip wraps to the last');
+  const shown = () => page.evaluate(() => !document.getElementById('diffTips').hidden);
+  const before = await shown();
+  await page.click('#showTips');
+  assert.equal(await shown(), !before, 'the checkbox folds the how-to-win box in and out');
+  await page.click('#diff-hard');
+  assert.match(await page.evaluate(() => document.getElementById('foldLabel').textContent), /Hard/, 'the label follows the difficulty');
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
 test('drawing routes', async () => {
   const page = await openGame();
   await t(page, 'start');

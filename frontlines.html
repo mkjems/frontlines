@@ -206,6 +206,25 @@
   .tips ol { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: 12.5px; line-height: 1.45; color: var(--ink); }
   .tips p { font-size: 12.5px; }
   .btn.primary:hover { background: #5d93f7; }
+  /* intro tip carousel: slides share one grid cell, so the card keeps the height of the longest tip */
+  .carousel { background: var(--raised); border-radius: 14px; padding: 14px 16px 10px; box-shadow: inset 0 0 0 1px var(--edge); display: grid; gap: 8px; touch-action: pan-y; }
+  .slides { display: grid; }
+  .slide { grid-area: 1 / 1; display: grid; gap: 6px; align-content: start; opacity: 0; visibility: hidden; transform: translateX(8px); transition: opacity .3s ease, transform .3s ease, visibility .3s; }
+  .slide.on { opacity: 1; visibility: visible; transform: none; }
+  .slide .kicker { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; color: var(--blue-ink); }
+  .slide.r .kicker { color: var(--red-ink); }
+  .slide.n .kicker { color: var(--muted); }
+  .slide p { color: var(--ink); font-size: 13.5px; font-weight: 400; }
+  .slide .legend { flex-direction: column; gap: 8px; font-size: 13.5px; color: var(--ink); }
+  .cnav { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .cbtn { font: 600 18px var(--font); line-height: 1; color: var(--ink); background: transparent; border: 0; border-radius: 8px; padding: 2px 10px 5px; cursor: pointer; }
+  .cbtn:hover { background: var(--panel); }
+  .dots { display: flex; gap: 6px; }
+  .dots button { width: 7px; height: 7px; padding: 0; border: 0; border-radius: 50%; background: var(--line); cursor: pointer; transition: background .2s, transform .2s; }
+  .dots button.on { background: var(--blue-ink); transform: scale(1.25); }
+  .fold { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); cursor: pointer; user-select: none; }
+  .fold input { width: 15px; height: 15px; margin: 0; accent-color: var(--blue-ink); cursor: pointer; }
+  .fold:hover { color: var(--ink); }
   .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .choice {
     text-align: left; font: inherit; color: var(--ink); background: var(--raised); border: 1.5px solid var(--line);
@@ -281,19 +300,24 @@
   <div class="card">
     <div class="hero" id="introHero"></div>
     <h1>Frontlines</h1>
-    <p>Two kingdoms, one river. You never command a soldier. You draw the roads they march on, and the armies sort out the rest.</p>
-    <ul>
-      <li>Drag from a blue town to draw a march route. Tap a town to choose its troops or clear its route.</li>
-      <li class="n">End a route on an enemy or grey town to attack it, or on open ground to gather an army. Drag from a gathered army to send it on.</li>
-      <li>Big groups hit harder, troops arriving at a run hit hardest, and everyone fights better near home.</li>
-      <li>Farms and gold mines earn gold. Spend it in the tray on forts, watchtowers, bridges, barracks and more farms. A mine works for whoever holds the land around it. The enemy farms, mines and builds too.</li>
-      <li>Terrain matters. Roads are fast: troops march 40% quicker on them. Archers on hills shoot further, and attacking uphill is weaker. Forests slow troops but shelter them from arrows. Fords let anyone wade across the river, slowly.</li>
-      <li class="r">The enemy gathers at the bridges and sometimes fakes an attack. Take Redmarsh to win; lose Ashford and the war is over.</li>
-    </ul>
-    <div class="legend">
-      <span><i class="shape k0"></i>Spearmen beat cavalry</span>
-      <span><i class="shape k2"></i>Cavalry beat archers</span>
-      <span><i class="shape k1"></i>Archers beat spearmen</span>
+    <p>Two kingdoms, one river. You never command a soldier. You draw the paths they march on, and the armies sort out the rest.</p>
+    <!-- How to play, one tip at a time -->
+    <div class="carousel" id="carousel" aria-roledescription="carousel" aria-label="How to play">
+      <div class="slides" aria-live="polite">
+        <div class="slide"><span class="kicker">Draw the march</span><p>Drag from a blue town to draw a march route. Tap a town to choose its troops or clear its route.</p></div>
+        <div class="slide n"><span class="kicker">Attack or gather</span><p>End a route on an enemy or grey town to attack it, or on open ground to gather an army. Drag from a gathered army to send it on.</p></div>
+        <div class="slide"><span class="kicker">Strength in numbers</span><p>Big groups hit harder, troops arriving at a run hit hardest, and everyone fights better near home.</p></div>
+        <div class="slide"><span class="kicker">Spearmen, archers, cavalry</span>
+          <div class="legend"><span><i class="shape k0"></i>Spearmen beat cavalry</span><span><i class="shape k2"></i>Cavalry beat archers</span><span><i class="shape k1"></i>Archers beat spearmen</span></div></div>
+        <div class="slide"><span class="kicker">Gold and building</span><p>Farms and gold mines earn gold. Spend it in the tray on forts, watchtowers, bridges, barracks and more farms. A mine works for whoever holds the land around it.</p></div>
+        <div class="slide"><span class="kicker">Terrain matters</span><p>Roads are 40% faster. Archers on hills shoot further, and attacking uphill is weaker. Forests slow troops but shelter them from arrows. Fords let anyone wade across, slowly.</p></div>
+        <div class="slide r"><span class="kicker">Know your enemy</span><p>The enemy gathers at the bridges and sometimes fakes an attack. Take Redmarsh to win; lose Ashford and the war is over.</p></div>
+      </div>
+      <div class="cnav">
+        <button type="button" class="cbtn" id="tipPrev" aria-label="Previous tip">‹</button>
+        <div class="dots" id="tipDots"></div>
+        <button type="button" class="cbtn" id="tipNext" aria-label="Next tip">›</button>
+      </div>
     </div>
     <div class="diff" id="diff">
       <span class="label">Difficulty</span>
@@ -301,7 +325,8 @@
       <button type="button" id="diff-normal" data-d="normal">Normal</button>
       <button type="button" id="diff-hard" data-d="hard">Hard</button>
     </div>
-    <div class="tips" id="diffTips" aria-live="polite">
+    <label class="fold"><input type="checkbox" id="showTips"><span id="foldLabel">Show how to win</span></label>
+    <div class="tips" id="diffTips" aria-live="polite" hidden>
       <span class="label" id="tipsTitle">How to win</span>
       <p id="tipsIntro"></p>
       <ol id="tipsList"></ol>
@@ -2156,6 +2181,7 @@ import * as THREE from 'three';
     for (const k of Object.keys(DIFF)) $('diff-' + k).className = k === difficulty ? 'on' : '';
     const t = TIPS[difficulty];
     $('tipsTitle').textContent = `How to win on ${difficulty[0].toUpperCase() + difficulty.slice(1)}`;
+    $('foldLabel').textContent = `Show how to win on ${difficulty[0].toUpperCase() + difficulty.slice(1)}`;
     $('tipsIntro').textContent = t.intro;
     $('tipsList').innerHTML = t.list.map(x => `<li>${x}</li>`).join('');
   }
@@ -2165,6 +2191,35 @@ import * as THREE from 'three';
     stats.train[0] = D().blueTrain; stats.train[1] = D().redTrain;
   };
   renderDiff();
+  // The "how to win" box folds out from a checkbox; the choice is remembered.
+  try { $('showTips').checked = localStorage.getItem('frontlines-show-tips') === '1'; } catch (e) {}
+  $('diffTips').hidden = !$('showTips').checked;
+  $('showTips').onchange = () => {
+    $('diffTips').hidden = !$('showTips').checked;
+    try { localStorage.setItem('frontlines-show-tips', $('showTips').checked ? '1' : '0'); } catch (e) {}
+  };
+  // Intro tips, one at a time: arrows, dots, swipe and arrow keys; it advances by itself until touched.
+  const slides = [...document.querySelectorAll('#carousel .slide')];
+  let slideAt = 0, slideAuto = setInterval(() => showSlide(slideAt + 1), 7000);
+  $('tipDots').innerHTML = slides.map((_, i) => `<button type="button" aria-label="Tip ${i + 1} of ${slides.length}"></button>`).join('');
+  const dots = [...$('tipDots').children];
+  function showSlide(i) {
+    slideAt = (i + slides.length) % slides.length;
+    slides.forEach((s, k) => { s.classList.toggle('on', k === slideAt); s.setAttribute('aria-hidden', k !== slideAt); });
+    dots.forEach((d, k) => d.classList.toggle('on', k === slideAt));
+  }
+  const stepSlide = d => { clearInterval(slideAuto); showSlide(slideAt + d); };
+  $('tipPrev').onclick = () => stepSlide(-1);
+  $('tipNext').onclick = () => stepSlide(1);
+  dots.forEach((d, k) => d.onclick = () => { clearInterval(slideAuto); showSlide(k); });
+  let swipeX = null;
+  $('carousel').addEventListener('pointerdown', e => { swipeX = e.clientX; });
+  $('carousel').addEventListener('pointerup', e => { if (swipeX !== null && Math.abs(e.clientX - swipeX) > 40) stepSlide(e.clientX < swipeX ? 1 : -1); swipeX = null; });
+  addEventListener('keydown', e => {
+    if ($('intro').hidden || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+    stepSlide(e.key === 'ArrowRight' ? 1 : -1);
+  });
+  showSlide(0);
   addEventListener('resize', resize);
 
   let toastTimer = 0;
