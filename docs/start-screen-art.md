@@ -33,7 +33,7 @@ Leave the title out of the image. The game sets **Frontlines** in its own font (
   - **Blue** is the player's kingdom, on the west bank, with **Ashford** as its capital.
   - **Red** is the enemy, on the east bank, with **Redmarsh** as its capital.
   - They are colours on a map, not real nations, so avoid real-world flags, heraldry or text on banners.
-- **Landscape:** deep reddish-brown earth with ochre and green fields, a winding slate-blue river with a shallow ford of
+- **Landscape:** dark, muted earth with dull ochre and green fields, a winding slate-blue river with a shallow ford of
   stepping stones, terraced hills, dark green woods of round trees and pines, brown dirt roads linking
   the towns.
 - **Mood:** calm before the battle. The tension comes from the two armies facing each other across the
@@ -62,16 +62,17 @@ Use the game's palette so the art sits naturally on the card:
 | --- | --- |
 | Blue kingdom | `#3b6fd4` (light `#b7cbef`) |
 | Red kingdom | `#df5448` (light `#f2bcb6`) |
-| Open ground (reddish-brown earth) | `#6b5141`, `#634a3b` |
-| Hills (darker towards the top) | `#654c3c` → `#553f31` |
+| Open ground (dark, muted earth) | `#4f433b`, `#4a3f37` |
+| Hills (darker towards the top) | `#4b4038` → `#3f362f` |
 | River | `#4f7d93`, riverbed `#47555a` |
-| Muddy riverbanks | `#7d6550` |
-| Dirt roads (only a little lighter than the ground) | `#755c48`, `#806852` |
-| Fields (muted, they sit back) | wheat `#857547`, green crops `#56633b` |
+| Muddy riverbanks | `#5c5046` |
+| Dirt roads (only a little lighter than the ground) | `#574a40`, `#5f5146` |
+| Fields (muted, they sit back) | wheat `#685f4b`, green crops `#4a513d` |
 | Soldiers (the lightest marks on the board) | blue `#7aa6ff`, red `#ff7a66` |
 | Trees | `#62894a`, `#527b3f`; pines `#3f6744` |
 | Stone (walls, bridges, houses) | `#cfcabd`, `#aaa597` |
-| Board edge (earth layers) | `#6b5141` → `#5c4334` → `#3e352c` |
+| Board edge (earth layers) | `#4f433b` → `#453a32` → `#3e352c` |
+| Bridges (weathered timber) | `#76664f`, `#655743` |
 | Table around the board | `#3d423c` |
 | Card (the white the banner sits on) | `#fbfbf7` |
 | Text | `#2e3735` |
@@ -100,7 +101,7 @@ Adjust the aspect-ratio flag to whatever your tool uses (for example `--ar 21:9`
 > slate-blue river runs down the centre with a stone bridge and shallow stepping-stone ford. On the left
 > bank a walled stone castle with royal-blue roofs and blue pennants, a column of small blue spearmen,
 > archers and cavalry marching along a dirt road towards the bridge. On the right bank a matching castle
-> with coral-red roofs and red pennants and a red army. Deep reddish-brown earth, ochre wheat fields,
+> with coral-red roofs and red pennants and a red army. Dark muted brown earth, dull ochre fields,
 > faint dirt roads, terraced grassy hills, clusters of dark green low-poly round trees and pines, grey
 > stone. Low-poly stylised 3D, soft matte materials, low warm sun from the upper left casting soft
 > shadows to the lower right, earthy palette of darker browns, greens and greys, gentle tilt-shift depth
@@ -109,7 +110,7 @@ Adjust the aspect-ratio flag to whatever your tool uses (for example `--ar 21:9`
 **Background, the diorama on the table:**
 
 > A miniature strategy-game board on a dark slate-grey table, seen from above at a slight angle. The board
-> shows a deep reddish-brown landscape split by a winding slate-blue river; a blue kingdom's walled castle and towns
+> shows a dark, muted brown landscape split by a winding slate-blue river; a blue kingdom's walled castle and towns
 > on the left, a red kingdom's on the right, roads, fields, small woods and terraced hills. Low-poly
 > stylised 3D, soft daylight from the upper left, soft shadows, earthy palette of darker browns, greens
 > and greys with royal blue and coral red as the only strong colours, tilt-shift miniature look, lots of calm space in the centre, no
