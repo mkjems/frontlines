@@ -97,6 +97,14 @@ test('an army sent into the enemy capital takes it', async () => {
   for (let i = 0; i < 12 && await t(page, 'state') === 'play'; i++) await t(page, 'run', 5);
   assert.equal(await t(page, 'owner', 'Redmarsh'), 0, 'Redmarsh falls to the army');
   assert.equal(await t(page, 'state'), 'over', 'taking the capital ends the game');
+  // the battle plays on behind the end dialog, and Keep watching tucks the dialog away
+  const before = await t(page, 'alive');
+  await t(page, 'run', 5);
+  assert.notEqual(await t(page, 'alive'), before, 'soldiers keep training and fighting after the war is decided');
+  await page.click('#watchBtn');
+  assert.ok(await page.$eval('#over', e => e.hidden) && !(await page.$eval('#watchBar', e => e.hidden)), 'the dialog gives way to a small bar');
+  await page.click('#againBtn2');
+  assert.equal(await t(page, 'state'), 'intro', 'Play again starts over');
   assert.deepEqual(page.errors, []);
   await page.close();
 });

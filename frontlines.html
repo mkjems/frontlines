@@ -205,6 +205,16 @@
   #gold .big { display: flex; align-items: center; gap: 6px; }
   #gold .coin { width: 12px; height: 12px; }
   #goldRate { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  /* the end of a campaign: no blur, a light veil, so the battle can be watched as it plays out */
+  #over { background: rgba(12, 15, 14, .3); backdrop-filter: none; }
+  .row-btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .watchbar {
+    position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 70px);
+    display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; border-radius: 14px;
+    background: var(--panel); box-shadow: var(--shadow), inset 0 0 0 1px var(--edge); font-size: 13px; font-weight: 600; white-space: nowrap;
+  }
+  .watchbar[hidden] { display: none; }
+  .watchbar .btn.primary { padding: 8px 14px; font-size: 13px; }
   .btn.primary { background: var(--blue); color: #fff; padding: 12px 18px; font-size: 14px; align-self: flex-start; }
   .diff { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .diff .label { margin-right: 4px; min-width: 70px; }
@@ -429,8 +439,15 @@
     <h1 id="overTitle">Victory</h1>
     <p id="overText"></p>
     <div class="stats" id="overStats"></div>
-    <button class="btn primary" id="againBtn" type="button">Play again</button>
+    <div class="row-btns">
+      <button class="btn primary" id="againBtn" type="button">Play again</button>
+      <button class="btn" id="watchBtn" type="button">Keep watching</button>
+    </div>
   </div>
+</div>
+<div class="watchbar" id="watchBar" hidden>
+  <span id="watchText"></span>
+  <button class="btn primary" id="againBtn2" type="button">Play again</button>
 </div>
 
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }</script>
@@ -1440,7 +1457,7 @@ import * as THREE from 'three';
     e.hp -= dmg * defense(e); e.flash = 0.12;
     if (!ranged && Math.random() < 0.5) FX.kick(e.x, e.y);
     strikes++;
-    e.x += nx * kb; e.y += ny * kb;
+    e.x += nx * kb; e.y += ny * kb; constrain(e);   // knocked back, but never into a river or a mountainside
     if (e.hp <= 0) kill(e);
   }
 
@@ -1467,7 +1484,7 @@ import * as THREE from 'three';
     if (menuTown === t) closeMenu();
     if (team === 0) tally.captured++;
     if (prev === 0) tally.fallen++;
-    if (t.capital) { endGame(team === 0); return; }
+    if (t.capital && state === 'play') { endGame(team === 0); return; }
     if (team === 0) Sound.good(); else if (prev === 0) Sound.bad();
     if (team === 0) toast(towns.some(o => o.owner === 0 && o.route && o.route.target === t) ? `${t.name} captured. Its attackers now guard it` : `${t.name} captured`, 'good');
     else if (prev === 0) toast(`${t.name} has fallen`, 'bad');
@@ -1542,7 +1559,7 @@ import * as THREE from 'three';
         const ex = t.x - u.x, ey = t.y - u.y;
         if (ex * ex + ey * ey < 144) { enterTown(t, u); break; }
       }
-      if (state !== 'play') return;
+      if (!running()) return;
     }
   }
 
@@ -1927,8 +1944,11 @@ import * as THREE from 'three';
   }
   function setHint(text) { hintBase = text; if (!armed) { $('hint').textContent = text; $('hint').style.opacity = text ? 1 : 0; } }
 
+  // the world moves while you play, and after the war is decided, so you can watch it play out
+  const running = () => state === 'play' || state === 'over';
   function endGame(won) {
-    state = 'over';
+    state = 'over';   // the battle plays on behind the dialog; only the player's part is over
+    $('watchText').textContent = `${won ? 'Victory' : 'Defeat'} · ${won ? 'Redmarsh' : 'Ashford'} has fallen`;
     const level = difficulty[0].toUpperCase() + difficulty.slice(1);
     $('overLabel').textContent = `${won ? 'Victory' : 'Defeat'} · ${level}`;
     $('overTitle').textContent = won ? 'Redmarsh has fallen' : 'Ashford has fallen';
@@ -1952,7 +1972,7 @@ import * as THREE from 'three';
     time += dt; weekT += dt;
     buildGrid();
     updateUnits(dt);
-    if (state !== 'play') return;
+    if (!running()) return;
     updateTowns(dt);
     updateStructs(dt);
     aiStep(dt);
@@ -1966,11 +1986,11 @@ import * as THREE from 'three';
     if (scars.length && time - scars[0].born > 30) scars = scars.filter(sc => time - sc.born < 30);
     stepTerritory(dt);
     stepEconomy(dt);
-    stepCoach(dt);
+    if (state === 'play') stepCoach(dt);
     alerts = alerts.filter(a => a.t < 6);
     chargeCd = Math.max(0, chargeCd - dt);
     puffs = puffs.filter(p => p.t < 0.5);
-    if (weekT >= WEEK) { weekT = 0; offerUpgrades(); }
+    if (weekT >= WEEK) { weekT = 0; if (state === 'play') offerUpgrades(); }
   }
 
   // ---------- input ----------
@@ -2212,7 +2232,7 @@ import * as THREE from 'three';
   addEventListener('keyup', e => { if (e.key === 'Shift') { inspectAt = null; showInspect(); } });
   addEventListener('blur', () => { inspectAt = null; showInspect(); });
   addEventListener('keydown', e => {
-    if (e.code === 'Space' && state === 'play') { e.preventDefault(); setPaused(!paused); }
+    if (e.code === 'Space' && running()) { e.preventDefault(); setPaused(!paused); }
     if (e.key === 'Escape') { if (armed) { armed = null; renderTray(); } closeMenu(); if (!$('rules').hidden) $('rulesClose').onclick(); }
   });
   cvs.addEventListener('pointerleave', () => { ghost = null; lastPointer = null; inspectAt = null; showInspect(); });
@@ -2363,7 +2383,9 @@ import * as THREE from 'three';
     if (st.el) $(st.el).classList.add('pulse');
   }
   $('tutSkip').onclick = endTutorial;
-  $('againBtn').onclick = () => { $('over').hidden = true; newGame(); state = 'intro'; setPaused(false); $('intro').hidden = false; $('startBtn').focus(); };
+  $('watchBtn').onclick = () => { $('over').hidden = true; $('watchBar').hidden = false; };
+  $('againBtn2').onclick = () => $('againBtn').click();
+  $('againBtn').onclick = () => { $('over').hidden = true; $('watchBar').hidden = true; newGame(); state = 'intro'; setPaused(false); $('intro').hidden = false; $('startBtn').focus(); };
   const TIPS = {
     easy: {
       intro: 'The enemy grows slowly and rarely counters you. A good level to learn the basics.',
@@ -3236,7 +3258,7 @@ import * as THREE from 'three';
   function render() {
     if (!bg || !renderer) return;
     const nowS = performance.now() / 1000, odd = ++renderNo % 2;
-    const fxDt = state === 'play' && !paused ? Math.min(0.05, nowS - lastRenderS) * speed : 0;
+    const fxDt = running() && !paused ? Math.min(0.05, nowS - lastRenderS) * speed : 0;
     lastRenderS = nowS;
     // Spread the work: ground markings refresh on odd frames (every frame while you draw or place), shadows on even ones.
     if (odd || drawing || armed) { drawDecals(nowS); decalTex.needsUpdate = true; }
@@ -3625,16 +3647,16 @@ import * as THREE from 'three';
   function frame(now) {
     adaptResolution(now - last, now);
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
-    if (state === 'play' && !paused) {
+    if (running() && !paused) {
       acc += dt * speed;
-      while (acc >= STEP && state === 'play') { step(STEP); acc -= STEP; }
+      while (acc >= STEP && running()) { step(STEP); acc -= STEP; }
     } else acc = 0;
     // Battle noise follows how much fighting happened this frame.
     clashLevel += (strikes / Math.max(dt, 0.001) / 60 - clashLevel) * 0.08;
     if (strikes && Math.random() < Math.min(1, strikes * 0.15)) Sound.hit();
     strikes = 0;
-    Sound.clash(state === 'play' && !paused ? clashLevel : 0);
-    Sound.ambient(clashLevel, state === 'play' && !paused);
+    Sound.clash(running() && !paused ? clashLevel : 0);
+    Sound.ambient(clashLevel, running() && !paused);
     render();
     updateHud();
     requestAnimationFrame(frame);
@@ -3651,7 +3673,7 @@ import * as THREE from 'three';
       resetView: () => { view.z = 1; view.x = view.y = 0; placeCamera(); },
       zoom: (x, y, z) => zoomTo(z, x, y),
       barracks: (n, k) => { town(n).barracks = k; },
-      run: secs => { for (let i = 0; i < secs * 40 && state === 'play'; i++) step(STEP); },
+      run: secs => { for (let i = 0; i < secs * 40 && running(); i++) step(STEP); },
       alive: () => units.filter(u => !u.dead).length,
       smouldering: () => towns.filter(t => t.smokeUntil > performance.now() / 1000).map(t => t.name),
       // 40 blue against 40 red just east of Millbrook; returns the screen point of the fight
