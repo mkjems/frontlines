@@ -185,6 +185,12 @@
   .card li.n::before { background: #8e8d86; }
   .hero { margin: -28px -28px 0; border-radius: 18px 18px 0 0; overflow: hidden; line-height: 0; }
   .hero svg { width: 100%; height: auto; display: block; }
+  /* the start screen's painting, with the title set on it; it fades into the card at the bottom */
+  .hero.art { position: relative; height: 240px; line-height: 1; display: flex; align-items: flex-end; padding: 0 28px 6px;
+    background: #1c201f url(art/start.jpg) center 42% / cover no-repeat; }
+  .hero.art::after { content: ""; position: absolute; inset: 0;
+    background: linear-gradient(to bottom, rgba(38, 44, 43, 0) 40%, rgba(38, 44, 43, .6) 72%, var(--panel) 100%); }
+  .hero.art h1 { position: relative; z-index: 1; font-size: 48px; text-shadow: 0 2px 14px rgba(0, 0, 0, .7), 0 1px 2px rgba(0, 0, 0, .6); }
   .march { animation: march 1.8s linear infinite; }
   @keyframes march { from { transform: translate(0, 0); } to { transform: translate(var(--mx), var(--my)); } }
   .icon-tile { width: 40px; height: 40px; border-radius: 10px; background: rgba(159, 192, 255, .12); color: var(--blue-ink); display: grid; place-items: center; }
@@ -257,6 +263,8 @@
     .choices { grid-template-columns: 1fr; }
     .card { padding: 22px; }
     .hero { margin: -22px -22px 0; }
+    .hero.art { height: 190px; padding: 0 22px 4px; }
+    .hero.art h1 { font-size: 40px; }
     .card h1 { font-size: 32px; }
   }
   @media (prefers-reduced-motion: reduce) { .march { animation: none; } * { transition: none !important; } .pulse { animation: none; outline: 2px solid var(--blue-ink); } }
@@ -320,8 +328,7 @@
 
 <div class="overlay" id="intro">
   <div class="card">
-    <div class="hero" id="introHero"></div>
-    <h1>Frontlines</h1>
+    <div class="hero art" id="introHero"><h1>Frontlines</h1></div>
     <p>Two kingdoms, one river. You never command a soldier. You draw the paths they march on, and the armies sort out the rest.</p>
     <!-- How to play, one tip at a time -->
     <div class="carousel" id="carousel" aria-roledescription="carousel" aria-label="How to play">
@@ -2319,7 +2326,6 @@ import * as THREE from 'three';
     $('coachText').textContent = c.text; $('coach').hidden = false; coachHide = 10; coachT = 14;
   }
   $('coachClose').onclick = () => { $('coach').hidden = true; };
-  $('introHero').innerHTML = heroSVG('intro');
   $('startBtn').onclick = () => { Sound.init(); $('intro').hidden = true; state = 'play'; };
   function renderSound() { $('soundBtn').textContent = Sound.muted ? 'Sound off' : 'Sound on'; }
   $('soundBtn').onclick = () => { Sound.init(); Sound.setMuted(!Sound.muted); renderSound(); };

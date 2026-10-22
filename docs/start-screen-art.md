@@ -129,7 +129,9 @@ Before using an image, check that:
 - it has the same earthy, muted feel as the game, not brighter or more saturated;
 - there's no stray text or lettering.
 
-Then add the image to the project, for example as `art/start-banner.webp`, and ask Claude to wire it in.
-It would replace the drawn banner made by `heroSVG('intro')` in `frontlines.html`, and `build.sh` would
-need to copy the image into `site/`. Don't put it straight into `site/`: that folder is rebuilt on every
-build and isn't saved in git.
+The current painting is `art/start.jpg` (1200 × 800, about 350 KB). It fills the top of the start card with
+the title **Frontlines** set on it, cropped to the middle and fading into the card at the bottom, so keep
+the area just above the bottom edge calm enough for the title to read. To replace it, save the new image
+over `art/start.jpg` (a JPEG around 1200 px wide, under about 400 KB); `build.sh` copies the `art/`
+folder into `site/`. Don't put it straight into `site/`: that folder is rebuilt on every build and isn't
+saved in git.

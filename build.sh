@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the website version of Frontlines into site/index.html.
+# Builds the website version of Frontlines into site/ (index.html and the art/ folder).
 # frontlines.html is written without the document wrapper (the artifact host adds it),
 # so this wraps it as a complete page with sharing metadata and an icon.
 set -euo pipefail
@@ -29,4 +29,6 @@ HEAD
   echo '</body>'
   echo '</html>'
 } > "$OUT"
+# pictures the page uses (the start screen painting)
+rm -rf site/art && cp -R art site/art
 echo "Built $OUT ($(wc -c < "$OUT" | tr -d ' ') bytes)"
