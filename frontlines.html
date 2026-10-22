@@ -2989,16 +2989,6 @@ import * as THREE from 'three';
       ctx.beginPath(); ctx.arc(t.x, t.y, 64, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
     }
-    // drill yards: towns with barracks sit on a round, dark-tinted parade ground that grows with each
-    // barracks; a capital's fills the inside of its city wall
-    for (const t of towns) {
-      if (!t.barracks || t.owner < 0) continue;
-      const y = t.capital ? 62 : townSize(t) + 24 + 7 * Math.min(3, t.barracks);
-      ctx.beginPath(); ctx.arc(t.x, t.y, y, 0, Math.PI * 2);
-      ctx.globalAlpha = 0.07 + 0.03 * Math.min(3, t.barracks); ctx.fillStyle = COL.team[t.owner]; ctx.fill();
-      ctx.globalAlpha = 0.5; ctx.strokeStyle = COL.mid[t.owner]; ctx.lineWidth = 1.2; ctx.setLineDash([6, 5]); ctx.stroke(); ctx.setLineDash([]);
-      ctx.globalAlpha = 1;
-    }
     // battle scars fade over 30 seconds
     for (const sc of scars) {
       const k = 1 - (time - sc.born) / 30;
@@ -3158,7 +3148,17 @@ import * as THREE from 'three';
         label(t.name.toUpperCase(), p.x, p.y + 2 * k, Math.round(14 * k), 800, t.owner < 0 ? INK : LIGHTC[t.owner], 4);
         label('CAPITAL', p.x, p.y + 16 * k, Math.round(9 * k), 600, 'rgba(226,230,222,.65)');
       } else label(t.name, p.x, p.y, Math.round(11.5 * k), 600, INK);
-      if (t.barracks > 0) label(t.barracks === 1 ? 'Barracks' : `×${t.barracks} barracks`, p.x, p.y + (t.capital ? 29 : 14) * k, Math.round(9.5 * k), 700, t.owner < 0 ? INK : LIGHTC[t.owner]);
+      if (t.barracks > 0) {   // barracks: a rank insignia, one chevron per barracks, beside the label
+        const by = p.y + (t.capital ? 29 : 14) * k, fill = t.owner < 0 ? INK : LIGHTC[t.owner], n = Math.min(3, t.barracks);
+        label('Barracks', p.x + 7 * k, by, Math.round(9.5 * k), 700, fill);
+        const cx = p.x + 7 * k - ctx.measureText('Barracks').width / 2 - 8 * k, cw = 4.5 * k, ch = 3 * k, gap = 3.2 * k;
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        for (const [w, c] of [[4.5 * k, 'rgba(16,19,18,.85)'], [1.8 * k, fill]]) {
+          ctx.lineWidth = w; ctx.strokeStyle = c; ctx.beginPath();
+          for (let i = 0; i < n; i++) { const y = by - (n - 1) * gap / 2 + i * gap; ctx.moveTo(cx - cw, y + ch / 2); ctx.lineTo(cx, y - ch / 2); ctx.lineTo(cx + cw, y + ch / 2); }
+          ctx.stroke();
+        }
+      }
     }
     if (drawing && drawing.lock) {
       const L = drawing.lock, p = toScreen(L.x, L.y, groundAt(L.x, L.y) + keepH(L) + 16);
