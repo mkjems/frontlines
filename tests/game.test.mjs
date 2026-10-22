@@ -184,9 +184,11 @@ test('every landscape builds and plays: towns stay dry and nobody walks through 
   const terrain = await t(page, 'newMap', 'highlands') && await t(page, 'terrain');
   assert.ok(terrain.crags > 0, 'the highlands have crags');
   assert.ok((await t(page, 'newMap', 'marsh'), await t(page, 'terrain')).marshes > 0, 'the marshes have bogs');
-  const before = await t(page, 'land');
-  await page.evaluate(() => document.getElementById('newMap').click());
-  assert.notEqual(await t(page, 'land'), before, 'New map deals a different landscape');
+  // New map steps through every landscape once, in order, then starts over
+  const seen = [];
+  for (let i = 0; i < 9; i++) { await page.evaluate(() => document.getElementById('newMap').click()); seen.push(await t(page, 'land')); }
+  assert.equal(new Set(seen).size, 9, 'nine presses visit all nine landscapes');
+  assert.equal(seen[8], 'marsh', 'and the ninth comes back round to where it started');
   assert.deepEqual(page.errors, []);
   await page.close();
 });

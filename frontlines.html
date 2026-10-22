@@ -207,6 +207,8 @@
   #goldRate { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
   /* the end of a campaign: no blur, a light veil, so the battle can be watched as it plays out */
   #over { background: rgba(12, 15, 14, .3); backdrop-filter: none; }
+  /* the start screen: no blur either, so you can see the map you're about to play */
+  #intro { background: rgba(12, 15, 14, .3); backdrop-filter: none; }
   .row-btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .watchbar {
     position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 70px);
@@ -828,10 +830,14 @@ import * as THREE from 'three';
   let land = LANDS.valley, landKey = '', mapSeed = 1, classic = false;
   try { classic = localStorage.getItem('frontlines-classic') === '1'; } catch (e) {}
   if (new URLSearchParams(location.search).get('layout') === 'classic') classic = true;
-  // a different landscape from last time, unless one is asked for (?land=highlands in the address works too)
+  // New map steps through the landscapes in order, carrying on next visit where you left off,
+  // unless one is asked for (?land=highlands in the address works too)
   function pickLand(force) {
-    const keys = Object.keys(LANDS).filter(k => k !== landKey);
-    landKey = LANDS[force] ? force : keys[Math.random() * keys.length | 0];
+    const keys = Object.keys(LANDS);
+    let last = landKey;
+    if (!last) try { last = localStorage.getItem('frontlines-land') || ''; } catch (e) {}
+    landKey = LANDS[force] ? force : keys[(keys.indexOf(last) + 1) % keys.length];
+    try { localStorage.setItem('frontlines-land', landKey); } catch (e) {}
     land = LANDS[landKey];
     $('landName').textContent = land.name; $('landDesc').textContent = land.desc;
   }
