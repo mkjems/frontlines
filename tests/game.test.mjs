@@ -49,7 +49,10 @@ async function dragTo(page, a, b) {
 test('intro: tip carousel and how-to-win fold-out', async () => {
   const page = await openGame();
   const active = () => page.evaluate(() => [...document.querySelectorAll('#carousel .slide')].findIndex(s => s.classList.contains('on')));
-  assert.equal(await active(), 0, 'the first tip shows');
+  // The carousel advances by itself every 7s until touched, and on slow machines (CI renders WebGL in
+  // software) the first advance can happen before we look, so start by clicking the first dot.
+  await page.click('#tipDots button:first-child');
+  assert.equal(await active(), 0, 'a dot jumps to its tip');
   await page.click('#tipNext');
   assert.equal(await active(), 1, 'the next arrow moves on');
   await page.click('#tipPrev'); await page.click('#tipPrev');
