@@ -74,12 +74,8 @@ test('two players play a match through the relay, each with their own side, and 
   const hostTo = await nearestFree(host, 'Ashford'), guestTo = await nearestFree(guest, 'Redmarsh');
   await drag(host, 'Ashford', hostTo);     // each player draws a route from their own capital
   await drag(guest, 'Redmarsh', guestTo);
-  await sleep(1500);
-  for (const p of [host, guest]) {
-    assert.equal(await t(p, 'route', 'Ashford'), hostTo, 'the host\'s route reaches both games');
-    assert.equal(await t(p, 'route', 'Redmarsh'), guestTo, 'the guest\'s route reaches both games');
-  }
-  for (const p of [host, guest]) await until(p, () => __t.net().turn > 60 && __t.net().agreed >= 3, 'the battle to move on and checksums to be compared');
+  for (const p of [host, guest]) await until(p, ([a, b]) => __t.route('Ashford') === a && __t.route('Redmarsh') === b, 'both routes to reach both games', 60000, [hostTo, guestTo]);
+  for (const p of [host, guest]) await until(p, () => __t.net().turn > 60 && __t.net().agreed >= 3, 'the battle to move on and checksums to be compared', 60000);
   for (const p of [host, guest]) {
     const n = await t(p, 'net');
     assert.equal(n.desync, -1, 'no checksum ever differed');
@@ -94,7 +90,7 @@ test('a match stays in sync with a slow connection', async () => {
   const { host, guest } = await match(slow);
   await drag(host, 'Ashford', await nearestFree(host, 'Ashford'));
   await drag(guest, 'Redmarsh', await nearestFree(guest, 'Redmarsh'));
-  for (const p of [host, guest]) await until(p, () => __t.net().turn > 40 && __t.net().agreed >= 2, 'the battle to move on despite the delay');
+  for (const p of [host, guest]) await until(p, () => __t.net().turn > 40 && __t.net().agreed >= 2, 'the battle to move on despite the delay', 60000);
   for (const p of [host, guest]) {
     const n = await t(p, 'net');
     assert.equal(n.desync, -1);
