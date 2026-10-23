@@ -25,4 +25,4 @@ Ideas:
 - **Look:** one dark colour scheme only (no seasons or light themes); soldiers should be the brightest
   things on the board.
 - **Two-player online play** is being built in phases; [docs/multiplayer.md](docs/multiplayer.md) holds the
-  plan and the progress. Splitting the file into modules is still undecided (an open question there).
+  plan and the progress. The game stays in one file for now (decided 23 October; see the plan's open questions).

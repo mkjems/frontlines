@@ -6,7 +6,8 @@
   "scripts": {
     "pretest": "../build.sh",
     "test": "node --test --test-concurrency=1 game.test.mjs",
-    "drift": "../build.sh >/dev/null && node drift.mjs"
+    "drift": "../build.sh >/dev/null && node drift.mjs",
+    "safari": "../build.sh >/dev/null && node safari.mjs"
   },
   "devDependencies": {
     "puppeteer-core": "^23.11.1"

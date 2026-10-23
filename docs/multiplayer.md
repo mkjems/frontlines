@@ -3,7 +3,7 @@
 The plan for playing Frontlines against another person, agreed on 23 October 2026. Work through the phases
 in order. Single player against the computer must keep working, and feel the same, after every phase.
 
-**Current phase:** 2, not started. Phase 1 was done on 23 October (one check left open, see there).
+**Current phase:** 2, not started. Phase 1 was done on 23 October.
 
 How to keep this plan up to date:
 - Tick a step (`- [ ]` → `- [x]`) in the same commit as the work, once its tests pass.
@@ -127,9 +127,17 @@ Exit: we know how far today's game is from deterministic, and the size of phase 
       Full run on 23 October (`npm run drift`): identical for 10 game minutes on all ten landscapes, up to
       1,650 soldiers.
       Each copy runs in its own browser profile with the same saved settings; see phase 3 for why.
-- [ ] Left open: a check that the simulation gives the same results in Safari's engine as in Chrome's: for example, run
-      the simulation without drawing in Node and in `jsc` and compare checksums. That needs the simulation
-      to run without the page, which ties in with the open question on splitting the file.
+- [x] A check that the battle comes out the same in Safari as in Chrome. Done with real Safari, not by
+      splitting the file: `cd tests && npm run safari` (macOS only) runs the twins with one copy in Chrome and
+      one in Safari, controlled through `safaridriver`. Safari's automation must be switched on once:
+      `sudo safaridriver --enable`, and in Safari's settings "Show features for web developers", then under
+      Developer "Allow remote automation". Safari must be closed, or at least have no dialog open, or the
+      session times out. Run from Claude Code, the command needs to run outside the sandbox to start Safari.
+      Results on 23 October: identical for 10 game minutes on River Valley, Great Lake, Two Rivers, Mountain
+      Pass and Open Border, and for 2 game minutes on the other five. That's slow: about 15 minutes per
+      landscape at 10 game minutes, as Safari draws the full game. As a check that the test can catch a
+      difference, switching the game back to `Math.sin`/`cos`/`hypot` made Chrome and Safari differ from
+      second 6. Firefox is still untested (not installed).
 
 Exit: the determinism test passes reliably; single player plays as before.
 
@@ -190,8 +198,9 @@ Exit: a friend who has never seen the game can join from a link on a phone and f
 
 ## Open questions
 
-- **Splitting the file into modules** (paused since 22 October): lockstep doesn't require it, but a
-  separate simulation file would make phase 0/1 tests and a later Worker easier. Decide before phase 1.
+- **Splitting the file into modules** (paused since 22 October): lockstep doesn't require it, and the Safari
+  check was done in real Safari instead. Decided on 23 October to stay in the single file for now; revisit if
+  the simulation needs to run in a Worker (see Background tabs).
 - **Pauses:** must the other player accept, or does each player get a few pauses of their own?
 - **Background tabs:** browsers slow hidden tabs, which stalls both players in lockstep. Pause the match when
   either tab is hidden, or run the simulation in a Worker?
