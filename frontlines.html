@@ -456,7 +456,7 @@
         <li><span class="k">End on a town</span> to attack it, or <span class="k">on open ground</span> to gather an army there.</li>
         <li><span class="k">Drag from a gathered army</span> to send it on. Free, costs no ink.</li>
         <li><span class="k">Tap a town</span> to pick its troops or clear its route.</li>
-        <li><span class="k">Charge</span> (first in the tray, or press C; every 25s): troops in the circle sprint and hit harder.</li>
+        <li><span class="k">Charge</span> (first in the tray, or press C; every 25s): your troops in the circle run at the enemy where you click, sprinting, and their first blow hits two to three times as hard.</li>
         <li><span class="k">Space</span> pauses, <span class="k">Esc</span> cancels. Hold <span class="k">Shift</span> and hover to inspect anything.</li>
         <li><span class="k">Scroll or pinch</span> to zoom in on the fighting, <span class="k">drag open ground</span> to look around, <span class="k">double-click</span> to zoom in or back out.</li>
       </ul></div>
@@ -609,7 +609,12 @@ import * as THREE from 'three';
       place() { noise(0.18, { filter: 'lowpass', freq: 300, vol: 0.5 }); tone(150, 0.2, { vol: 0.18, glide: 70 }); },
       good() { [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.35, { type: 'triangle', vol: 0.09, delay: i * 0.08 })); },
       bad() { [440, 349, 294].forEach((f, i) => tone(f, 0.45, { type: 'triangle', vol: 0.1, delay: i * 0.13 })); },
-      charge() { tone(196, 0.55, { type: 'sawtooth', vol: 0.05, glide: 392 }); tone(294, 0.55, { type: 'sawtooth', vol: 0.035, glide: 588, delay: 0.06 }); },
+      charge() {
+        tone(196, 0.55, { type: 'sawtooth', vol: 0.05, glide: 392 }); tone(294, 0.55, { type: 'sawtooth', vol: 0.035, glide: 588, delay: 0.06 });
+        // the battle cry: many voices, a swelling roar of filtered noise, and running feet
+        for (const [f, d, v] of [[420, 1.1, 0.16], [780, 0.9, 0.1], [1300, 0.7, 0.05]]) noise(d, { freq: f, q: 0.9, vol: v, delay: 0.08 });
+        for (let i = 0; i < 8; i++) noise(0.06, { freq: 160, q: 1.2, vol: 0.12, delay: 0.15 + i * 0.11 });
+      },
       arrow() { if (now() - lastArrow > 90) { lastArrow = now(); noise(0.09, { freq: 2400, q: 2, vol: 0.18 }); tone(420, 0.1, { type: 'triangle', vol: 0.12, glide: 180 }); } },
       hit() { if (now() - lastHit > 70) { lastHit = now(); noise(0.05, { freq: 600 + Math.random() * 500, q: 4, vol: 0.12 }); } },
       alarm() { tone(784, 0.14, { type: 'square', vol: 0.035 }); tone(784, 0.14, { type: 'square', vol: 0.035, delay: 0.22 }); },
@@ -1644,7 +1649,17 @@ import * as THREE from 'three';
 
       const g = goalOf(u);
       const aggro = g.hold ? 100 : 60;
-      if (u.enemy && (u.enemy.dead || (u.enemy.x - u.x) ** 2 + (u.enemy.y - u.y) ** 2 > (aggro * 1.4) ** 2)) u.enemy = null;
+      if (u.charge) {   // on a charge: run at the enemies around the spot it was aimed at, for a few seconds
+        u.charge.t -= dt;
+        if (u.charge.t <= 0) u.charge = null;
+        else {
+          // each goes for the enemy nearest to itself among those around the spot, so the charge spreads along their line
+          const e = u.enemy, near = (o, r) => o && (o.x - u.charge.x) ** 2 + (o.y - u.charge.y) ** 2 < r * r;
+          if (!e || e.dead || !near(e, 110)) { const own = nearestEnemy(u.x, u.y, u.team, 150, false); u.enemy = near(own, 110) ? own : nearestEnemy(u.charge.x, u.charge.y, u.team, 110, false); }
+          if (Math.random() < dt * 6) FX.kick(u.x, u.y);   // dust thrown up by the running feet
+        }
+      }
+      if (u.enemy && !u.charge && (u.enemy.dead || (u.enemy.x - u.x) ** 2 + (u.enemy.y - u.y) ** 2 > (aggro * 1.4) ** 2)) u.enemy = null;
       if (!u.enemy && (u.id + frameNo) % 5 === 0) u.enemy = findEnemy(u, aggro);
 
       u.boost -= dt;
@@ -1663,6 +1678,8 @@ import * as THREE from 'three';
           if (u.cd <= 0) { u.cd = rand(0.55, 0.95); strike(u, e, dx / d, dy / d, allies); }
         }
         [tx, ty] = nav(u.x, u.y, e.x, e.y);
+      } else if (u.charge) {   // nobody at the spot (yet): run to it
+        [tx, ty] = nav(u.x, u.y, u.charge.x, u.charge.y);
       } else {
         u.calm += dt;
         [tx, ty] = nav(u.x, u.y, g.x, g.y);
@@ -2041,12 +2058,15 @@ import * as THREE from 'three';
   function place(kind, p) {
     if (kind === 'charge') {
       let n = 0;
-      for (const u of units) if (u.team === 0 && !u.dead && (u.x - p.x) ** 2 + (u.y - p.y) ** 2 < 140 * 140) { u.boost = 4; u.calm = 5; n++; }
+      for (const u of units) if (u.team === 0 && !u.dead && (u.x - p.x) ** 2 + (u.y - p.y) ** 2 < 140 * 140) {
+        u.boost = 4; u.calm = 5; u.charge = { x: p.x, y: p.y, t: 4 }; u.enemy = null; n++;   // see updateUnits
+      }
+      waves.push({ x: p.x, y: p.y, t: 0, color: COL.team[0] });
       for (let i = 0; i < 3; i++) puffs.push({ x: p.x, y: p.y, t: -i * 0.08, color: COL.team[0], size: 140 });
       for (let i = 0; i < 18; i++) { const a = i / 18 * Math.PI * 2; FX.dust(p.x + Math.cos(a) * 60, p.y + Math.sin(a) * 60, 1); }
       chargeCd = CHARGE_CD; armed = null; renderTray();
       Sound.charge(); tutorialDid('charge');
-      toast(n ? `Charge! ${n} soldiers sprint forward` : 'No soldiers in range', n ? 'good' : '');
+      toast(n ? `Charge! ${n} soldiers crash into the enemy` : 'No soldiers in range', n ? 'good' : '');
       return;
     }
     if (kind === 'bridge') { bridges.push({ line: bandAt(p.x, p.y), b: B(p.x, p.y), span: 20 }); buildStatic(); }
@@ -2088,7 +2108,7 @@ import * as THREE from 'three';
     }
     refreshTray(true);
     const el2 = $('hint');
-    if (armed === 'charge') { el2.textContent = 'Click where your soldiers should charge. Everyone within the circle sprints and hits harder. Esc cancels.'; el2.style.opacity = 1; }
+    if (armed === 'charge') { el2.textContent = 'Click on the enemy to charge them: your soldiers in the circle run at them and hit hard. Esc cancels.'; el2.style.opacity = 1; }
     else if (armed) {
       el2.textContent = armed === 'bridge' ? 'Click on the river to build the bridge. Esc cancels.'
         : armed === 'barracks' ? 'Click one of your towns to add barracks. Esc cancels.'
@@ -3913,6 +3933,10 @@ import * as THREE from 'three';
       land: () => landKey,
       newMap: (k, seed) => { newGame(k, seed); return landKey; },
       fallbacks: () => layoutFallbacks,
+      chargeAt: (sx, sy) => { const p = pointAt(sx, sy); armed = 'charge'; place('charge', p); },
+      charging: () => units.filter(u => !u.dead && u.charge).length,
+      // how many of one side's soldiers stand within r of the ground under a screen point
+      near: (team, sx, sy, r) => { const p = pointAt(sx, sy); return units.filter(u => !u.dead && u.team === team && Math.hypot(u.x - p.x, u.y - p.y) < r).length; },
       bridgesLeft: () => ({ blue: inventory.bridge || 0, red: redFreeBridge }),
       riverPoint: bn => { const L = waterLines()[0], b = bn * LB, p = XY(lineA(L, b), b); return toScreen(p.x, p.y, 0); },
       layout: () => towns.map(t => ({ name: t.name, owner: t.owner, x: Math.round(t.x), y: Math.round(t.y) })),

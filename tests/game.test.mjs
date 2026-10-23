@@ -207,6 +207,23 @@ test('Charge: first in the tray, armed with C, then counts down', async () => {
   await page.close();
 });
 
+test('Charge sends the soldiers in the circle running at the spot', async () => {
+  const page = await openGame();
+  await t(page, 'start');
+  await t(page, 'army', 'Millbrook', 30, 100);   // an army camped 100 west of Millbrook
+  const aim = await t(page, 'pos', 'Millbrook', -10, 80);   // open ground about 120 from the camp
+  assert.equal(await t(page, 'near', 0, aim.x, aim.y, 45), 0, 'nobody is there yet');
+  await page.keyboard.press('c');
+  await page.mouse.click(aim.x, aim.y); await sleep(100);
+  assert.ok(await t(page, 'charging') >= 25, 'everyone in the circle sets off');
+  await t(page, 'run', 2.5);
+  assert.ok(await t(page, 'near', 0, aim.x, aim.y, 45) >= 15, 'and they get there at a sprint');
+  await t(page, 'run', 3);
+  assert.equal(await t(page, 'charging'), 0, 'then the charge is over and they go back to their orders');
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
 test('battles, captures and attacks on your capital', async () => {
   const page = await openGame();
   await t(page, 'start');
