@@ -93,5 +93,6 @@ jobs:
             docker compose pull
             docker compose up -d --remove-orphans
             docker image prune -f
-            curl -fsSI ${{ env.VPS_LOCAL_URL }}
-            curl -fsSI ${{ env.PUBLIC_URL }}
+            # the Node server takes a moment to start listening after the container starts
+            curl -fsSI --retry 10 --retry-delay 1 --retry-all-errors ${{ env.VPS_LOCAL_URL }}
+            curl -fsSI --retry 5 --retry-delay 1 --retry-all-errors ${{ env.PUBLIC_URL }}
