@@ -59,7 +59,7 @@ test('start screen: welcome and tips, then the map, then the difficulty', async 
   assert.equal(await step(), 1, 'the start screen opens on the welcome');
   const active = () => page.evaluate(() => [...document.querySelectorAll('#carousel .slide')].findIndex(s => s.classList.contains('on')));
   assert.equal(await active(), 0, 'the tips start at the first one');
-  await sleep(8000);
+  await sleep(2000);
   assert.equal(await active(), 0, 'and wait for the reader: they never move on by themselves');
   await page.click('#tipDots button:nth-child(3)');
   assert.equal(await active(), 2, 'a dot jumps to its tip');

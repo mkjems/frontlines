@@ -2745,7 +2745,7 @@ import * as THREE from 'three';
       throw err;
     }
     renderer.setPixelRatio(maxPixelRatio());
-    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.enabled = !LITE;
     renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.shadowMap.autoUpdate = false;   // refreshed every other frame in render()
     renderer.toneMapping = THREE.NeutralToneMapping;
@@ -3887,7 +3887,11 @@ import * as THREE from 'three';
   // resolution (text on the overlay stays sharp); raise it again when there is room.
   let pixelRatio = 0, frameTimes = [], adaptT = 0;
   // 1.5x with antialiasing looks the same as 2x on Retina screens at a little over half the pixels
-  function maxPixelRatio() { return Math.min(window.devicePixelRatio || 1, 1.5); }
+  // The browser tests (?test) never look at the picture, and CI draws it in software: there the board is drawn
+  // small, without shadows, and only every 8th frame, which keeps a run quick while still drawing it.
+  const LITE = new URLSearchParams(location.search).has('test') && new URLSearchParams(location.search).get('lite') !== '0';   // &lite=0: full picture
+  let liteFrame = 0;
+  function maxPixelRatio() { return LITE ? 0.4 : Math.min(window.devicePixelRatio || 1, 1.5); }
   function adaptResolution(ms, now) {
     if (!renderer) return;
     const max = maxPixelRatio();
@@ -3916,7 +3920,7 @@ import * as THREE from 'three';
     strikes = 0;
     Sound.clash(running() && !paused ? clashLevel : 0);
     Sound.ambient(clashLevel, running() && !paused);
-    render();
+    if (!LITE || ++liteFrame % 8 === 0) render();
     updateHud();
     requestAnimationFrame(frame);
   }
