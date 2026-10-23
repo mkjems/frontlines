@@ -3623,7 +3623,10 @@ import * as THREE from 'three';
     camera.setViewOffset(vw, vh, (b.x0 + b.x1) / 2 - (side + aw / 2), (b.y0 + b.y1) / 2 - (top + ah / 2), vw, vh);
     placeCamera();
     const R = Math.max(W, H) * 0.8;
-    sun.position.set((W / 2 - 560) * VIEWDIR(), 640, (H / 2 - 690) * VIEWDIR());   // turned with the camera for the red player (it shines at the origin)   // low in the north-west: long evening shadows sun.target.position.set(W / 2, 0, H / 2);
+    // a low evening sun beyond the board and a little to the right, aimed at its centre, so the river catches its
+    // light on any board shape; it turns with the camera for the red player
+    sun.target.position.set(W / 2, 0, H / 2);
+    sun.position.set(W / 2 + 80 * VIEWDIR(), 640, H / 2 - 290 * VIEWDIR());   // low in the north-west: long evening shadows sun.target.position.set(W / 2, 0, H / 2);
     Object.assign(sun.shadow.camera, { left: -R, right: R, top: R, bottom: -R, near: 300, far: 2600 });
     sun.shadow.camera.updateProjectionMatrix();
   }

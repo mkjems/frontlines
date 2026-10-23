@@ -184,8 +184,10 @@ Exit: no input handler or AI routine changes the game state directly.
       (`VIEWDIR`), and `paintTeams()` swaps the two entries of every team palette (`COL.team/light/mid`, `KEEPC`,
       `TEAMC`, `LIGHTC`, `ROUTE`, `CHEVRON`), so code that colours by team needs no change; "mine" is
       `COL.team[me]`. The territory wash flips sign and the sun turns with the camera. Found along the way: the
-      sun's `target.position.set()` sits inside a comment in `fitCamera`, so it shines at the board's corner;
-      left as it is (it's the look of the board), with the direction mirrored for red.
+      sun's `target.position.set()` sat inside a comment in `fitCamera`, so it shone at the board's corner and
+      its direction depended on the board's shape: on a phone's tall board the river never caught the light.
+      Now it's aimed at the centre from a fixed direction (what a 1280×800 window had), so desktop looks the
+      same and phones get the river's highlights.
 - [x] The computer opponent becomes "a player on team 1" that can be switched off.
       It plays `match.ai` (0, 1, or -1 for none) against the other team; the AI code uses `aiTeam`/`aiFoe`
       instead of 1/0. Checked: against an idle opponent it takes the whole map as blue just as it does as red.
