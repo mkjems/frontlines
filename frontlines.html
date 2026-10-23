@@ -52,6 +52,8 @@
   #beats svg { display: block; fill: var(--blue-ink); }
   #beats .arr { fill: none; stroke: var(--muted); stroke-width: 1.4; stroke-linecap: round; marker-end: url(#beatHead); }
   #beats marker path { fill: var(--muted); }
+  #level { display: flex; flex-direction: column; gap: 2px; padding-left: 12px; border-left: 1px solid var(--line); white-space: nowrap; }
+  #levelv { font-size: 13px; font-weight: 600; }
   #day { font-size: 12px; color: var(--muted); }
   #balance { display: flex; flex-direction: column; align-items: center; gap: 4px; }
   #balance .split { display: flex; width: 160px; max-width: 32vw; height: 8px; border-radius: 8px; overflow: hidden; background: var(--line); }
@@ -306,6 +308,7 @@
     #balance { display: none; }
     #clock { flex-direction: column; align-items: stretch; gap: 6px; }
     #beats { padding: 6px 0 0; border-left: 0; border-top: 1px solid var(--line); }
+    #level { padding: 6px 0 0; border-left: 0; border-top: 1px solid var(--line); }
     #hint { bottom: calc(env(safe-area-inset-bottom, 0px) + 106px); }
     .tray { bottom: calc(env(safe-area-inset-bottom, 0px) + 58px); left: max(16px, env(safe-area-inset-left, 0px)); max-width: none; justify-content: flex-start; }
     .tray .name { display: none; }
@@ -347,6 +350,10 @@
         <path class="arr" d="M26.1 7.5A13 13 0 0 1 32.6 17.5"/><path class="arr" d="M26.9 30A13 13 0 0 1 15 30.8"/><path class="arr" d="M7 19.5A13 13 0 0 1 12.2 8.8"/>
         <path d="M20 1.5l4.6 8.2h-9.2z"/><rect x="27.3" y="21.5" width="8" height="8" rx="1"/><circle cx="8.7" cy="25.5" r="4.3"/>
       </svg>
+    </div>
+    <div id="level" title="Difficulty. Change it from the start screen.">
+      <span class="label">Difficulty</span>
+      <span id="levelv">Normal</span>
     </div>
   </div>
   <div class="panel" id="balance">
@@ -2615,37 +2622,42 @@ import * as THREE from 'three';
   $('againBtn').onclick = () => { $('over').hidden = true; $('watchBar').hidden = true; newGame(); state = 'intro'; setPaused(false); $('intro').hidden = false; showStep(2); };
   const TIPS = {
     easy: {
-      intro: 'The enemy grows slowly and rarely counters you. A good level to learn the basics.',
+      intro: 'Your towns train faster than the enemy\'s. It hardly builds, its soldiers never get tougher, and it waits for a big army before it attacks.',
       list: [
         'Grab the grey towns on your side first. Every town adds soldiers and 300 route ink.',
         'Camp an army next to a gold mine until the land turns blue. It pays for your next watchtower.',
+        'The first attack comes late but big. Have a fort or watchtower at the bridge it gathers at.',
         'Gather 15–20 soldiers on open ground, then drag the group across the bridge in one push.',
       ],
     },
     normal: {
-      intro: 'The enemy masses at a bridge, then attacks. Win the fight at the river and the rest follows.',
+      intro: 'The enemy trains a little faster every week, fortifies a bridge every other week and gets tougher soldiers from week 6. About two in three of its towns train the counter to your most common troop.',
       list: [
         'Never trickle troops into a defended town. Gather an army first, then strike all at once.',
         'When the red warning appears, send the counter: spearmen stop cavalry, cavalry run down archers, archers shred spearmen.',
+        'Expect feints: an attack may start at one bridge, then the main army comes at another. Keep a reserve between them.',
         'Hold each bridge with a fort or watchtower, and save Charge for the moment the armies collide.',
+        'Waiting favours the enemy. Aim to take Redmarsh before its soldiers toughen up in week 6.',
       ],
     },
     hard: {
-      intro: 'The enemy builds every week, counters your most common troop type, and grows stronger fast.',
+      intro: 'The enemy out-trains you from week 2, builds a fort or tower every week and spends all its gold. Its soldiers get tougher in weeks 4, 7 and 10, and three in four of its towns counter your most common troop.',
       list: [
         'Mix your troop types so the enemy has nothing easy to counter.',
-        'Watch the ford. A slow crossing is still a crossing, and the enemy will use it.',
-        'Buy farms early. Gold compounds, and a contested mine near the river is worth fighting over.',
         'Expand early. Barracks and extra towns matter more than anything else after week 3.',
-        'Expect feints: the first attack may be a decoy. Keep a reserve near the other bridge.',
-        'Strike Redmarsh before week 6. The longer the war lasts, the harder it gets.',
+        'Buy farms early. Gold compounds, and a contested mine near the river is worth fighting over.',
+        'Attacks come early and often. Hold the bridges, and keep a reserve for the feint.',
+        'Where the map has a ford, watch it: a slow crossing is still a crossing.',
+        'Strike Redmarsh before week 6. By then the enemy trains 60% faster than you.',
       ],
     },
   };
   function renderDiff() {
     for (const k of Object.keys(DIFF)) $('diff-' + k).className = k === difficulty ? 'on' : '';
     const t = TIPS[difficulty];
-    $('tipsTitle').textContent = `How to win on ${difficulty[0].toUpperCase() + difficulty.slice(1)}`;
+    const level = difficulty[0].toUpperCase() + difficulty.slice(1);
+    $('levelv').textContent = level;
+    $('tipsTitle').textContent = `How to win on ${level}`;
     $('tipsIntro').textContent = t.intro;
     $('tipsList').innerHTML = t.list.map(x => `<li>${x}</li>`).join('');
   }

@@ -78,6 +78,7 @@ test('start screen: welcome and tips, then the map, then the difficulty', async 
   assert.equal(await step(), 3, 'Next moves on to the difficulty');
   await page.click('#diff-hard');
   assert.match(await page.$eval('#tipsTitle', e => e.textContent), /Hard/, 'the how-to-win tips follow the difficulty, shown straight away');
+  assert.equal(await page.$eval('#levelv', e => e.textContent), 'Hard', 'the top-left panel shows the difficulty too');
   await page.click('#step3 [data-go="2"]');
   assert.equal(await step(), 2, 'Back goes back');
   await page.reload(); await page.waitForFunction(() => window.__t, { timeout: 20000 });
