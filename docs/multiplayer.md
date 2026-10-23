@@ -165,16 +165,29 @@ Exit: the determinism test passes reliably; single player plays as before.
 Exit: no input handler or AI routine changes the game state directly.
 
 ### Phase 3: both sides are equal
-- [ ] Per-team economy: gold, purchases, inventory, route ink and weekly rewards per team. Today blue's
+- [x] Per-team economy: gold, purchases, inventory, route ink and weekly rewards per team. Today blue's
       and red's are separate variables (`gold`/`redGold`, `bought`/`redBought` and so on).
+      Now `gold`, `bought`, `inventory`, `ink` (extra, from Surveyors) and `chargeCd` are arrays by team, with
+      `priceOf(team, k)`, `inkCap(team)`, `goldPerSecond(team)` and `placeCheck(team, kind, p)`. The enemy's free
+      bridge on Broken Bridges is an ordinary bridge in its tray. Orders follow the same rules for either team;
+      a player's are checked again when carried out (`carryOut(team, o, check)`), the computer's aren't, as it
+      only picks allowed moves. Weekly rewards: every side played by a person gets its own two offers
+      (`offers[team]`), and the next week begins once all have chosen.
 - [ ] "Me" is a setting (team 0 or 1), not assumed to be team 0. The HUD, tray, hints, toasts and sounds
       follow "me".
 - [ ] Drawing mirrored for team 1 so that player also sees their kingdom as blue on the near side.
-- [ ] The computer opponent becomes "a player on team 1" that can be switched off.
-- [ ] Settings that change the battle are settings of the match, the same for both players, not read from
+- [x] The computer opponent becomes "a player on team 1" that can be switched off.
+      It plays `match.ai` (0, 1, or -1 for none) against the other team; the AI code uses `aiTeam`/`aiFoe`
+      instead of 1/0. Checked: against an idle opponent it takes the whole map as blue just as it does as red.
+      A browser never plays the computer's side: `newGame` moves `me` if needed.
+- [x] Settings that change the battle are settings of the match, the same for both players, not read from
       each browser's saved settings: difficulty (`D()` also sets blue's training speed), classic towns, and the
       tutorial (a player who hasn't finished it gets a 25-second grace before the first enemy push, `aiT`).
       Found in phase 1, when a copy that had finished the tutorial drifted from one that hadn't.
+      `match = { ai, difficulty, classic, grace }`. In single player `newGame` builds it from this browser's
+      settings (and a difficulty picked afterwards updates it); `presetMatch` fixes it instead (`__t.match()` in
+      tests; the host, later). Records carry it, and the twins no longer depend on saved settings. With no
+      computer, both sides train at the same speed.
 
 Exit: a test can play team 1 by hand while the computer plays team 0.
 

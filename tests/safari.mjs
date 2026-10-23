@@ -14,7 +14,7 @@ import { existsSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
-import { MAP, BOARD, ORDERS, setupInPage, secondInPage, differ, chromeCopy, chromeSecond } from './twins.mjs';
+import { MAP, BOARD, MATCH, ORDERS, setupInPage, secondInPage, differ, chromeCopy, chromeSecond } from './twins.mjs';
 
 const LANDS = ['valley', 'lake', 'tworivers', 'mountains', 'open', 'steppe', 'greenwood', 'highlands', 'marsh', 'broken'];
 const [onlyLand, secsArg] = process.argv.slice(2);
@@ -53,10 +53,8 @@ await wd('POST', `${S}/window/rect`, { width: 900, height: 700 });   // Safari's
 
 async function safariCopy(land) {
   await wd('POST', `${S}/url`, { url: URL_ });
-  await inSafari(() => localStorage.setItem('frontlines-tutorial', 'done'));   // the same saved settings as the Chrome copy
-  await wd('POST', `${S}/url`, { url: URL_ });
   for (let i = 0; !(await inSafari(() => !!window.__t)); i++) { if (i > 100) throw new Error('the game did not load in Safari'); await new Promise(r => setTimeout(r, 100)); }
-  await inSafari(setupInPage, land, MAP, BOARD, false);
+  await inSafari(setupInPage, land, MAP, BOARD, MATCH, false);
 }
 
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--enable-unsafe-swiftshader', '--no-sandbox'] });

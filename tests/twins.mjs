@@ -7,13 +7,15 @@
 
 const URL_ = new URL('../site/index.html?test', import.meta.url).href;
 export const MAP = 4821, BOARD = { w: 1200, h: 800 };
+// the match both copies play: the settings that change the battle, fixed rather than read from each browser
+export const MATCH = { ai: 1, difficulty: 'normal', classic: false, grace: 6 };
 const WINDOWS = [{ width: 1200, height: 800 }, { width: 390, height: 844, isMobile: true, hasTouch: true }];
 // the same blue orders in both copies: armies from the capital towards the enemy's at these game seconds
 export const ORDERS = { 5: 20, 60: 30, 150: 40, 300: 40, 450: 50 };
 
 // These two run inside the page (they're sent to the browser as source, so they may only use their arguments).
-export function setupInPage(land, map, board, history) {
-  __t.freeze(); __t.board(board);
+export function setupInPage(land, map, board, match, history) {
+  __t.freeze(); __t.board(board); __t.match(match);
   if (history) { __t.newMap('marsh', 77); __t.start(); __t.march('Ashford', 'Redmarsh', 30); __t.run(40); }
   __t.newMap(land, map); __t.start();
 }
@@ -27,16 +29,15 @@ export function secondInPage(n) {
 export const differ = (ra, rb) => Object.keys(ra.parts).filter(k => ra.parts[k] !== rb.parts[k]);
 
 async function copy(browser, land, viewport, history, url = URL_) {
-  // each copy gets its own browser storage, like two machines, with the same saved settings (the tutorial
-  // done): settings that change the battle must match, see phase 3 of docs/multiplayer.md
+  // each copy gets its own browser storage, like two machines; their saved settings don't matter, as the
+  // match fixes everything that changes the battle
   const context = await browser.createBrowserContext(), page = await context.newPage();
-  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('frontlines-tutorial', 'done'); } catch (e) {} });
   await page.setViewport(viewport);
   page.errors = [];
   page.on('pageerror', e => page.errors.push(e.message));
   await page.goto(url);
   await page.waitForFunction(() => window.__t);
-  await page.evaluate(setupInPage, land, MAP, BOARD, history);
+  await page.evaluate(setupInPage, land, MAP, BOARD, MATCH, history);
   return page;
 }
 // one copy in Chrome, for safari.mjs: the laptop window, with history

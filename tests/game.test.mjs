@@ -308,11 +308,7 @@ test('two copies of a battle stay identical, as two players\' browsers must (doc
 });
 
 test('a battle replays exactly from its orders: everything the player does goes through them', async () => {
-  // a real game played with the mouse, in real time and while frozen, then its orders played back in a fresh copy.
-  // Both copies start with the tutorial done: an unfinished one changes the battle (docs/multiplayer.md, phase 3).
-  const prep = await openGame();
-  await prep.evaluate(() => localStorage.setItem('frontlines-tutorial', 'done'));
-  await prep.close();
+  // a real game played with the mouse, in real time and while frozen, then its orders played back in a fresh copy
   const page = await openGame();
   await t(page, 'start');
   await dragTo(page, await t(page, 'pos', 'Brindle'), await t(page, 'pos', 'Millbrook'));   // a route
@@ -340,7 +336,7 @@ test('a battle replays exactly from its orders: everything the player does goes 
   for (const k of ['route', 'train', 'build', 'charge', 'reward']) assert.ok(types.has(k), `the record holds a ${k} order`);
 
   const copy = await openGame();
-  await copy.evaluate(rec => { __t.freeze(); __t.newMap(rec.land, rec.map); __t.start(); }, rec);
+  await copy.evaluate(rec => { __t.freeze(); __t.match(rec.match); __t.newMap(rec.land, rec.map); __t.start(); }, rec);
   assert.deepEqual(await t(copy, 'replay', rec), rec.sum, 'the replay ends exactly where the game did');
   assert.deepEqual([...page.errors, ...copy.errors], []);
   await page.close(); await copy.close();
