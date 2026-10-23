@@ -24,8 +24,9 @@ before(async () => {
 after(async () => { await browser?.close(); await server?.close(); await slow?.close(); });
 
 const t = (page, fn, ...args) => page.evaluate((fn, args) => window.__t[fn](...args), fn, args);
-async function until(page, fn, what, ms = 8000) {
-  for (const end = Date.now() + ms; Date.now() < end; await sleep(50)) if (await page.evaluate(fn)) return;
+// waits for fn (run in the page, with arg) to come true; generous, as CI machines draw in software and run slowly
+async function until(page, fn, what, ms = 20000, arg) {
+  for (const end = Date.now() + ms; Date.now() < end; await sleep(50)) if (await page.evaluate(fn, arg)) return;
   throw new Error(`timed out waiting for ${what}`);
 }
 // a player: their own browser storage, like a separate machine
@@ -78,7 +79,7 @@ test('two players play a match through the relay, each with their own side, and 
     assert.equal(await t(p, 'route', 'Ashford'), hostTo, 'the host\'s route reaches both games');
     assert.equal(await t(p, 'route', 'Redmarsh'), guestTo, 'the guest\'s route reaches both games');
   }
-  await sleep(2500);
+  for (const p of [host, guest]) await until(p, () => __t.net().turn > 60 && __t.net().agreed >= 3, 'the battle to move on and checksums to be compared');
   for (const p of [host, guest]) {
     const n = await t(p, 'net');
     assert.equal(n.desync, -1, 'no checksum ever differed');
@@ -93,7 +94,7 @@ test('a match stays in sync with a slow connection', async () => {
   const { host, guest } = await match(slow);
   await drag(host, 'Ashford', await nearestFree(host, 'Ashford'));
   await drag(guest, 'Redmarsh', await nearestFree(guest, 'Redmarsh'));
-  await sleep(4000);
+  for (const p of [host, guest]) await until(p, () => __t.net().turn > 40 && __t.net().agreed >= 2, 'the battle to move on despite the delay');
   for (const p of [host, guest]) {
     const n = await t(p, 'net');
     assert.equal(n.desync, -1);
@@ -116,7 +117,8 @@ test('a player who drops out rejoins, replays the battle and carries on in sync'
   assert.equal((await t(host, 'net')).turn, held, 'and the battle holds still meanwhile');
   await t(guest, 'netRejoin');
   await until(guest, () => __t.net().live && __t.net().turn > 0, 'the guest to catch up');
-  await sleep(3000);
+  await until(host, held => __t.net().turn > held + 40, 'the battle to carry on', 20000, held);
+  await until(guest, () => __t.net().agreed >= 2, 'the rejoined guest to compare checksums');
   const h = await t(host, 'net'), g = await t(guest, 'net');
   assert.ok(h.turn > held + 40, `the battle carries on (turn ${h.turn})`);
   for (const n of [h, g]) assert.equal(n.desync, -1, 'still in sync after the rejoin');

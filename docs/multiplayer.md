@@ -124,7 +124,7 @@ Exit: we know how far today's game is from deterministic, and the size of phase 
 - [x] Test: two copies, with native `Math.random` and drawing on, identical checksums on every landscape. In
       `npm test` a few game minutes each, to keep it quick; `npm run drift` for the full 10 minutes.
       `tests/twins.mjs` runs both copies with different windows (laptop and portrait phone) and history (one
-      plays another battle first). In `npm test` 90 game seconds per landscape. Checked that it fails if the
+      plays another battle first). In `npm test` 45 game seconds per landscape (it took 3½ minutes on GitHub at 90). Checked that it fails if the
       counter reset or one `rng()` in the AI is undone.
       Full run on 23 October (`npm run drift`): identical for 10 game minutes on all ten landscapes, up to
       1,650 soldiers.

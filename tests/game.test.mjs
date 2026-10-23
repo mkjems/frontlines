@@ -301,7 +301,7 @@ test('maps without a river sell no bridges: none in the tray or among the weekly
 test('two copies of a battle stay identical, as two players\' browsers must (docs/multiplayer.md)', async () => {
   // different windows, drawing, Math.random and history; same map number, board and orders. npm run drift runs it longer.
   for (const land of ['valley', 'lake', 'tworivers', 'mountains', 'open', 'steppe', 'greenwood', 'highlands', 'marsh', 'broken']) {
-    const r = await race(browser, land, 90);
+    const r = await race(browser, land, 45);
     assert.equal(r.first, null, `${land}: the copies differ from second ${r.first?.s} (${r.first?.parts})`);
     assert.deepEqual(r.errors, []);
   }
