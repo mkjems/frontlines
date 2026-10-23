@@ -189,6 +189,24 @@ test('Broken Bridges: no way across until each side builds its free bridge', asy
   await page.close();
 });
 
+test('Charge: first in the tray, armed with C, then counts down', async () => {
+  const page = await openGame();
+  await t(page, 'start');
+  assert.equal(await page.$eval('#tray', e => e.firstElementChild.id), 'chargeBtn', 'Charge leads the tray');
+  assert.match(await page.$eval('#chargeBtn', e => e.textContent), /Ready/);
+  await page.keyboard.press('c');
+  assert.ok(await page.$eval('#chargeBtn', e => e.classList.contains('armed')), 'C arms it');
+  await page.keyboard.press('Escape');
+  assert.ok(!(await page.$eval('#chargeBtn', e => e.classList.contains('armed'))), 'Esc cancels');
+  await page.click('#chargeBtn');
+  const spot = await t(page, 'pos', 'Ashford', 70, 40);
+  await page.mouse.click(spot.x, spot.y); await sleep(100);
+  assert.ok(await page.$eval('#chargeBtn', e => e.disabled), 'after charging it rests');
+  assert.match(await page.$eval('#chargeBtn', e => e.textContent), /\d+s/, 'and counts down');
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
 test('battles, captures and attacks on your capital', async () => {
   const page = await openGame();
   await t(page, 'start');

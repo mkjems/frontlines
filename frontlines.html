@@ -76,7 +76,7 @@
   .tray {
     position: fixed; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
     right: max(16px, env(safe-area-inset-right, 0px));
-    display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; max-width: 55vw;
+    display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; max-width: calc(100vw - 380px);   /* room left of it for Pause, speed, Sound and Rules */
   }
   .tray button {
     font: 600 13px var(--font); color: var(--ink); background: var(--panel); border: 0; border-radius: 10px;
@@ -113,8 +113,22 @@
   .shape.k2 { width: 10px; height: 10px; border-radius: 1px; }
   .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
-  #chargeBtn:disabled { opacity: .55; cursor: default; }
-  #chargeBtn.armed { background: var(--blue); color: #fff; }
+  /* Charge leads the tray, set apart from the things you buy: it is free but recharges, filling as it does */
+  .tray #chargeBtn { background: linear-gradient(90deg, var(--raised) var(--fill, 0%), var(--panel) var(--fill, 0%)); }
+  .tray #chargeBtn:disabled { opacity: .6; }
+  .tray #chargeBtn.armed { background: var(--blue); color: #fff; }
+  .tray #chargeBtn .cd { color: var(--muted); font-weight: 600; min-width: 34px; text-align: left; }
+  .tray #chargeBtn.armed .cd { color: #fff; }
+  .tray .sep { width: 1px; align-self: stretch; margin: 6px 2px; background: var(--line); }
+  /* narrower screens: icons and prices only (the names show on hover), so the tray stays one row */
+  @media (max-width: 1180px) { .tray .name { display: none; } }
+  @media (max-width: 560px) {
+    .tray { gap: 5px; }
+    .tray button { padding: 8px 7px; gap: 4px; }
+    .tray .sep { margin: 6px 0; }
+    .tray #chargeBtn:not(:disabled) .cd { display: none; }
+    .tray #chargeBtn .cd { min-width: 0; }
+  }
   .pulse { animation: pulse 1.4s ease-in-out infinite; }
   @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(159, 192, 255, .55); } 50% { box-shadow: 0 0 0 7px rgba(159, 192, 255, 0); } }
   .inspect {
@@ -344,7 +358,6 @@
 <div class="controls">
   <button id="pauseBtn" type="button" aria-label="Pause">❚❚ Pause</button>
   <button id="speedBtn" type="button" aria-label="Game speed">1×</button>
-  <button id="chargeBtn" type="button">Charge</button>
   <button id="soundBtn" type="button" aria-label="Toggle sound">Sound on</button>
   <button id="rulesBtn" type="button">Rules</button>
 </div>
@@ -443,7 +456,7 @@
         <li><span class="k">End on a town</span> to attack it, or <span class="k">on open ground</span> to gather an army there.</li>
         <li><span class="k">Drag from a gathered army</span> to send it on. Free, costs no ink.</li>
         <li><span class="k">Tap a town</span> to pick its troops or clear its route.</li>
-        <li><span class="k">Charge</span> (every 25s): troops in the circle sprint and hit harder.</li>
+        <li><span class="k">Charge</span> (first in the tray, or press C; every 25s): troops in the circle sprint and hit harder.</li>
         <li><span class="k">Space</span> pauses, <span class="k">Esc</span> cancels. Hold <span class="k">Shift</span> and hover to inspect anything.</li>
         <li><span class="k">Scroll or pinch</span> to zoom in on the fighting, <span class="k">drag open ground</span> to look around, <span class="k">double-click</span> to zoom in or back out.</li>
       </ul></div>
@@ -650,6 +663,7 @@ import * as THREE from 'three';
     barracks: '<path d="M4 11l8-6 8 6v9H4z"/><path d="M10 20v-5h4v5"/><path d="M12 5V1.5l4 1.5-4 1.5"/>',
     farm: '<path d="M12 21V8"/><path d="M12 8c-3 0-4.5-2.5-4.5-5 2.5 0 4.5 1.5 4.5 5zM12 8c3 0 4.5-2.5 4.5-5-2.5 0-4.5 1.5-4.5 5zM12 14c-3 0-4.5-2.5-4.5-5 2.5 0 4.5 1.5 4.5 5zM12 14c3 0 4.5-2.5 4.5-5-2.5 0-4.5 1.5-4.5 5z"/>',
     ink: '<circle cx="12" cy="12" r="8.5"/><path d="M12 6.5l2 5.5-2 5.5-2-5.5z"/>',
+    charge: '<path d="M5 6l6 6-6 6"/><path d="M12 6l6 6-6 6"/>',
     drill: '<ellipse cx="12" cy="9" rx="7" ry="2.8"/><path d="M5 9v7c0 1.6 3.1 2.8 7 2.8s7-1.2 7-2.8V9"/><path d="M6 3l5 4M18 3l-5 4"/>',
   };
   const icon = (k, size = 24) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k] || ''}</svg>`;
@@ -2054,9 +2068,17 @@ import * as THREE from 'three';
   }
   function renderTray() {
     const el = $('tray'); el.innerHTML = '';
+    const cb = document.createElement('button');   // Charge first, then a divider, then what gold buys
+    cb.type = 'button'; cb.id = 'chargeBtn'; cb.title = 'Charge (C): everyone in the circle sprints and hits harder';
+    cb.onclick = toggleCharge;
+    el.appendChild(cb);
+    el.insertAdjacentHTML('beforeend', '<span class="sep" aria-hidden="true"></span>');
+    const st = tut && tutStep();
+    if (st && st.el === 'chargeBtn') cb.classList.add('pulse');
+    renderCharge();
     for (const k of Object.keys(ITEM)) {
       const b = document.createElement('button');
-      b.type = 'button'; b.id = 'tray-' + k; b.className = armed === k ? 'armed' : '';
+      b.type = 'button'; b.id = 'tray-' + k; b.className = armed === k ? 'armed' : ''; b.title = ITEM[k];
       b.onclick = () => {
         if (armed === k) { armed = null; renderTray(); return; }
         if (!(inventory[k] > 0) && gold < priceOf(k)) { toast(`Not enough gold: ${priceOf(k)} needed`, 'bad'); return; }
@@ -2282,7 +2304,16 @@ import * as THREE from 'three';
     }
     closeMenu();
   };
-  $('chargeBtn').onclick = () => { if (state !== 'play' || chargeCd > 0) return; armed = armed === 'charge' ? null : 'charge'; renderTray(); };
+  // the Charge button: Ready, or a countdown while it recharges, with the button filling as it does
+  function renderCharge() {
+    const cb = $('chargeBtn'), cd = chargeCd > 0 ? `${Math.ceil(chargeCd)}s` : 'Ready';
+    if (!cb) return;
+    cb.disabled = chargeCd > 0;
+    cb.classList.toggle('armed', armed === 'charge');
+    cb.style.setProperty('--fill', chargeCd > 0 ? `${(1 - chargeCd / CHARGE_CD) * 100}%` : '0%');
+    if (cb.dataset.cd !== cd) { cb.innerHTML = `${icon('charge', 16)}<span class="name">Charge</span><span class="cd">${cd}</span>`; cb.dataset.cd = cd; }
+  }
+  function toggleCharge() { if (state !== 'play' || chargeCd > 0) return; armed = armed === 'charge' ? null : 'charge'; renderTray(); }
 
   // Camera: wheel or pinch to zoom, drag empty ground (or right/middle-drag anywhere) to pan.
   let pan = null, pinch = null;
@@ -2379,6 +2410,7 @@ import * as THREE from 'three';
   addEventListener('blur', () => { inspectAt = null; showInspect(); });
   addEventListener('keydown', e => {
     if (e.code === 'Space' && running()) { e.preventDefault(); setPaused(!paused); }
+    if ((e.key === 'c' || e.key === 'C') && !e.metaKey && !e.ctrlKey && !e.altKey) toggleCharge();
     if (e.key === 'Escape') { if (armed) { armed = null; renderTray(); } closeMenu(); if (!$('rules').hidden) $('rulesClose').onclick(); }
   });
   cvs.addEventListener('pointerleave', () => { ghost = null; lastPointer = null; inspectAt = null; showInspect(); });
@@ -2521,12 +2553,12 @@ import * as THREE from 'three';
     setHint('');
   }
   function showTutorial() {
-    for (const id of ['tray', 'chargeBtn']) $(id).classList.remove('pulse');
+    for (const id of ['tray', 'chargeBtn']) $(id)?.classList.remove('pulse');   // the tray may not be built yet
     const st = tutStep();
     $('tutSkip').hidden = !st;
     if (!st) { if (tut) endTutorial(); return; }
     setHint(typeof st.text === 'function' ? st.text() : st.text);
-    if (st.el) $(st.el).classList.add('pulse');
+    if (st.el) $(st.el)?.classList.add('pulse');
   }
   $('tutSkip').onclick = endTutorial;
   $('watchBtn').onclick = () => { $('over').hidden = true; $('watchBar').hidden = false; };
@@ -3800,10 +3832,7 @@ import * as THREE from 'three';
     const cap = inkCap();
     $('inkv').textContent = `${Math.max(0, Math.round(cap - used))}`;
     $('inkbar').style.width = clamp((1 - used / cap) * 100, 0, 100) + '%';
-    const cb = $('chargeBtn');
-    cb.disabled = chargeCd > 0;
-    cb.textContent = chargeCd > 0 ? `Charge ${Math.ceil(chargeCd)}s` : 'Charge';
-    cb.className = armed === 'charge' ? 'armed' : '';
+    renderCharge();
   }
 
   // Adaptive resolution: if frames run slow for a couple of seconds, render the 3D scene at a lower
