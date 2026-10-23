@@ -308,6 +308,14 @@
     .tray { bottom: calc(env(safe-area-inset-bottom, 0px) + 58px); left: max(16px, env(safe-area-inset-left, 0px)); max-width: none; justify-content: flex-start; }
     .tray .name { display: none; }
     #tutSkip { bottom: calc(env(safe-area-inset-bottom, 0px) + 88px); }
+    /* tips: a slim bar just under the top panels, clear of the tray; tap it to read the whole tip */
+    .coach { left: max(12px, env(safe-area-inset-left, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); bottom: auto;
+      top: calc(var(--hud-bottom, 130px) + 8px); max-width: none; padding: 8px 34px 8px 12px; font-size: 12px; border-left-width: 3px;
+      display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
+    .coach[hidden] { display: none; }
+    .coach .label { display: inline; margin: 0; flex: none; }
+    .coach:not(.open) #coachText { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .coach button { top: 3px; }
     #goldRate { display: none; }
     .choices { grid-template-columns: 1fr; }
     .card { padding: 22px; }
@@ -1109,6 +1117,9 @@ import * as THREE from 'three';
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     cvs.width = Math.round(innerWidth * dpr); cvs.height = Math.round(innerHeight * dpr);
     fitCamera();
+    // where the top panels end, so tips on a phone can sit just below them
+    const hb = Math.max(...[...document.querySelectorAll('.hud .panel')].map(e => e.getBoundingClientRect().bottom));
+    if (hb > 0) document.documentElement.style.setProperty('--hud-bottom', hb + 'px');
   }
 
   function rr(c, x, y, w, h, r) {
@@ -2541,9 +2552,11 @@ import * as THREE from 'three';
     if (!c) return;
     coachSeen[c.id] = true;
     try { localStorage.setItem('frontlines-coach', JSON.stringify(coachSeen)); } catch (e) {}
-    $('coachText').textContent = c.text; $('coach').hidden = false; coachHide = 10; coachT = 14;
+    $('coachText').textContent = c.text; $('coach').classList.remove('open'); $('coach').hidden = false; coachHide = 10; coachT = 14;
   }
-  $('coachClose').onclick = () => { $('coach').hidden = true; };
+  $('coachClose').onclick = e => { e.stopPropagation(); $('coach').hidden = true; };
+  // on a phone a tip shows as one line; tapping it opens the whole tip (and keeps it up a while longer)
+  $('coach').onclick = () => { const open = $('coach').classList.toggle('open'); if (open) coachHide = Math.max(coachHide, 15); };
   $('startBtn').onclick = () => { Sound.init(); $('intro').hidden = true; state = 'play'; };
   function renderSound() { $('soundBtn').textContent = Sound.muted ? 'Sound off' : 'Sound on'; }
   $('soundBtn').onclick = () => { Sound.init(); Sound.setMuted(!Sound.muted); renderSound(); };
