@@ -660,7 +660,7 @@ import * as THREE from 'three';
   // Gold comes from farms around your towns and from gold mines on land you control.
   const PRICE = { farm: 30, tower: 40, fort: 60, barracks: 70, bridge: 80 };
   const FARM_RATE = 0.15, MINE_RATE = 0.6;   // gold per second
-  let gold = 0, bought = {}, mines = [], coins = [], redGold = 0, redBought = {}, redBuys = 0;
+  let gold = 0, bought = {}, mines = [], coins = [], redGold = 0, redBought = {}, redBuys = 0, redFreeBridge = 0;
   const priceOf = k => Math.round(PRICE[k] * 1.5 ** (bought[k] || 0));
   // Troop types: 0 spearmen, 1 archers, 2 cavalry
   const KIND = ['Spearmen', 'Archers', 'Cavalry'];
@@ -776,6 +776,7 @@ import * as THREE from 'three';
   // middle: where neutral towns may stand, as [nearest, furthest] from blue's edge (0..0.5).
   // roads: how many neighbours each town has a road to (2 if not given); bushes and rocks: how many (90, 22).
   // thick: how densely each wood is planted (1 if not given). scatter: lone trees and copses on top of the woods.
+  // ruins: where broken bridges stand in the river (just scenery). freeBridge: each side starts with a bridge to build.
   // Each map is point-symmetric about the board's centre, so a pair of barriers or crossings must mirror
   // each other (c and 1 - c, b and 1 - b); the far one of each pair is made from the near one.
   const RIVER = (o, cross) => ({ kind: 'water', c: 0.5, amp: 0.028, freq: 1.15, wide: 1, ...o, cross });
@@ -811,6 +812,9 @@ import * as THREE from 'three';
     plains: { name: 'Open Plains', desc: 'Rich farmland with little cover: more gold, and room for cavalry to charge.',
       lines: [RIVER({ amp: 0.015, freq: 0.8, wide: 1.25 }, [[0.14, 0], [0.38, 1], [0.62, 1], [0.86, 0]])],
       hills: [2, 45, 70], woods: [0, 0, 0], trees: 45, fields: 1.4 },
+    broken: { name: 'Broken Bridges', desc: 'The old bridges are gone. Each side has one bridge to build: where you put it decides the war.',
+      lines: [RIVER({}, [])], ruins: [0.27, 0.5, 0.73], freeBridge: true,
+      hills: [5, 55, 95], woods: [4, 45, 70], trees: 175, fields: 1 },
   };
   let land = LANDS.valley, landKey = '', mapSeed = 1, classic = false;
   try { classic = localStorage.getItem('frontlines-classic') === '1'; } catch (e) {}
@@ -1059,9 +1063,10 @@ import * as THREE from 'three';
     stats = { train: [D().blueTrain, D().redTrain], hp: [3, 3], cap: [0, 0], holdMult: [1, 1] };
     time = 0; week = 1; weekT = 0; aiT = 6; ink = 0; chargeCd = 0; closeMenu(); routesDrawn = 0; drawing = null;
     alerts = []; tally = { trained: 0, lost: 0, killed: 0, captured: 0, fallen: 0 };
-    structs = []; tracers = []; inventory = { tower: 1 }; armed = null; plan = null;
-    gold = 0; bought = {}; coins = []; redGold = 0; redBought = {}; redBuys = 0;
-    setHint('Drag from a blue town to draw a march route. Your first watchtower is in the tray.');
+    structs = []; tracers = []; inventory = land.freeBridge ? { tower: 1, bridge: 1 } : { tower: 1 }; armed = null; plan = null;
+    gold = 0; bought = {}; coins = []; redGold = 0; redBought = {}; redBuys = 0; redFreeBridge = land.freeBridge ? 1 : 0;
+    setHint(land.freeBridge ? 'No bridge crosses the river. Your bridge is in the tray: build it where you want to cross.'
+      : 'Drag from a blue town to draw a march route. Your first watchtower is in the tray.');
     startTutorial();
     renderTray();
     view.z = 1; view.x = view.y = 0;
@@ -1740,6 +1745,25 @@ import * as THREE from 'three';
     const counter = [1, 2, 0][common];   // archers vs spears, cavalry vs archers, spears vs cavalry
     for (const t of red) t.kind = Math.random() < D().counter ? counter : (Math.random() * 3 | 0);
   }
+  // A bridge of its own: where a river stands between the enemy and its target with no way across (or while it
+  // still has the free bridge some maps give), it builds one where it best links home and target.
+  function aiBridge(L, from, to) {
+    const price = Math.round(PRICE.bridge * 1.5 ** (redBought.bridge || 0));
+    if (L.kind !== 'water' || (!redFreeBridge && redGold < price)) return null;
+    let best = null, bs = Infinity;
+    for (let bn = 0.1; bn <= 0.9; bn += 0.02) {
+      const b = bn * LB;
+      if (hwAt(L, b) > L.hw * 1.25 || bridges.some(br => br.line === L && Math.abs(br.b - b) < 90)) continue;
+      const br = { line: L, b, span: 20 }, s = sideOfLine(L, from.x, from.y), en = bridgeEnd(br, s), ex = bridgeEnd(br, -s);
+      const d = Math.hypot(en.x - from.x, en.y - from.y) + Math.hypot(to.x - ex.x, to.y - ex.y);
+      if (d < bs) { bs = d; best = br; }
+    }
+    if (!best) return null;
+    if (redFreeBridge) redFreeBridge--; else { redGold -= price; redBought.bridge = (redBought.bridge || 0) + 1; }
+    bridges.push(best); buildStatic();
+    alertAt(bridgeEnd(best, blueSide()), `The enemy has built a bridge: the ${bridgeName(best)}`, false);
+    return best;
+  }
   function newPlan() {
     const red = towns.filter(t => t.owner === 1);
     plan = null;
@@ -1749,8 +1773,9 @@ import * as THREE from 'three';
     const target = pickTarget(home);
     if (!target) return;
     // mass at the last barrier before the target, at its best crossing
-    const rt = regionOf(target.x, target.y), rh = regionOf(home.x, home.y);
-    const main = rt === rh ? null : bestBridge(home.x, home.y, target.x, target.y, lines[rh > rt ? rt : rt - 1]);
+    const rt = regionOf(target.x, target.y), rh = regionOf(home.x, home.y), L = rt === rh ? null : lines[rh > rt ? rt : rt - 1];
+    let main = L ? bestBridge(home.x, home.y, target.x, target.y, L) : null;
+    if (L && (!main || redFreeBridge)) main = aiBridge(L, home, target) || main;
     let decoy = null, decoyTarget = null;
     const others = main ? bridges.filter(b => b !== main && b.line === main.line) : [];
     if (others.length && red.length >= 3 && Math.random() < 0.45) {
@@ -1777,6 +1802,15 @@ import * as THREE from 'three';
     aiT = 2;
     const red = towns.filter(t => t.owner === 1);
     if (!red.length) return;
+    // a free bridge goes up once there's nothing left to take on the enemy's own bank, or after half a minute
+    if (redFreeBridge) {
+      const home = red.find(t => t.capital) || red[0], rh = regionOf(home.x, home.y);
+      const across = towns.filter(t => t.owner !== 1 && regionOf(t.x, t.y) !== rh);
+      if (across.length && (time > 30 || !towns.some(t => t.owner !== 1 && regionOf(t.x, t.y) === rh))) {
+        const to = across.reduce((a, t) => Math.hypot(t.x - home.x, t.y - home.y) < Math.hypot(a.x - home.x, a.y - home.y) ? t : a);
+        if (aiBridge(nextLine(home.x, home.y, to.x, to.y), home, to)) newPlan();
+      }
+    }
     if (!plan || plan.target.owner === 1 || time - plan.t > 75) newPlan();
     if (!plan) return;
 
@@ -2980,6 +3014,19 @@ import * as THREE from 'three';
     }));
     world.add(instanced(GEO.rock, mat('#ffffff'), rocks, (r, d, c) => { d.position.set(r.x, groundAt(r.x, r.y) + r.r * 0.2, r.y); d.scale.set(r.r, r.r * 0.6, r.r * 0.8); d.rotation.set(0, rand(0, 6), 0); tint(c, '#6b6c66', 0.04); }));
 
+    // broken bridges: the stumps of old stone piers, standing in the river
+    for (const L of waterLines()) for (const rb of land.ruins || []) {
+      const b = rb * LB, ca = lineA(L, b), hw = hwAt(L, b);
+      if (bridges.some(br => br.line === L && Math.abs(br.b - b) < 40)) continue;   // rebuilt here since
+      const g = new THREE.Group(), c = XY(ca, b);
+      g.position.set(c.x, 0, c.y); if (P) g.rotation.y = Math.PI / 2;
+      for (const sx of [-0.5, 0.5]) {   // two weathered stumps, uneven, barely clear of the water
+        if (rng() < 0.2) continue;
+        put(g, GEO.box, mat('#64635d'), sx * hw * 1.3 + rand(-3, 3), BED_Y, rand(-4, 4), 4.5, WATER_Y - BED_Y + rand(0.6, 2.6), rand(16, 30), rand(-0.15, 0.15));
+      }
+      for (const sx of [-1, 1]) { const q = XY(ca + sx * (hw + 5), b); put(g, GEO.box, mat('#5a5954'), sx * (hw + 5), groundAt(q.x, q.y) - 1.2, rand(-3, 3), 8, 2.2, rand(18, 30)); }
+      world.add(mergeGroup(g));
+    }
     // bridges: a stone deck with parapets and piers; the ford gets stepping stones
     const stones = [];
     for (const br of bridges) {
@@ -3843,6 +3890,8 @@ import * as THREE from 'three';
       land: () => landKey,
       newMap: (k, seed) => { newGame(k, seed); return landKey; },
       fallbacks: () => layoutFallbacks,
+      bridgesLeft: () => ({ blue: inventory.bridge || 0, red: redFreeBridge }),
+      riverPoint: bn => { const L = waterLines()[0], b = bn * LB, p = XY(lineA(L, b), b); return toScreen(p.x, p.y, 0); },
       layout: () => towns.map(t => ({ name: t.name, owner: t.owner, x: Math.round(t.x), y: Math.round(t.y) })),
       mirrored: () => {   // is the land the same, turned about the centre, for both sides?
         const near = (p, list, d = 2) => list.some(q => Math.hypot(W - p.x - q.x, H - p.y - q.y) < d);

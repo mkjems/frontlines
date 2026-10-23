@@ -17,8 +17,8 @@ march on, and thousands of soldiers clash on a 3D tabletop battlefield.
 - **Spend gold** from the tray on farms, watchtowers, forts, barracks and bridges. Farms and gold mines earn it.
 - **Take Redmarsh, the enemy capital, to win.** Lose Ashford and the war is over.
 - **Every game is dealt a landscape:** River Valley, The Great Lake, Two Rivers, Mountain Pass, Open Border,
-  The Steppe, The Greenwood, Highlands, Marshes, Old Forest or Open Plains. Step through them with the arrows or dots on the start screen, or add
-  `?land=mountains` (or `valley`, `lake`, `tworivers`, `open`, `steppe`, `greenwood`, `highlands`, `marsh`, `forest`, `plains`) to
+  The Steppe, The Greenwood, Highlands, Marshes, Old Forest, Open Plains or Broken Bridges. Step through them with the arrows or dots on the start screen, or add
+  `?land=mountains` (or `valley`, `lake`, `tworivers`, `open`, `steppe`, `greenwood`, `highlands`, `marsh`, `forest`, `plains`, `broken`) to
   the address to pick one.
 - **Every map is random but fair:** the towns, mines, farms, hills, woods, crags and bogs are laid out at
   random on your half and mirrored, turned about the centre, onto the enemy's. Each map has a number shown on
