@@ -2414,8 +2414,8 @@ import * as THREE from 'three';
   // A player who drops out rejoins with their key: the relay sends every turn so far, and they replay them.
   // In a match, held (set by a pause order) stops both battles on the same turn, and a weekly choice not made
   // within WEEK_PICK turns (15 s) is made for the player: the first reward offered.
-  const TURN_TICKS = 2, DELAY = 3, SUM_EVERY = 20, WEEK_PICK = 300;
   const TESTING = new URLSearchParams(location.search).has('test');
+  const TURN_TICKS = 2, DELAY = 3, SUM_EVERY = 20, WEEK_PICK = TESTING && +new URLSearchParams(location.search).get('pick') || 300;   // tests: ?test&pick=turns
   const AWAY_S = TESTING && +new URLSearchParams(location.search).get('away') || 30;   // seconds a dropped player has to come back
   let held = false;
   let net = null;   // { ws, code, team, key, names, setup, live, turn, sent, acc, inbox: [Map, Map], outbox, sums, peerSums, desync, waitT }

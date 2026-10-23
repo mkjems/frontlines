@@ -274,7 +274,7 @@ Found on GitHub's slow machines after deploying: a player who finished the count
 from the moment a match is announced, and turns and checksums carry the match's id, so a late one from before a
 rematch is ignored. The first match test makes the guest's countdown slow (`&count=700`) to cover it.
 Board shape: the host's window, unless one screen is tall and the other wide; then a square board (1000 × 1000)
-suits both. Tests can shorten a week and the time away with `?test&week=2&away=2`.
+suits both. Tests can shorten a week, the time away, the weekly limit and the countdown with `?test&week=2&away=2&pick=60&count=700`.
 Tests: "playing a friend through the screens" (invite, join by link, a map change seen by the guest, start,
 pause and resume, give up, rematch), the weekly choice with its limit, and a walkover.
 

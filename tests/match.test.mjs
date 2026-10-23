@@ -189,15 +189,15 @@ test('playing a friend through the screens: invite, join by link, battle, pause,
 });
 
 test('the weekly choice in a match: each picks their own, and a slow player gets the first reward after 15 s', async () => {
-  const { host, guest } = await match(server, '&week=2');
+  const { host, guest } = await match(server, '&week=2&pick=60');   // 60 turns (3 s) instead of 300, for slow CI machines
   await until(host, () => __t.state() === 'upgrade' && !document.getElementById('upgrade').hidden, 'the end of the week');
   await host.evaluate(() => document.getElementById('choice0').click());
   assert.match(await host.$eval('#choices', e => e.textContent), /Waiting for Bo to choose/);
   await sleep(1000);
   assert.equal(await t(host, 'state'), 'upgrade', 'the battle waits for the other player');
   assert.match(await guest.$eval('#upLabel', e => e.textContent), /Week 1 complete · \d+ s/, 'the guest sees the time left');
-  await until(host, () => __t.state() === 'play', 'the guest\'s reward to be chosen for them', 25000);
-  await until(guest, () => __t.state() === 'play' && document.getElementById('upgrade').hidden, 'the guest\'s dialog to close', 5000);
+  await until(host, () => __t.state() === 'play', 'the guest\'s reward to be chosen for them', 60000);
+  await until(guest, () => __t.state() === 'play' && document.getElementById('upgrade').hidden, 'the guest\'s dialog to close', 20000);
   for (const p of [host, guest]) assert.equal((await t(p, 'net')).desync, -1);
   assert.deepEqual([...host.errors, ...guest.errors], []);
   await close(host, guest);
