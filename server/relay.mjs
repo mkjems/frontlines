@@ -12,7 +12,8 @@
 //
 // Messages are JSON, { t: type, ... }:
 //   from a player  host {name, screen} · join {code, name, screen} · rejoin {code, team, key} · name {name}
-//                  lobby {lobby} and start {setup} (host only) · turn {n, orders} · sum {n, sum} · over
+//                  lobby {lobby} and start {setup} (host only) · turn {id, n, orders} · sum {id, n, sum} · over
+//                  (id: the match's, from its setup)
 //                  ping, pong and rematch (passed on as they are)
 //   to a player    room {code, team, key, names, screens, lobby} · joined {names, screens} · names {names}
 //                  lobby/start/turn/sum/ping/pong/rematch (the other's) · catchup {setup, turns} (after a
@@ -100,11 +101,11 @@ export function start({ port = 8080, site = fileURLToPath(new URL('../site/', im
       } else if (m.t === 'start' && room && team === 0) {
         room.setup = m.setup; room.turns = [[], []]; room.over = false;
         for (const p of room.players) send(p, { t: 'start', setup: m.setup });
-      } else if (m.t === 'turn' && room && room.setup) {
+      } else if (m.t === 'turn' && room && room.setup && m.id === room.setup.id) {   // a late turn from an earlier match is dropped
         room.turns[team][m.n] = m.orders;
-        send(other(), { t: 'turn', n: m.n, orders: m.orders });
+        send(other(), { t: 'turn', id: m.id, n: m.n, orders: m.orders });
       } else if (m.t === 'sum' && room) {
-        send(other(), { t: 'sum', n: m.n, sum: m.sum });
+        send(other(), { t: 'sum', id: m.id, n: m.n, sum: m.sum });
       }
     });
     ws.on('close', () => {

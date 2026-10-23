@@ -30,9 +30,11 @@ async function until(page, fn, what, ms = 20000, arg) {
   throw new Error(`timed out waiting for ${what}`);
 }
 // a player: their own browser storage, like a separate machine
-async function player(srv, viewport, query = '') {
+// slow: how many times slower this player's machine runs (a slow phone)
+async function player(srv, viewport, query = '', slow = 1) {
   const page = await (await browser.createBrowserContext()).newPage();
   await page.setViewport(viewport);
+  if (slow > 1) await page.emulateCPUThrottling(slow);
   page.errors = [];
   page.on('pageerror', e => page.errors.push(e.message));
   await page.goto(`http://127.0.0.1:${srv.port}/?test${query}`);
@@ -40,8 +42,9 @@ async function player(srv, viewport, query = '') {
   return page;
 }
 // a host on a laptop and a guest on a phone, in a started match on River Valley, map 4821
-async function match(srv, query) {
-  const host = await player(srv, { width: 1200, height: 800 }, query), guest = await player(srv, { width: 390, height: 844, isMobile: true, hasTouch: true }, query);
+// lateGuest: the guest's countdown runs slowly, so the host begins (and sends turns) well before the guest does
+async function match(srv, query = '', lateGuest = false) {
+  const host = await player(srv, { width: 1200, height: 800 }, query), guest = await player(srv, { width: 390, height: 844, isMobile: true, hasTouch: true }, query + (lateGuest ? '&count=700' : ''));
   await t(host, 'netHost', 'Ann');
   await until(host, () => __t.net().code, 'a room code');
   const { code } = await t(host, 'net');
@@ -66,7 +69,8 @@ async function drag(page, from, to) {
 async function close(...pages) { for (const p of pages) await p.browserContext().close(); }
 
 test('two players play a match through the relay, each with their own side, and stay in sync', async () => {
-  const { host, guest } = await match(server);
+  // the guest finishes the countdown last, after the host has begun sending turns, as a slow phone would
+  const { host, guest } = await match(server, '', true);
   assert.equal(await t(host, 'me'), 0); assert.equal(await t(guest, 'me'), 1);
   // the board is the host's (a wide one here), turned for the guest: red's capital where the host sees blue's
   const [hA, hR, gA, gR] = [await t(host, 'pos', 'Ashford'), await t(host, 'pos', 'Redmarsh'), await t(guest, 'pos', 'Ashford'), await t(guest, 'pos', 'Redmarsh')];

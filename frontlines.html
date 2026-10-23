@@ -2439,7 +2439,7 @@ import * as THREE from 'three';
   function netStart(land, seed) {
     const tall = s => s && s.h > s.w * 1.1, [a, b] = net.screens;
     const board = !a || !b || tall(a) === tall(b) ? myScreen() : { w: 1000, h: 1000 };
-    netSend({ t: 'start', setup: { land, map: seed || 1 + (Math.random() * 9999 | 0), board, match: { ai: -1, difficulty: 'normal', classic, grace: 6 } } });
+    netSend({ t: 'start', setup: { id: Math.random().toString(36).slice(2, 8), land, map: seed || 1 + (Math.random() * 9999 | 0), board, match: { ai: -1, difficulty: 'normal', classic, grace: 6 } } });
   }
   // the host's map as it's chosen, so the guest sees it behind the invitation
   function sendLobby() { netSend({ t: 'lobby', lobby: { land: landKey, name: land.name, map: mapSeed, classic } }); }
@@ -2453,17 +2453,21 @@ import * as THREE from 'three';
     else if (m.t === 'joined') { Object.assign(net, { names: m.names, screens: m.screens }); toast(`${oppName()} has joined`, 'good'); showInvite(); }
     else if (m.t === 'names') { net.names = m.names; if (net.team === 0) showInvite(); else showJoined(); }
     else if (m.t === 'lobby') { previewLobby(m.lobby); showJoined(); }
-    else if (m.t === 'start') countdown(() => beginMatch(m.setup));
+    // Turns for this match are collected from the moment it's announced: the other player may finish the
+    // countdown first and start sending. Turns and checksums from any other match (a late one from before a
+    // rematch) are ignored.
+    else if (m.t === 'start') { net.next = m.setup.id; freshTurns(); countdown(() => beginMatch(m.setup)); }
     else if (m.t === 'ping') netSend({ t: 'pong', at: m.at });
     else if (m.t === 'pong') net.rtt = performance.now() - m.at;
     else if (m.t === 'rematch') { net.rematch[1 - net.team] = true; toast(`${oppName()} wants a rematch`, 'good'); maybeRematch(); }
-    else if (m.t === 'turn') net.inbox[1 - net.team].set(m.n, m.orders);
-    else if (m.t === 'sum') { net.peerSums.set(m.n, m.sum); compareSums(m.n); }
+    else if (m.t === 'turn') { if (m.id === net.next) net.inbox[1 - net.team].set(m.n, m.orders); }
+    else if (m.t === 'sum') { if (m.id === net.next) { net.peerSums.set(m.n, m.sum); compareSums(m.n); } }
     else if (m.t === 'left') { if (net.live && state === 'play') { net.awayAt = performance.now(); toast(`${oppName()} lost the connection`, 'bad'); } }
     else if (m.t === 'back') { if (net.awayAt) toast(`${oppName()} is back`, 'good'); net.awayAt = 0; }
     else if (m.t === 'catchup') {
       Object.assign(net, { code: m.code, team: m.team, names: m.names });
       if (!m.setup) return;
+      net.next = m.setup.id; freshTurns();
       beginMatch(m.setup);
       for (const team of [0, 1]) m.turns[team].forEach((o, n) => { if (o) net.inbox[team].set(n, o); });
       net.sent = Math.max(DELAY - 1, m.turns[net.team].length - 1);
@@ -2477,9 +2481,7 @@ import * as THREE from 'three';
     net.setup = setup; board = setup.board; presetMatch = setup.match; me = net.team;
     net.live = false;   // while the map is made, orders aren't sent anywhere
     newGame(setup.land, setup.map);
-    Object.assign(net, { live: true, turn: 0, sent: DELAY - 1, acc: 0, inbox: [new Map(), new Map()], outbox: [], sums: new Map(), peerSums: new Map(),
-      desync: -1, awayAt: 0, rematch: [false, false], weekTurns: 0 });
-    for (let n = 0; n < DELAY; n++) for (const team of [0, 1]) net.inbox[team].set(n, []);   // the first turns carry no orders
+    Object.assign(net, { live: true, turn: 0, sent: DELAY - 1, acc: 0, outbox: [], desync: -1, awayAt: 0, rematch: [false, false], weekTurns: 0 });
     held = false;
     tut = null; showTutorial(); setHint('');   // the first-game tutorial is for blue against the computer
     for (const id of ['intro', 'over', 'watchBar', 'upgrade', 'countdown']) $(id).hidden = true;
@@ -2514,9 +2516,14 @@ import * as THREE from 'three';
     const tick = () => {
       if (!n) { $('countdown').hidden = true; then(); return; }
       $('countNum').textContent = n--; Sound.select();
-      setTimeout(tick, TESTING ? 120 : 900);
+      setTimeout(tick, TESTING ? +new URLSearchParams(location.search).get('count') || 120 : 900);   // tests: ?test&count=ms
     };
     tick();
+  }
+  // empty turn buffers for a new match; its first turns carry no orders
+  function freshTurns() {
+    Object.assign(net, { inbox: [new Map(), new Map()], sums: new Map(), peerSums: new Map() });
+    for (let n = 0; n < DELAY; n++) for (const team of [0, 1]) net.inbox[team].set(n, []);
   }
   const haveTurn = n => net.inbox[0].has(n) && net.inbox[1].has(n);
   function runTurn() {
@@ -2525,7 +2532,7 @@ import * as THREE from 'three';
       const mine = JSON.parse(JSON.stringify(net.outbox));
       net.outbox = []; net.sent = n + DELAY;
       net.inbox[net.team].set(n + DELAY, mine);
-      netSend({ t: 'turn', n: n + DELAY, orders: mine });
+      netSend({ t: 'turn', id: net.setup.id, n: n + DELAY, orders: mine });
     }
     for (const team of [0, 1]) {
       for (const o of net.inbox[team].get(n)) { orderLog.push({ ...o, team, at: frameNo, turn: n }); carryOut(team, o, true); }
@@ -2536,7 +2543,7 @@ import * as THREE from 'three';
     } else net.weekTurns = 0;
     for (let i = 0; i < TURN_TICKS; i++) if (running() && !held) step(STEP);
     net.turn++;
-    if (n % SUM_EVERY === 0 && !net.replaying) { net.sums.set(n, JSON.stringify(checksum())); netSend({ t: 'sum', n, sum: net.sums.get(n) }); compareSums(n); }
+    if (n % SUM_EVERY === 0 && !net.replaying) { net.sums.set(n, JSON.stringify(checksum())); netSend({ t: 'sum', id: net.setup.id, n, sum: net.sums.get(n) }); compareSums(n); }
   }
   function compareSums(n) {
     const a = net.sums.get(n), b = net.peerSums.get(n);
