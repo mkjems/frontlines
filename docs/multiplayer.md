@@ -1,8 +1,18 @@
 # Multiplayer plan: two players online
 
 The plan for playing Frontlines against another person, agreed on 23 October 2026. Work through the phases
-in order and tick items off as they land, so the next session can see where things stand. Single player
-against the computer must keep working, and feel the same, after every phase.
+in order. Single player against the computer must keep working, and feel the same, after every phase.
+
+**Current phase:** 0, not started.
+
+How to keep this plan up to date:
+- Tick a step (`- [ ]` → `- [x]`) in the same commit as the work, once its tests pass.
+- A phase is done when its **Exit** condition holds, not just when its boxes are ticked. Then move
+  **Current phase** on.
+- Under a step, add a short indented line for anything learned that the next session needs (numbers,
+  surprises, where the code ended up).
+- When reality changes the plan, change the plan: add or reword steps, or strike out (`~~…~~`) ones that
+  turned out unnecessary, with a word on why.
 
 ## Decisions
 
