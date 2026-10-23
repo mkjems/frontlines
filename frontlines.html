@@ -145,7 +145,9 @@
     box-shadow: var(--shadow), inset 0 0 0 1px var(--edge); border-left: 4px solid var(--blue-ink);
   }
   .coach .label { color: var(--blue-ink); display: block; margin-bottom: 2px; }
-  .coach button { position: absolute; top: 6px; right: 6px; border: 0; background: transparent; font: 600 16px var(--font); color: var(--muted); cursor: pointer; padding: 2px 6px; }
+  #coachClose { position: absolute; top: 6px; right: 6px; border: 0; background: transparent; font: 600 16px var(--font); color: var(--muted); cursor: pointer; padding: 2px 6px; }
+  #coachOff { display: block; margin-top: 4px; padding: 0; text-align: left; border: 0; background: none; font: 500 11px var(--font); color: var(--muted); text-decoration: underline; cursor: pointer; }
+  #coachOff:hover { color: var(--ink); }
   .card.rules { max-width: 760px; }
   .rules .cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 22px; }
   .rules h3 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
@@ -315,7 +317,10 @@
     .coach[hidden] { display: none; }
     .coach .label { display: inline; margin: 0; flex: none; }
     .coach:not(.open) #coachText { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-    .coach button { top: 3px; }
+    .coach:not(.open) #coachOff { display: none; }
+    .coach.open { display: block; }   /* opened: laid out like the full tip on a computer */
+    .coach.open .label { display: block; margin-bottom: 2px; }
+    #coachClose { top: 3px; }
     #goldRate { display: none; }
     .choices { grid-template-columns: 1fr; }
     .card { padding: 22px; }
@@ -452,7 +457,7 @@
 </div>
 
 <div class="inspect" id="inspect" hidden></div>
-<div class="coach" id="coach" hidden><span class="label">Tip</span><span id="coachText"></span><button type="button" id="coachClose" aria-label="Dismiss tip">×</button></div>
+<div class="coach" id="coach" hidden><span class="label">Tip</span><span id="coachText"></span><button type="button" id="coachClose" aria-label="Dismiss tip">×</button><button type="button" id="coachOff">Turn off tips</button></div>
 
 <div class="overlay" id="rules" hidden>
   <div class="card rules">
@@ -492,6 +497,7 @@
         <li>Each week: one free reinforcement, and the enemy grows stronger.</li>
       </ul></div>
     </div>
+    <label class="fold"><input type="checkbox" id="tipsOn"><span>Show tips while playing</span></label>
     <button class="btn primary" id="rulesClose" type="button">Back to the battle</button>
   </div>
 </div>
@@ -2541,11 +2547,18 @@ import * as THREE from 'three';
     { id: 'lost', when: () => tally.fallen > 0, text: 'A lost town stops training for you and its farms pay the enemy. Take it back to restore your income.' },
     { id: 'enemyBuild', when: () => structs.some(st => st.team === 1), text: 'The enemy has built defences. Hold Shift and hover over anything on the map to see what it does.' },
   ];
-  let coachSeen = {}, coachT = 4, coachHide = 0;
+  let coachSeen = {}, coachT = 4, coachHide = 0, tipsOff = false;
+  try { tipsOff = localStorage.getItem('frontlines-tips-off') === '1'; } catch (e) {}
+  // tips can be turned off from any tip, and back on from the rules sheet
+  function setTipsOff(off) {
+    tipsOff = off; $('tipsOn').checked = !off;
+    if (off) $('coach').hidden = true;
+    try { localStorage.setItem('frontlines-tips-off', off ? '1' : '0'); } catch (e) {}
+  }
   try { coachSeen = JSON.parse(localStorage.getItem('frontlines-coach') || '{}') || {}; } catch (e) {}
   function stepCoach(dt) {
     if (coachHide > 0 && (coachHide -= dt) <= 0) $('coach').hidden = true;
-    if ((coachT -= dt) > 0 || tutStep()) return;
+    if (tipsOff || (coachT -= dt) > 0 || tutStep()) return;
     coachT = 1;
     if (!$('coach').hidden) return;
     const c = COACH.find(c => !coachSeen[c.id] && c.when());
@@ -2555,6 +2568,9 @@ import * as THREE from 'three';
     $('coachText').textContent = c.text; $('coach').classList.remove('open'); $('coach').hidden = false; coachHide = 10; coachT = 14;
   }
   $('coachClose').onclick = e => { e.stopPropagation(); $('coach').hidden = true; };
+  $('coachOff').onclick = e => { e.stopPropagation(); setTipsOff(true); toast('Tips are off. Turn them back on under Rules.'); };
+  $('tipsOn').checked = !tipsOff;
+  $('tipsOn').onchange = () => setTipsOff(!$('tipsOn').checked);
   // on a phone a tip shows as one line; tapping it opens the whole tip (and keeps it up a while longer)
   $('coach').onclick = () => { const open = $('coach').classList.toggle('open'); if (open) coachHide = Math.max(coachHide, 15); };
   $('startBtn').onclick = () => { Sound.init(); $('intro').hidden = true; state = 'play'; };

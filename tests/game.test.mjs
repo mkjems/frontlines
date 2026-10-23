@@ -317,6 +317,27 @@ test('random layouts: the same for both sides, the same for the same map number,
   await page.close();
 });
 
+test('tips can be turned off from any tip, and back on under Rules', async () => {
+  const page = await openGame();
+  await page.evaluate(() => { localStorage.removeItem('frontlines-coach'); localStorage.removeItem('frontlines-tips-off'); });
+  await page.reload(); await page.waitForFunction(() => window.__t, { timeout: 20000 });
+  await t(page, 'start');
+  const tipShown = () => page.$eval('#coach', e => !e.hidden);
+  for (let i = 0; i < 20 && !(await tipShown()); i++) await t(page, 'run', 2);
+  assert.ok(await tipShown(), 'a tip turns up');
+  await page.click('#coachOff');
+  assert.ok(!(await tipShown()), 'Turn off tips hides it');
+  for (let i = 0; i < 10; i++) await t(page, 'run', 2);
+  assert.ok(!(await tipShown()), 'and no more tips come');
+  // (the week may have ended by now, with its dialog up, so use the rules sheet's switch directly)
+  assert.equal(await page.$eval('#tipsOn', e => e.checked), false, 'the rules sheet shows tips as off');
+  await page.$eval('#tipsOn', e => e.click());
+  assert.equal(await page.evaluate(() => localStorage.getItem('frontlines-tips-off')), '0', 'and can turn them back on');
+  assert.deepEqual(page.errors, []);
+  await page.evaluate(() => localStorage.removeItem('frontlines-tips-off'));
+  await page.close();
+});
+
 test('the Sound button silences everything', async () => {
   const page = await openGame();
   await toStart(page);
