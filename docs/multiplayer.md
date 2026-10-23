@@ -3,9 +3,9 @@
 The plan for playing Frontlines against another person, agreed on 23 October 2026. Work through the phases
 in order. Single player against the computer must keep working, and feel the same, after every phase.
 
-**Current phase:** 5 built and tested locally on 23 October. Phase 4 is deployed (the relay answers at
-`wss://frontlines.mkjems.dk/ws`). Both exits, a battle between two machines through the VPS and a friend joining
-from a link on a phone, wait for a real try once phase 5 is deployed.
+**Current phase:** 6, trying it out. Phases 4 and 5 are deployed (23 October): matches work on frontlines.mkjems.dk,
+checked with two browsers through the VPS (about 60 ms round trip). The user is playing and reporting bugs; the
+first, the guest's route drawn red while dragging, is fixed. More to come.
 
 How to keep this plan up to date:
 - Tick a step (`- [ ]` → `- [x]`) in the same commit as the work, once its tests pass.
