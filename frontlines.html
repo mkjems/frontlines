@@ -191,8 +191,6 @@
   .hero.art::after { content: ""; position: absolute; inset: 0;
     background: linear-gradient(to bottom, rgba(38, 44, 43, 0) 40%, rgba(38, 44, 43, .6) 72%, var(--panel) 100%); }
   .hero.art h1 { position: relative; z-index: 1; font-size: 48px; text-shadow: 0 2px 14px rgba(0, 0, 0, .7), 0 1px 2px rgba(0, 0, 0, .6); }
-  .march { animation: march 1.8s linear infinite; }
-  @keyframes march { from { transform: translate(0, 0); } to { transform: translate(var(--mx), var(--my)); } }
   .icon-tile { width: 40px; height: 40px; border-radius: 10px; background: rgba(159, 192, 255, .12); color: var(--blue-ink); display: grid; place-items: center; }
   .icon-tile svg, .tray svg { display: block; }
   .tray svg { width: 16px; height: 16px; color: var(--blue-ink); }
@@ -301,7 +299,7 @@
     .hero.art h1 { font-size: 40px; }
     .card h1 { font-size: 32px; }
   }
-  @media (prefers-reduced-motion: reduce) { .march { animation: none; } * { transition: none !important; } .pulse { animation: none; outline: 2px solid var(--blue-ink); } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } .pulse { animation: none; outline: 2px solid var(--blue-ink); } }
 </style>
 
 <canvas id="map"></canvas>
@@ -472,7 +470,7 @@
 
 <div class="overlay" id="over" hidden>
   <div class="card">
-    <div class="hero" id="overHero"></div>
+    <div class="hero art" id="overHero"></div>
     <span class="label" id="overLabel">Campaign over</span>
     <h1 id="overTitle">Victory</h1>
     <p id="overText"></p>
@@ -629,58 +627,7 @@ import * as THREE from 'three';
     };
   })();
 
-  // ---------- artwork: hero scenes and icons, drawn as inline SVG ----------
-  function heroSVG(mode) {   // 'intro' | 'win' | 'lose'
-    const BL = '#4a84f2', RD = '#df5448', BLs = '#5e98ff', RDs = '#ff5d47';   // castles in team colours, soldiers light
-    const leftCol = mode === 'lose' ? RD : BL, rightCol = mode === 'win' ? BL : RD;
-    const castle = (x, col, flip) => `
-      <g transform="translate(${x} 62)">
-        <rect x="-21" y="-13" width="46" height="36" rx="5" fill="rgba(0,0,0,.3)"/>
-        <rect x="-24" y="-16" width="46" height="36" rx="5" fill="${col}"/>
-        ${[-24, -12, 0, 12].map(dx => `<rect x="${dx}" y="-22" width="8" height="8" rx="1.5" fill="${col}"/>`).join('')}
-        <rect x="-6" y="2" width="10" height="18" rx="5" fill="rgba(255,255,255,.85)"/>
-        <line x1="${flip ? -20 : 18}" y1="-22" x2="${flip ? -20 : 18}" y2="-44" stroke="#9aa49d" stroke-width="1.6"/>
-        <path d="M${flip ? -20 : 18} -44 l${flip ? -14 : 14} 4 l${flip ? 14 : -14} 4z" fill="${col}"/>
-      </g>`;
-    const march = (pts, col, shape, n) => {
-      const [x0, y0, x1, y1] = pts, dx = (x1 - x0) / n, dy = (y1 - y0) / n;
-      let g = '';
-      for (let i = 0; i < n; i++) {
-        const x = x0 + dx * i, y = y0 + dy * i + (i % 2 ? 2.5 : -2.5);
-        g += shape === 'tri' ? `<path d="M${x} ${y - 3.6}l3.4 6h-6.8z" fill="${col}"/>`
-          : shape === 'sq' ? `<rect x="${x - 2.8}" y="${y - 2.8}" width="5.6" height="5.6" fill="${col}"/>`
-          : `<circle cx="${x}" cy="${y}" r="2.9" fill="${col}"/>`;
-      }
-      return `<g class="march" style="--mx:${dx}px;--my:${dy}px">${g}</g>`;
-    };
-    const trees = [[24, 112, 9], [36, 120, 7], [128, 22, 8], [140, 30, 6], [262, 120, 8], [276, 128, 6], [372, 112, 9], [360, 24, 7], [384, 34, 6]]
-      .map(([x, y, r]) => `<circle cx="${x + 2}" cy="${y + 3}" r="${r}" fill="rgba(0,0,0,.25)"/><circle cx="${x}" cy="${y}" r="${r}" fill="${r > 7 ? '#4d6745' : '#435d3d'}"/>`).join('');
-    const pines = [[110, 120], [120, 128], [292, 18], [304, 26]]
-      .map(([x, y]) => `<path d="M${x} ${y - 10}l7 14h-14z" fill="#38513a"/>`).join('');
-    const field = (x, y, rot, col) => `<g transform="translate(${x} ${y}) rotate(${rot})"><rect x="-18" y="-11" width="36" height="22" rx="3" fill="${col}"/>${[-6, 0, 6].map(o => `<line x1="-16" y1="${o}" x2="16" y2="${o}" stroke="rgba(0,0,0,.22)" stroke-width="1.4"/>`).join('')}</g>`;
-    let armies = '';
-    if (mode === 'intro') armies = march([96, 104, 168, 82], BLs, 'tri', 7) + march([304, 104, 232, 82], RDs, 'circ', 7) + march([110, 32, 170, 74], BLs, 'sq', 5);
-    else if (mode === 'win') armies = march([96, 104, 300, 92], BLs, 'tri', 18);
-    else armies = march([304, 104, 100, 92], RDs, 'circ', 18);
-    const clash = mode === 'intro' ? `<circle cx="200" cy="80" r="9" fill="none" stroke="rgba(230,236,226,.4)" stroke-width="1.4"/><circle cx="200" cy="80" r="16" fill="none" stroke="rgba(230,236,226,.2)" stroke-width="1.2"/>` : '';
-    return `<svg viewBox="0 0 400 150" role="img" aria-label="Two castles facing each other across a river">
-      <rect width="400" height="150" fill="#353b36"/>
-      <ellipse cx="62" cy="30" rx="80" ry="40" fill="#3a413a"/><ellipse cx="62" cy="30" rx="50" ry="24" fill="#3f463e"/><ellipse cx="62" cy="30" rx="22" ry="10" fill="#444b42"/>
-      <ellipse cx="350" cy="132" rx="90" ry="40" fill="#3a413a"/><ellipse cx="350" cy="132" rx="56" ry="24" fill="#3f463e"/>
-      ${field(130, 100, -8, '#4d4a3c')}${field(280, 44, 10, '#3c4535')}${field(286, 104, -12, '#4d4a3c')}
-      <path d="M95 104 Q140 96 168 82 M304 104 Q262 96 232 82" stroke="#444840" stroke-width="5" fill="none" stroke-linecap="round"/>
-      <path d="M222 -10 C 190 40, 215 100, 182 160" stroke="#403f37" stroke-width="40" fill="none"/>
-      <path d="M222 -10 C 190 40, 215 100, 182 160" stroke="#365f74" stroke-width="30" fill="none"/>
-      <path d="M222 -10 C 190 40, 215 100, 182 160" stroke="#2c4f62" stroke-width="12" fill="none"/>
-      <path d="M205 20 l8 3 M196 50 l7 3 M206 118 l8 3" stroke="rgba(255,255,255,.25)" stroke-width="1.4" stroke-linecap="round"/>
-      <rect x="172" y="73" width="60" height="18" rx="4" fill="rgba(0,0,0,.3)"/>
-      <rect x="170" y="71" width="60" height="18" rx="4" fill="#5f5545" stroke="#51493c" stroke-width="1.5"/>
-      ${[178, 186, 194, 202, 210, 218].map(x => `<line x1="${x}" y1="73" x2="${x}" y2="87" stroke="rgba(0,0,0,.25)"/>`).join('')}
-      ${trees}${pines}
-      ${castle(70, leftCol, false)}${castle(330, rightCol, true)}
-      ${armies}${clash}
-    </svg>`;
-  }
+  // ---------- artwork: icons for the tray and dialogs, drawn as inline SVG (the paintings are in art/) ----------
   const ICON = {
     fort: '<path d="M4 20V9h3V6h3v3h4V6h3v3h3v11z"/><path d="M10 20v-5h4v5"/>',
     tower: '<path d="M8 21V10h8v11"/><path d="M7 10V5h2v2h2V5h2v2h2V5h2v5"/><path d="M12 13v3"/>',
@@ -2116,7 +2063,8 @@ import * as THREE from 'three';
       [tally.captured, 'Towns captured'], [tally.fallen, 'Towns lost'], [`${mins}:${String(secs).padStart(2, '0')}`, 'Time played'],
     ];
     $('overStats').innerHTML = cells.map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join('');
-    $('overHero').innerHTML = heroSVG(won ? 'win' : 'lose');
+    // the painting of whichever kingdom won (loaded only now, at the end)
+    $('overHero').style.backgroundImage = `url(art/victory-${won ? 'blue' : 'red'}.jpg)`;
     $('over').hidden = false;
     $('againBtn').focus();
     Sound.clash(0);
