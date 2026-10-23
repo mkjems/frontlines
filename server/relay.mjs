@@ -6,14 +6,17 @@
 //   node relay.mjs                      serves ../site on port 8080 (PORT and SITE override)
 //   import { start } from './relay.mjs' tests start it on a free port, optionally with a delay per message
 //
-// A room: players[team] (socket, or null while away), keys[team] (to rejoin), names, setup (what the host
-// started: map, board, match), turns[team][n] (every turn so far, for rejoining) and guest (someone joined).
+// A room: players[team] (socket, or null while away), keys[team] (to rejoin), names, screens (each player's
+// window size, for choosing the board), lobby (the map the host is showing), setup (what the host started:
+// map, board, match), turns[team][n] (every turn so far, for rejoining), guest (someone joined) and over.
 //
 // Messages are JSON, { t: type, ... }:
-//   from a player  host {name} · join {code, name} · rejoin {code, team, key} · start {setup} (host only)
-//                  turn {n, orders} · sum {n, sum}
-//   to a player    room {code, team, key, names} · joined {names} · start {setup} · turn/sum (the other's)
-//                  catchup {setup, turns} (after a rejoin) · left {team} · back {team} · error {message}
+//   from a player  host {name, screen} · join {code, name, screen} · rejoin {code, team, key} · name {name}
+//                  lobby {lobby} and start {setup} (host only) · turn {n, orders} · sum {n, sum} · over
+//                  ping, pong and rematch (passed on as they are)
+//   to a player    room {code, team, key, names, screens, lobby} · joined {names, screens} · names {names}
+//                  lobby/start/turn/sum/ping/pong/rematch (the other's) · catchup {setup, turns} (after a
+//                  rejoin) · left {team} · back {team} · error {message}
 
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
@@ -67,25 +70,35 @@ export function start({ port = 8080, site = fileURLToPath(new URL('../site/', im
       if (room) room.seen = Date.now();
       if (m.t === 'host' && !room) {
         const code = newCode();
-        room = { code, guest: false, players: [ws, null], keys: [randomBytes(8).toString('hex'), randomBytes(8).toString('hex')], names: [String(m.name || '').slice(0, 24), ''], setup: null, turns: [[], []], seen: Date.now() };
+        room = { code, guest: false, over: false, players: [ws, null], keys: [randomBytes(8).toString('hex'), randomBytes(8).toString('hex')], names: [String(m.name || '').slice(0, 24), ''], screens: [m.screen || null, null], lobby: null, setup: null, turns: [[], []], seen: Date.now() };
         rooms.set(code, room); team = 0;
         send(ws, { t: 'room', code, team, key: room.keys[0], names: room.names });
       } else if (m.t === 'join' && !room) {
         const r = rooms.get(String(m.code || '').toUpperCase());
         if (!r) return send(ws, { t: 'error', message: 'No game with that code' });
         if (r.guest) return send(ws, { t: 'error', message: 'That game already has two players' });   // a guest who dropped out rejoins with their key
-        room = r; team = 1; r.guest = true; r.players[1] = ws; r.names[1] = String(m.name || '').slice(0, 24);
-        send(ws, { t: 'room', code: r.code, team, key: r.keys[1], names: r.names, setup: r.setup });
-        send(r.players[0], { t: 'joined', names: r.names });
+        room = r; team = 1; r.guest = true; r.players[1] = ws; r.names[1] = String(m.name || '').slice(0, 24); r.screens[1] = m.screen || null;
+        send(ws, { t: 'room', code: r.code, team, key: r.keys[1], names: r.names, screens: r.screens, lobby: r.lobby });
+        send(r.players[0], { t: 'joined', names: r.names, screens: r.screens });
       } else if (m.t === 'rejoin' && !room) {
         const r = rooms.get(String(m.code || '').toUpperCase()), tm = m.team === 1 ? 1 : 0;
-        if (!r || r.keys[tm] !== m.key) return send(ws, { t: 'error', message: 'That game is over' });
+        if (!r || r.over || r.keys[tm] !== m.key) return send(ws, { t: 'error', message: 'That game is over' });
         if (r.players[tm]) r.players[tm].close();
         room = r; team = tm; r.players[tm] = ws;
         send(ws, { t: 'catchup', code: r.code, team, names: r.names, setup: r.setup, turns: r.turns });
         send(r.players[1 - tm], { t: 'back', team });
+      } else if (m.t === 'name' && room) {
+        room.names[team] = String(m.name || '').slice(0, 24);
+        for (const p of room.players) send(p, { t: 'names', names: room.names });
+      } else if (m.t === 'lobby' && room && team === 0) {
+        room.lobby = m.lobby;
+        send(other(), { t: 'lobby', lobby: m.lobby });
+      } else if ((m.t === 'ping' || m.t === 'pong' || m.t === 'rematch') && room) {
+        send(other(), m);
+      } else if (m.t === 'over' && room) {
+        room.over = true;
       } else if (m.t === 'start' && room && team === 0) {
-        room.setup = m.setup; room.turns = [[], []];
+        room.setup = m.setup; room.turns = [[], []]; room.over = false;
         for (const p of room.players) send(p, { t: 'start', setup: m.setup });
       } else if (m.t === 'turn' && room && room.setup) {
         room.turns[team][m.n] = m.orders;

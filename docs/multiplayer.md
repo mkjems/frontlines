@@ -3,9 +3,9 @@
 The plan for playing Frontlines against another person, agreed on 23 October 2026. Work through the phases
 in order. Single player against the computer must keep working, and feel the same, after every phase.
 
-**Current phase:** 4, built and tested locally on 23 October; not yet deployed, so its exit (a battle between two
-machines through the VPS) is still open. Without the phase 5 screens, a match can only be started from the browser
-console with `?test` (`__t.netHost`, `__t.netJoin`, `__t.netStart`).
+**Current phase:** 5 built and tested locally on 23 October. Phase 4 is deployed (the relay answers at
+`wss://frontlines.mkjems.dk/ws`). Both exits, a battle between two machines through the VPS and a friend joining
+from a link on a phone, wait for a real try once phase 5 is deployed.
 
 How to keep this plan up to date:
 - Tick a step (`- [ ]` → `- [x]`) in the same commit as the work, once its tests pass.
@@ -242,17 +242,37 @@ looks small on the phone. See the open questions.
 Exit: two browsers on different machines play a whole battle through the VPS.
 
 ### Phase 5: the UI
-- [ ] Start screen, first step: **Play the computer** or **Play a friend**.
-- [ ] Host: picks a map (the existing map step, difficulty skipped), then a waiting screen with the link,
+- [x] Start screen, first step: **Play the computer** or **Play a friend**.
+      "Play a friend" sits beside "Choose a map", with "Have a code from a friend?" below for joining without
+      a link.
+- [x] Host: picks a map (the existing map step, difficulty skipped), then a waiting screen with the link,
       **Copy**, **Share** (the phone's share menu) and the code in large letters. The map can still be changed
       while waiting, and the guest sees it.
-- [ ] Guest: the link opens "Join the battle on *map*", an optional name and **Ready**. Without the link, a
+      The map step's button becomes "Invite a friend ›"; the waiting card has a name field too.
+- [x] Guest: the link opens "Join the battle on *map*", an optional name and **Ready**. Without the link, a
       "Have a code?" field on the start screen.
-- [ ] Both ready: a 3-2-1 countdown.
-- [ ] In the battle: opponent panel in the HUD (name, connection dot, delay in ms), pause by request, Surrender.
-- [ ] End of week: the game pauses for both, each picks a reward, 15 seconds at most.
-- [ ] Dropouts: "Waiting for your opponent to reconnect… 30 s", then a win by walkover.
-- [ ] End of battle: **Rematch**, a new layout through the same link.
+      The link (`#CODE`) opens a welcome card with a name field and "Join the battle"; once joined it names the
+      map, with the host's map drawn behind it. A link pasted into an open tab works too, and a tab that was
+      already in that match rejoins it (after a reload, say).
+- [x] Both ready: a 3-2-1 countdown.
+      Simpler: the host presses "Start the battle" once the guest has joined; both then count down.
+- [x] In the battle: opponent panel in the HUD (name, connection dot, delay in ms), pause by request, Surrender.
+      The opponent's chip replaces the speed button (no speeds in a match), and the difficulty panel is hidden.
+      Pausing is an order: either player pauses or resumes both battles on the same turn (a `held` flag, not
+      the local `paused`). "Give up this battle" is in the Rules sheet, also an order. The first-game tutorial
+      is left out of matches: it's written for blue against the computer.
+- [x] End of week: the game pauses for both, each picks a reward, 15 seconds at most.
+      After choosing: "Waiting for Bo to choose…". The limit is counted in turns (`WEEK_PICK`), so both
+      browsers agree when the first reward is picked for a slow player.
+- [x] Dropouts: "Waiting for your opponent to reconnect… 30 s", then a win by walkover.
+      The relay then marks the game over, so a late rejoin is told so.
+- [x] End of battle: **Rematch**, a new layout through the same link.
+      Once both press it. "Leave" goes back to the start screen.
+
+Board shape: the host's window, unless one screen is tall and the other wide; then a square board (1000 × 1000)
+suits both. Tests can shorten a week and the time away with `?test&week=2&away=2`.
+Tests: "playing a friend through the screens" (invite, join by link, a map change seen by the guest, start,
+pause and resume, give up, rematch), the weekly choice with its limit, and a walkover.
 
 Exit: a friend who has never seen the game can join from a link on a phone and finish a battle.
 
@@ -269,8 +289,8 @@ Exit: a friend who has never seen the game can join from a link on a phone and f
 - **Pauses:** must the other player accept, or does each player get a few pauses of their own?
 - **Background tabs:** browsers slow hidden tabs, which stalls both players in lockstep. Pause the match when
   either tab is hidden, or run the simulation in a Worker?
-- **Board shape in a match:** it's the host's window. Pick a shape that suits both players' screens
-  (for example the guest's too, sent when joining), or a fixed one?
+- ~~**Board shape in a match:** it's the host's window.~~ Decided in phase 5: the host's window, or a square
+  board when one screen is tall and the other wide.
 - **Phones:** the slower device sets the pace for both. Needs checking on an older phone in phase 6.
 - **Later, if there's traffic:** "Find an opponent" (pair the next two waiting), quick messages ("Good game"),
   two players against the computer.

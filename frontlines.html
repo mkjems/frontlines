@@ -272,6 +272,34 @@
   .diff button.on { background: var(--ink); border-color: var(--ink); color: var(--ground); }
   .tips { background: rgba(159, 192, 255, .08); border-radius: 12px; padding: 12px 14px; display: grid; gap: 6px; box-shadow: inset 0 0 0 1px rgba(159, 192, 255, .12); }
   .tips .label { color: var(--blue-ink); }
+  /* playing a friend: the invitation, the guest's welcome, the countdown, and the opponent in the controls */
+  .linkbtn { font: 600 12px var(--font); color: var(--muted); background: none; border: 0; padding: 0; cursor: pointer; }
+  .linkbtn:hover { color: var(--ink); }
+  .codeline { display: flex; align-items: center; gap: 8px; min-height: 30px; }
+  .codeline input, .namefield input, .invite input {
+    font: 600 14px var(--font); color: var(--ink); background: var(--raised); border: 1.5px solid var(--line); border-radius: 10px;
+    padding: 7px 10px; min-width: 0; box-sizing: border-box;
+  }
+  .codeline input { width: 84px; text-transform: uppercase; letter-spacing: .18em; }
+  .codeline .btn, .invite .btn { padding: 7px 12px; font-size: 13px; }
+  .invite { display: flex; gap: 6px; }
+  .invite input { flex: 1; font-weight: 400; font-size: 13px; color: var(--muted); }
+  .bigcode { font-size: 44px; font-weight: 700; letter-spacing: .3em; text-align: center; color: var(--blue-ink); font-variant-numeric: tabular-nums; padding: 4px 0 0 .3em; }
+  .namefield { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+  .namefield input { flex: 1; }
+  #intro[data-step="wait"], #intro[data-step="join"] { background: rgba(12, 15, 14, .3); }
+  .countdown { position: fixed; inset: 0; display: grid; place-content: center; text-align: center; gap: 6px; pointer-events: none; }
+  .countdown[hidden] { display: none; }
+  .countdown b { font-size: 120px; font-weight: 700; line-height: 1; color: #fff; text-shadow: 0 4px 30px rgba(0, 0, 0, .7); }
+  .countdown span { font-size: 16px; font-weight: 600; color: var(--ink); text-shadow: 0 2px 10px rgba(0, 0, 0, .8); }
+  .opp { display: inline-flex; align-items: center; gap: 7px; font: 600 13px var(--font); color: var(--ink); background: var(--panel);
+    border-radius: 10px; padding: 9px 12px; box-shadow: var(--shadow), inset 0 0 0 1px var(--edge); white-space: nowrap; }
+  .opp[hidden] { display: none; }
+  .opp i { width: 8px; height: 8px; border-radius: 50%; background: #6fcf7f; }
+  .opp i.slow { background: #e2b93b; } .opp i.bad { background: var(--red); }
+  .opp small { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+  .waitnote { font-size: 13px; color: var(--muted); }
+  #intro:not([data-mode="friend"]) #inviteBtn, #intro[data-mode="friend"] #step2 [data-go="3"] { display: none; }
   .tips ol { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: 12.5px; line-height: 1.45; color: var(--ink); }
   .tips p { font-size: 12.5px; }
   .btn.primary:hover { background: #5d93f7; }
@@ -378,6 +406,7 @@
 <div class="controls">
   <button id="pauseBtn" type="button" aria-label="Pause">❚❚ Pause</button>
   <button id="speedBtn" type="button" aria-label="Game speed">1×</button>
+  <span class="opp" id="opp" hidden><i id="oppDot"></i><span id="oppName"></span><small id="oppPing"></small></span>
   <button id="soundBtn" type="button" aria-label="Toggle sound">Sound on</button>
   <button id="rulesBtn" type="button">Rules</button>
 </div>
@@ -418,10 +447,12 @@
       </div>
     </div>
     <div class="stepnav">
-      <span></span>
+      <button class="btn ghost" type="button" id="friendBtn">Play a friend</button>
       <div class="steps" aria-label="Step 1 of 3"><i class="on"></i><i></i><i></i></div>
       <button class="btn primary" type="button" data-go="2">Choose a map ›</button>
     </div>
+    <div class="codeline"><button type="button" class="linkbtn" id="haveCode">Have a code from a friend?</button>
+      <span id="codeForm" hidden><input id="codeIn" maxlength="4" placeholder="CODE" autocomplete="off" aria-label="Code"> <button class="btn" type="button" id="codeGo">Join</button></span></div>
   </div>
   <div class="card mapcard" id="step2" hidden>
     <span class="label">Choose your map</span>
@@ -441,6 +472,7 @@
       <button class="btn ghost" type="button" data-go="1">‹ How to play</button>
       <div class="steps" aria-label="Step 2 of 3"><i></i><i class="on"></i><i></i></div>
       <button class="btn primary" type="button" data-go="3">Next ›</button>
+      <button class="btn primary" type="button" id="inviteBtn">Invite a friend ›</button>
     </div>
   </div>
   <div class="card" id="step3" hidden>
@@ -461,7 +493,33 @@
       <button class="btn primary" id="startBtn" type="button">Start campaign</button>
     </div>
   </div>
+  <!-- Playing a friend: the host's invitation, and the guest's welcome -->
+  <div class="card" id="stepWait" hidden>
+    <span class="label">Play a friend</span>
+    <h2 id="waitTitle">Waiting for your friend…</h2>
+    <p id="waitText">Send them this link, or read them the code. They play red, you play blue, and each of you sees your own side in blue.</p>
+    <div class="invite"><input id="inviteLink" readonly aria-label="Invitation link"><button class="btn" type="button" id="copyBtn">Copy</button><button class="btn" type="button" id="shareBtn" hidden>Share</button></div>
+    <div class="bigcode" id="bigCode">····</div>
+    <label class="namefield">Your name <input id="hostName" maxlength="24" autocomplete="nickname"></label>
+    <div class="stepnav">
+      <button class="btn ghost" type="button" id="waitBack">‹ Map</button>
+      <span class="waitnote" id="waitMap"></span>
+      <button class="btn primary" type="button" id="beginBtn" disabled>Start the battle</button>
+    </div>
+  </div>
+  <div class="card" id="stepJoin" hidden>
+    <span class="label">Play a friend</span>
+    <h2 id="joinTitle">You're invited to a battle</h2>
+    <p id="joinText">Two kingdoms, one river. You draw the paths your armies march on, and so does your friend. You play red, shown in blue on your screen.</p>
+    <label class="namefield">Your name <input id="guestName" maxlength="24" autocomplete="nickname"></label>
+    <div class="stepnav">
+      <button class="btn ghost" type="button" id="joinCancel">‹ Play alone</button>
+      <span></span>
+      <button class="btn primary" type="button" id="joinBtn">Join the battle</button>
+    </div>
+  </div>
 </div>
+<div class="countdown" id="countdown" hidden><b id="countNum">3</b><span id="countText"></span></div>
 
 <div class="inspect" id="inspect" hidden></div>
 <div class="coach" id="coach" hidden><span class="label">Tip</span><span id="coachText"></span><button type="button" id="coachClose" aria-label="Dismiss tip">×</button><button type="button" id="coachOff">Turn off tips</button></div>
@@ -505,7 +563,8 @@
       </ul></div>
     </div>
     <label class="fold"><input type="checkbox" id="tipsOn"><span>Show tips while playing</span></label>
-    <button class="btn primary" id="rulesClose" type="button">Back to the battle</button>
+    <div class="row-btns"><button class="btn primary" id="rulesClose" type="button">Back to the battle</button>
+      <button class="btn ghost" id="giveUpBtn" type="button" hidden>Give up this battle</button></div>
   </div>
 </div>
 
@@ -527,6 +586,7 @@
     <div class="row-btns">
       <button class="btn primary" id="againBtn" type="button">Play again</button>
       <button class="btn" id="watchBtn" type="button">Keep watching</button>
+      <button class="btn ghost" id="leaveBtn" type="button" hidden>Leave</button>
     </div>
   </div>
 </div>
@@ -543,7 +603,9 @@ import * as THREE from 'three';
   const cvs = $('map'), octx = cvs.getContext('2d');
   let ctx = octx;   // points at whichever canvas is being drawn: the ground decals or the screen overlay
 
-  const STEP = 1 / 40, SPEED = 34, WEEK = 45, CELL = 32;
+  const STEP = 1 / 40, SPEED = 34, CELL = 32;
+  // seconds in a week; tests can shorten it (?test&week=3)
+  const WEEK = new URLSearchParams(location.search).has('test') && +new URLSearchParams(location.search).get('week') || 45;
   const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const COL = {
     outside: '#1c201f', land: '#e8ebe2', land2: '#e2e7da', river: '#a9cfe2', riverDeep: '#9dc6dc', shore: '#403f37', shadow: 'rgba(36,48,38,.15)', bridge: '#fbfaf6', bridgeEdge: '#c6ccbf',
@@ -1154,6 +1216,7 @@ import * as THREE from 'three';
     buildStatic();
     rng = seeded(mapSeed * 104729 + 13);   // the battle's own stream, after the map's
     resize();
+    if (net && net.team === 0 && net.code && !net.setup) { sendLobby(); showInvite(); }   // a host still inviting: the guest sees the new map
   }
 
   function resize() {
@@ -2065,8 +2128,9 @@ import * as THREE from 'three';
       b.innerHTML = `<div class="top"><span class="tag">${up.place ? 'Place on the map' : 'Instant'}</span><span class="icon-tile">${icon(up.key)}</span></div><b>${up.name}</b><span>${up.desc}</span>`;
       b.onclick = () => {
         order(me, { type: 'reward', key: up.key });
-        $('upgrade').hidden = true;
         renderTray();
+        if (net && net.live) { $('choices').innerHTML = `<p class="waitnote">${up.name} it is. Waiting for ${oppName()} to choose…</p>`; return; }
+        $('upgrade').hidden = true;
         toast(up.place ? `${up.name} added to your tray` : `Week ${week}: the enemy grows stronger`);
       };
       box.appendChild(b);
@@ -2184,14 +2248,15 @@ import * as THREE from 'three';
 
   // the world moves while you play, and after the war is decided, so you can watch it play out
   const running = () => state === 'play' || state === 'over';
-  function endGame(won) {
+  // why: how a match ended other than by a capital falling (a player gave up or left)
+  function endGame(won, why) {
     state = 'over';   // the battle plays on behind the dialog; only the player's part is over
-    const fallen = CAPITAL[won ? 1 - me : me];
-    $('watchText').textContent = `${won ? 'Victory' : 'Defeat'} · ${fallen} has fallen`;
+    const fallen = CAPITAL[won ? 1 - me : me], vs = match.ai < 0 ? oppName() : null;
+    $('watchText').textContent = `${won ? 'Victory' : 'Defeat'} · ${why || `${fallen} has fallen`}`;
     const level = match.difficulty[0].toUpperCase() + match.difficulty.slice(1);
-    $('overLabel').textContent = `${won ? 'Victory' : 'Defeat'} · ${level}`;
-    $('overTitle').textContent = `${fallen} has fallen`;
-    $('overText').textContent = won
+    $('overLabel').textContent = `${won ? 'Victory' : 'Defeat'} · ${vs ? `against ${vs}` : level}`;
+    $('overTitle').textContent = why || `${fallen} has fallen`;
+    $('overText').textContent = vs ? (won ? `You beat ${vs} in week ${week}.` : `${vs} won in week ${week}. A rematch on a new layout?`) : won
       ? `You took the enemy capital in week ${week} on ${level} difficulty. ${match.difficulty === 'hard' ? 'Try again and see if you can do it faster.' : 'Ready to try a harder level?'}`
       : `You held the river until week ${week}. Gather troops before you attack, and guard the bridges.`;
     const mins = Math.floor(time / 60), secs = Math.floor(time % 60);
@@ -2317,6 +2382,14 @@ import * as THREE from 'three';
       if (!o.free) for (let i = 0; i < 6; i++) puff(at.x + fxRand(-8, 8), at.y + fxRand(-8, 8), COL.team[team], fxRand(12, 22));
       return made;
     },
+    // a match: either player pauses or resumes both battles, on the same turn
+    pause(o, team) {
+      held = !!o.on;
+      $('pauseBtn').textContent = held ? '▶ Resume' : '❚❚ Pause';
+      if (team !== me) toast(`${oppName()} ${held ? 'paused' : 'resumed'} the battle`);
+    },
+    // a match: a side gives up, and the other wins
+    surrender(o, team) { if (state === 'play') endGame(team !== me, team === me ? 'You gave up' : `${oppName()} gave up`); },
     // the weekly reinforcement: into the tray, or straight away; then the next week begins and the enemy grows
     reward(o, team) {
       if (!offers[team] || !offers[team].includes(o.key)) return;   // only what was offered, and only once
@@ -2339,32 +2412,55 @@ import * as THREE from 'three';
   // Each sends its orders for the turn DELAY turns ahead, an empty list if it has none, and runs a turn only
   // once both players' orders for it are in, team 0's first. Every SUM_EVERY turns they compare checksums.
   // A player who drops out rejoins with their key: the relay sends every turn so far, and they replay them.
-  const TURN_TICKS = 2, DELAY = 3, SUM_EVERY = 20;
+  // In a match, held (set by a pause order) stops both battles on the same turn, and a weekly choice not made
+  // within WEEK_PICK turns (15 s) is made for the player: the first reward offered.
+  const TURN_TICKS = 2, DELAY = 3, SUM_EVERY = 20, WEEK_PICK = 300;
+  const TESTING = new URLSearchParams(location.search).has('test');
+  const AWAY_S = TESTING && +new URLSearchParams(location.search).get('away') || 30;   // seconds a dropped player has to come back
+  let held = false;
   let net = null;   // { ws, code, team, key, names, setup, live, turn, sent, acc, inbox: [Map, Map], outbox, sums, peerSums, desync, waitT }
   const relayURL = () => new URLSearchParams(location.search).get('relay') || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
   function netOpen(first) {
     const ws = new WebSocket(relayURL());
     net = { ws, code: null, team: -1, key: null, names: ['', ''], setup: null, live: false, turn: 0, sent: DELAY - 1, acc: 0,
-      inbox: [new Map(), new Map()], outbox: [], sums: new Map(), peerSums: new Map(), desync: -1, agreed: 0, waitT: 0, away: false };
+      inbox: [new Map(), new Map()], outbox: [], sums: new Map(), peerSums: new Map(), desync: -1, agreed: 0, waitT: 0,
+      screens: [null, null], lobby: null, rtt: 0, pingAt: 0, awayAt: 0, rematch: [false, false], weekTurns: 0 };
     ws.onopen = () => ws.send(JSON.stringify(first));
     ws.onmessage = e => netMessage(JSON.parse(e.data));
     ws.onclose = () => { if (net && net.ws === ws && net.live) toast('Lost the connection to the game server', 'bad'); };
   }
   const netSend = m => { if (net && net.ws.readyState === 1) net.ws.send(JSON.stringify(m)); };
-  const netHost = name => netOpen({ t: 'host', name });
-  const netJoin = (code, name) => netOpen({ t: 'join', code, name });
-  // the host starts the match: map, board and settings, the same for both
+  const myScreen = () => ({ w: innerWidth, h: innerHeight });
+  const netHost = name => netOpen({ t: 'host', name, screen: myScreen() });
+  const netJoin = (code, name) => netOpen({ t: 'join', code, name, screen: myScreen() });
+  const oppName = () => net && net.names[1 - net.team] || (net && net.team === 1 ? 'Your host' : 'Your friend');
+  // the host starts the match: map, board and settings, the same for both. The board is the host's window,
+  // unless one player's screen is tall and the other's wide: then a square board suits both.
   function netStart(land, seed) {
-    netSend({ t: 'start', setup: { land, map: seed || 1 + (Math.random() * 9999 | 0), board: { w: innerWidth, h: innerHeight }, match: { ai: -1, difficulty: 'normal', classic: false, grace: 6 } } });
+    const tall = s => s && s.h > s.w * 1.1, [a, b] = net.screens;
+    const board = !a || !b || tall(a) === tall(b) ? myScreen() : { w: 1000, h: 1000 };
+    netSend({ t: 'start', setup: { land, map: seed || 1 + (Math.random() * 9999 | 0), board, match: { ai: -1, difficulty: 'normal', classic, grace: 6 } } });
   }
+  // the host's map as it's chosen, so the guest sees it behind the invitation
+  function sendLobby() { netSend({ t: 'lobby', lobby: { land: landKey, name: land.name, map: mapSeed, classic } }); }
   function netMessage(m) {
-    if (m.t === 'room') { Object.assign(net, { code: m.code, team: m.team, key: m.key, names: m.names }); try { sessionStorage.setItem('frontlines-match', JSON.stringify({ code: m.code, team: m.team, key: m.key })); } catch (e) {} }
-    else if (m.t === 'joined') { net.names = m.names; toast(`${m.names[1] || 'Your opponent'} has joined`, 'good'); }
-    else if (m.t === 'start') beginMatch(m.setup);
+    if (m.t === 'room') {
+      Object.assign(net, { code: m.code, team: m.team, key: m.key, names: m.names, screens: m.screens || net.screens });
+      try { sessionStorage.setItem('frontlines-match', JSON.stringify({ code: m.code, team: m.team, key: m.key })); } catch (e) {}
+      if (myName && m.names[m.team] !== myName) netSend({ t: 'name', name: myName });   // typed before the connection opened
+      if (m.team === 0) { sendLobby(); showInvite(); } else { if (m.lobby) previewLobby(m.lobby); showJoined(); }
+    }
+    else if (m.t === 'joined') { Object.assign(net, { names: m.names, screens: m.screens }); toast(`${oppName()} has joined`, 'good'); showInvite(); }
+    else if (m.t === 'names') { net.names = m.names; if (net.team === 0) showInvite(); else showJoined(); }
+    else if (m.t === 'lobby') { previewLobby(m.lobby); showJoined(); }
+    else if (m.t === 'start') countdown(() => beginMatch(m.setup));
+    else if (m.t === 'ping') netSend({ t: 'pong', at: m.at });
+    else if (m.t === 'pong') net.rtt = performance.now() - m.at;
+    else if (m.t === 'rematch') { net.rematch[1 - net.team] = true; toast(`${oppName()} wants a rematch`, 'good'); maybeRematch(); }
     else if (m.t === 'turn') net.inbox[1 - net.team].set(m.n, m.orders);
     else if (m.t === 'sum') { net.peerSums.set(m.n, m.sum); compareSums(m.n); }
-    else if (m.t === 'left') { net.away = true; toast('Your opponent lost the connection. Waiting for them…', 'bad'); }
-    else if (m.t === 'back') { net.away = false; toast('Your opponent is back', 'good'); }
+    else if (m.t === 'left') { if (net.live && state === 'play') { net.awayAt = performance.now(); toast(`${oppName()} lost the connection`, 'bad'); } }
+    else if (m.t === 'back') { if (net.awayAt) toast(`${oppName()} is back`, 'good'); net.awayAt = 0; }
     else if (m.t === 'catchup') {
       Object.assign(net, { code: m.code, team: m.team, names: m.names });
       if (!m.setup) return;
@@ -2379,10 +2475,48 @@ import * as THREE from 'three';
   }
   function beginMatch(setup) {
     net.setup = setup; board = setup.board; presetMatch = setup.match; me = net.team;
+    net.live = false;   // while the map is made, orders aren't sent anywhere
     newGame(setup.land, setup.map);
-    Object.assign(net, { live: true, turn: 0, sent: DELAY - 1, acc: 0, inbox: [new Map(), new Map()], outbox: [], sums: new Map(), peerSums: new Map(), desync: -1 });
+    Object.assign(net, { live: true, turn: 0, sent: DELAY - 1, acc: 0, inbox: [new Map(), new Map()], outbox: [], sums: new Map(), peerSums: new Map(),
+      desync: -1, awayAt: 0, rematch: [false, false], weekTurns: 0 });
     for (let n = 0; n < DELAY; n++) for (const team of [0, 1]) net.inbox[team].set(n, []);   // the first turns carry no orders
-    $('intro').hidden = true; state = 'play'; setPaused(false); speed = 1;
+    held = false;
+    tut = null; showTutorial(); setHint('');   // the first-game tutorial is for blue against the computer
+    for (const id of ['intro', 'over', 'watchBar', 'upgrade', 'countdown']) $(id).hidden = true;
+    state = 'play'; setPaused(false); speed = 1; Sound.init();
+    $('pauseBtn').textContent = '❚❚ Pause';
+    $('againBtn').disabled = $('againBtn2').disabled = false;
+    matchControls(true);
+  }
+  // the controls a match shows: the opponent instead of the speed, Give up in the rules sheet
+  function matchControls(on) {
+    $('opp').hidden = !on; $('speedBtn').hidden = on; $('level').hidden = on; $('giveUpBtn').hidden = !on; $('leaveBtn').hidden = !on;
+    $('againBtn').textContent = $('againBtn2').textContent = on ? 'Rematch' : 'Play again';
+  }
+  // after a battle: a rematch on a new layout of the same landscape, once both players ask for one
+  function maybeRematch() { if (net.team === 0 && net.rematch[0] && net.rematch[1]) netStart(net.setup.land); }
+  function leaveMatch() {
+    if (net) { net.live = false; net.ws.close(); }
+    net = null; board = null; presetMatch = null; me = 0; held = false;
+    try { sessionStorage.removeItem('frontlines-match'); } catch (e) {}
+    history.replaceState(null, '', location.pathname + location.search);
+    matchControls(false);
+    for (const id of ['over', 'watchBar', 'upgrade', 'countdown']) $(id).hidden = true;
+    delete $('intro').dataset.mode;
+    newGame(); state = 'intro'; setPaused(false); $('intro').hidden = false; showStep(1);
+  }
+  // 3, 2, 1 over the board, then the battle
+  function countdown(then) {
+    for (const id of ['intro', 'over', 'watchBar']) $(id).hidden = true;
+    $('countdown').hidden = false;
+    $('countText').textContent = `You against ${oppName()}`;
+    let n = 3;
+    const tick = () => {
+      if (!n) { $('countdown').hidden = true; then(); return; }
+      $('countNum').textContent = n--; Sound.select();
+      setTimeout(tick, TESTING ? 120 : 900);
+    };
+    tick();
   }
   const haveTurn = n => net.inbox[0].has(n) && net.inbox[1].has(n);
   function runTurn() {
@@ -2397,7 +2531,10 @@ import * as THREE from 'three';
       for (const o of net.inbox[team].get(n)) { orderLog.push({ ...o, team, at: frameNo, turn: n }); carryOut(team, o, true); }
       net.inbox[team].delete(n);
     }
-    for (let i = 0; i < TURN_TICKS; i++) if (running()) step(STEP);
+    if (state === 'upgrade') {   // the weekly choice: made for whoever hasn't chosen in time
+      if (++net.weekTurns >= WEEK_PICK) for (const team of [0, 1]) if (offers[team]) carryOut(team, { type: 'reward', key: offers[team][0] }, true);
+    } else net.weekTurns = 0;
+    for (let i = 0; i < TURN_TICKS; i++) if (running() && !held) step(STEP);
     net.turn++;
     if (n % SUM_EVERY === 0 && !net.replaying) { net.sums.set(n, JSON.stringify(checksum())); netSend({ t: 'sum', n, sum: net.sums.get(n) }); compareSums(n); }
   }
@@ -2417,10 +2554,21 @@ import * as THREE from 'three';
       if (!haveTurn(net.turn)) break;
       runTurn(); net.acc -= T; ran++;
     }
-    const waiting = net.acc >= T && !haveTurn(net.turn);
+    const waiting = net.acc >= T && !haveTurn(net.turn), now = performance.now();
     net.waitT = waiting ? net.waitT + dt : 0;
-    if (net.waitT > 1 && !$('hint').textContent.startsWith('Waiting')) { $('hint').textContent = 'Waiting for your opponent…'; $('hint').style.opacity = 1; }
-    else if (!net.waitT && $('hint').textContent.startsWith('Waiting')) setHint(hintBase);
+    // a player who dropped out has 30 seconds to come back; after that the other wins by walkover
+    const away = net.awayAt ? Math.max(0, AWAY_S - (now - net.awayAt) / 1000) : -1;
+    if (away === 0 && state === 'play') { netSend({ t: 'over' }); net.awayAt = 0; endGame(true, `${oppName()} left the battle`); }
+    const note = away > 0 ? `${oppName()} lost the connection. Waiting ${Math.ceil(away)} s…` : net.waitT > 1 ? `Waiting for ${oppName()}…` : '';
+    if (note) { $('hint').textContent = note; $('hint').style.opacity = 1; } else if ($('hint').textContent.includes('Waiting')) setHint(hintBase);
+    if (now - net.pingAt > 2000) { net.pingAt = now; netSend({ t: 'ping', at: now }); }
+    // the opponent's chip: name, and how quick the connection is
+    $('oppName').textContent = oppName();
+    $('oppPing').textContent = away >= 0 ? 'away' : net.rtt ? `${Math.round(net.rtt)} ms` : '';
+    $('oppDot').className = away >= 0 || net.waitT > 1 ? 'bad' : net.rtt > 250 ? 'slow' : '';
+    // the weekly choice: its countdown, and the dialog closes once both players have chosen
+    if (state === 'upgrade' && !$('upgrade').hidden) $('upLabel').textContent = `Week ${week} complete · ${Math.max(0, Math.ceil((WEEK_PICK - net.weekTurns) * T))} s`;
+    if (state !== 'upgrade' && !$('upgrade').hidden) $('upgrade').hidden = true;
   }
   // this player's orders on their way: drawn faintly until they take effect
   function pendingRoutes() {
@@ -2662,7 +2810,9 @@ import * as THREE from 'three';
     paused = v;
     $('pauseBtn').textContent = paused ? '▶ Resume' : '❚❚ Pause';
   }
-  $('pauseBtn').onclick = () => { if (!(net && net.live)) setPaused(!paused); };   // a match can't be paused by one side (yet)
+  // in a match, pausing is an order: both battles stop on the same turn
+  const togglePause = () => { if (net && net.live) { if (state === 'play') order(me, { type: 'pause', on: !held }); } else setPaused(!paused); };
+  $('pauseBtn').onclick = togglePause;
   $('speedBtn').onclick = () => { if (net && net.live) return; speed = speed === 1 ? 2 : speed === 2 ? 3 : 1; $('speedBtn').textContent = speed + '×'; };
   // Holding Shift shows what is under the pointer; letting go hides it.
   addEventListener('keydown', e => {
@@ -2671,7 +2821,7 @@ import * as THREE from 'three';
   addEventListener('keyup', e => { if (e.key === 'Shift') { inspectAt = null; showInspect(); } });
   addEventListener('blur', () => { inspectAt = null; showInspect(); });
   addEventListener('keydown', e => {
-    if (e.code === 'Space' && running() && !(net && net.live)) { e.preventDefault(); setPaused(!paused); }
+    if (e.code === 'Space' && running()) { e.preventDefault(); togglePause(); }
     if ((e.key === 'c' || e.key === 'C') && !e.metaKey && !e.ctrlKey && !e.altKey) toggleCharge();
     if (e.key === 'Escape') { if (armed) { armed = null; renderTray(); } closeMenu(); if (!$('rules').hidden) $('rulesClose').onclick(); }
   });
@@ -2755,8 +2905,10 @@ import * as THREE from 'three';
 
   // ---------- rules sheet ----------
   let pausedBeforeRules = false;
-  $('rulesBtn').onclick = () => { if (state !== 'play') return; pausedBeforeRules = paused; setPaused(true); $('rules').hidden = false; $('rulesClose').focus(); };
-  $('rulesClose').onclick = () => { $('rules').hidden = true; setPaused(pausedBeforeRules); };
+  $('rulesBtn').onclick = () => { if (state !== 'play') return; pausedBeforeRules = paused; if (!(net && net.live)) setPaused(true); $('rules').hidden = false; $('rulesClose').focus(); };
+  $('rulesClose').onclick = () => { $('rules').hidden = true; if (!(net && net.live)) setPaused(pausedBeforeRules); };
+  $('giveUpBtn').onclick = () => { if (confirm('Give up this battle?')) { order(me, { type: 'surrender' }); $('rules').hidden = true; } };
+  $('leaveBtn').onclick = () => leaveMatch();
 
   // ---------- tips that appear the first time something becomes relevant ----------
   const COACH = [
@@ -2836,7 +2988,14 @@ import * as THREE from 'three';
   $('tutSkip').onclick = endTutorial;
   $('watchBtn').onclick = () => { $('over').hidden = true; $('watchBar').hidden = false; };
   $('againBtn2').onclick = () => $('againBtn').click();
-  $('againBtn').onclick = () => { $('over').hidden = true; $('watchBar').hidden = true; newGame(); state = 'intro'; setPaused(false); $('intro').hidden = false; showStep(2); };
+  $('againBtn').onclick = () => {
+    if (net && net.setup) {   // a match: ask for a rematch
+      net.rematch[me] = true; netSend({ t: 'rematch' });
+      $('againBtn').textContent = $('againBtn2').textContent = `Waiting for ${oppName()}…`;
+      $('againBtn').disabled = $('againBtn2').disabled = true;
+      maybeRematch(); return;
+    }
+    $('over').hidden = true; $('watchBar').hidden = true; newGame(); state = 'intro'; setPaused(false); $('intro').hidden = false; showStep(2); };
   const TIPS = {
     easy: {
       intro: 'Your towns train faster than the enemy\'s. It hardly builds, its soldiers never get tougher, and it waits for a big army before it attacks.',
@@ -2899,19 +3058,69 @@ import * as THREE from 'three';
     newGame(landKey, mapSeed);
   };
   // The start screen's three steps. Every visit opens on the welcome; Play again goes straight to the map.
+  // Playing a friend adds two cards: the host's invitation (wait) and the guest's welcome (join).
   let introStep = 1;
+  const CARDS = { 1: 'step1', 2: 'step2', 3: 'step3', wait: 'stepWait', join: 'stepJoin' };
   function showStep(n) {
     introStep = n;
-    for (const k of [1, 2, 3]) $('step' + k).hidden = k !== n;
+    for (const [k, id] of Object.entries(CARDS)) $(id).hidden = k !== String(n);
     $('intro').dataset.step = n;
-    const next = $('step' + n).querySelector('.btn.primary');
+    const next = $(CARDS[n]).querySelector('.btn.primary');
     if (next) next.focus({ preventScroll: true });
   }
   document.querySelectorAll('#intro [data-go]').forEach(b => b.onclick = () => showStep(+b.dataset.go));
   addEventListener('keydown', e => {   // Enter moves on, unless a button or box has the focus
     if ($('intro').hidden || e.key !== 'Enter' || e.target.closest('button, input, label')) return;
+    if (typeof introStep !== 'number') return;
     if (introStep < 3) showStep(introStep + 1); else $('startBtn').click();
   });
+  // ---------- playing a friend: the invitation and the welcome ----------
+  let myName = '';
+  try { myName = localStorage.getItem('frontlines-name') || ''; } catch (e) {}
+  $('hostName').value = $('guestName').value = myName;
+  for (const id of ['hostName', 'guestName']) $(id).onchange = () => {
+    myName = $(id).value.trim();
+    try { localStorage.setItem('frontlines-name', myName); } catch (e) {}
+    netSend({ t: 'name', name: myName });
+  };
+  $('friendBtn').onclick = () => { $('intro').dataset.mode = 'friend'; showStep(2); };
+  $('step1').querySelector('[data-go="2"]').addEventListener('click', () => { delete $('intro').dataset.mode; });
+  $('inviteBtn').onclick = () => { if (!net) netHost(myName); else sendLobby(); showStep('wait'); showInvite(); };
+  $('waitBack').onclick = () => showStep(2);
+  const inviteLink = () => `${location.origin}${location.pathname}#${net.code}`;
+  function showInvite() {
+    if (!net || net.team !== 0) return;
+    $('bigCode').textContent = net.code || '····';
+    $('inviteLink').value = net.code ? inviteLink() : '';
+    $('shareBtn').hidden = !navigator.share;
+    $('waitMap').textContent = `${land.name} · Map ${mapSeed}`;
+    const guest = net.names[1] || (net.screens[1] ? 'Your friend' : '');
+    $('waitTitle').textContent = guest ? `${guest} has joined` : 'Waiting for your friend…';
+    $('beginBtn').disabled = !net.screens[1];
+  }
+  $('copyBtn').onclick = () => { navigator.clipboard?.writeText(inviteLink()).then(() => toast('Link copied', 'good'), () => {}); $('inviteLink').select(); };
+  $('shareBtn').onclick = () => navigator.share({ title: 'Frontlines', text: 'Fight a battle with me in Frontlines', url: inviteLink() }).catch(() => {});
+  $('beginBtn').onclick = () => netStart(landKey, mapSeed);
+  // the guest: the welcome card, and the host's map behind it as they choose
+  function showJoin(code) { net = null; $('intro').hidden = false; $('intro').dataset.mode = 'friend'; showStep('join'); $('joinBtn').dataset.code = code; }
+  function showJoined() {
+    if (!net || net.team !== 1) return;
+    $('joinTitle').textContent = net.lobby ? `A battle on ${net.lobby.name}` : 'You have joined';
+    $('joinText').textContent = `${oppName()} is choosing the map. The battle begins when they press Start.`;
+    $('joinBtn').textContent = 'Joined'; $('joinBtn').disabled = true;
+  }
+  function previewLobby(l) {
+    net.lobby = l;
+    if (net.setup) return;   // the match has begun: a late preview must not touch the battle
+    presetMatch = { ai: -1, difficulty: 'normal', classic: l.classic, grace: 6 }; me = 1;
+    newGame(l.land, l.map);
+    presetMatch = null;
+  }
+  $('joinBtn').onclick = () => { netJoin($('joinBtn').dataset.code, myName); $('joinBtn').disabled = true; };
+  $('joinCancel').onclick = () => leaveMatch();
+  $('haveCode').onclick = () => { $('haveCode').hidden = true; $('codeForm').hidden = false; $('codeIn').focus(); };
+  $('codeGo').onclick = () => { const c = $('codeIn').value.trim().toUpperCase(); if (/^[A-Z2-9]{4}$/.test(c)) { location.hash = c; showJoin(c); } else toast('A code has four letters and numbers', 'bad'); };
+  $('codeIn').onkeydown = e => { if (e.key === 'Enter') $('codeGo').click(); };
   showStep(1);
   // Intro tips, one at a time, at the reader's own pace: arrows, dots, swipe and arrow keys.
   const slides = [...document.querySelectorAll('#carousel .slide')];
@@ -4241,7 +4450,7 @@ import * as THREE from 'three';
       netHost: name => netHost(name),
       netJoin: (code, name) => netJoin(code, name),
       netStart: (land, seed) => netStart(land, seed),
-      net: () => net && { code: net.code, team: net.team, live: net.live, turn: net.turn, desync: net.desync, agreed: net.agreed, waiting: net.waitT > 0 },
+      net: () => net && { code: net.code, team: net.team, live: net.live, turn: net.turn, desync: net.desync, agreed: net.agreed, waiting: net.waitT > 0, held, time },
       netDrop: () => net.ws.close(),
       netRejoin: () => netOpen({ t: 'rejoin', ...JSON.parse(sessionStorage.getItem('frontlines-match')) }),
       // for tests/drift.mjs (docs/multiplayer.md, phase 0): stop the real-time loop, so only run() moves the battle
@@ -4265,6 +4474,17 @@ import * as THREE from 'three';
   }
 
   newGame(new URLSearchParams(location.search).get('land'), +new URLSearchParams(location.search).get('map'));
+  // a friend's link (#CODE), opened or pasted into this tab: the welcome card, or straight back in if this tab
+  // was already playing that match
+  function fromLink() {
+    const code = location.hash.slice(1).toUpperCase();
+    if (!/^[A-Z2-9]{4}$/.test(code) || (net && net.code === code)) return;
+    let mine = null;
+    try { mine = JSON.parse(sessionStorage.getItem('frontlines-match')); } catch (e) {}
+    if (mine && mine.code === code) netOpen({ t: 'rejoin', ...mine }); else showJoin(code);
+  }
+  fromLink();
+  addEventListener('hashchange', fromLink);
   requestAnimationFrame(frame);
 })();
 </script>

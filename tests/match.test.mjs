@@ -30,18 +30,18 @@ async function until(page, fn, what, ms = 20000, arg) {
   throw new Error(`timed out waiting for ${what}`);
 }
 // a player: their own browser storage, like a separate machine
-async function player(srv, viewport) {
+async function player(srv, viewport, query = '') {
   const page = await (await browser.createBrowserContext()).newPage();
   await page.setViewport(viewport);
   page.errors = [];
   page.on('pageerror', e => page.errors.push(e.message));
-  await page.goto(`http://127.0.0.1:${srv.port}/?test`);
+  await page.goto(`http://127.0.0.1:${srv.port}/?test${query}`);
   await page.waitForFunction(() => window.__t);
   return page;
 }
 // a host on a laptop and a guest on a phone, in a started match on River Valley, map 4821
-async function match(srv) {
-  const host = await player(srv, { width: 1200, height: 800 }), guest = await player(srv, { width: 390, height: 844, isMobile: true, hasTouch: true });
+async function match(srv, query) {
+  const host = await player(srv, { width: 1200, height: 800 }, query), guest = await player(srv, { width: 390, height: 844, isMobile: true, hasTouch: true }, query);
   await t(host, 'netHost', 'Ann');
   await until(host, () => __t.net().code, 'a room code');
   const { code } = await t(host, 'net');
@@ -124,5 +124,93 @@ test('a player who drops out rejoins, replays the battle and carries on in sync'
   for (const n of [h, g]) assert.equal(n.desync, -1, 'still in sync after the rejoin');
   assert.ok(g.agreed >= 2, `the rejoined guest's checksums agree (${g.agreed} times)`);
   assert.deepEqual([...host.errors, ...guest.errors], []);
+  await close(host, guest);
+});
+
+test('playing a friend through the screens: invite, join by link, battle, pause, give up, rematch', async () => {
+  const host = await player(server, { width: 1200, height: 800 }), guest = await player(server, { width: 1200, height: 800 });
+  guest.on('dialog', d => d.accept());   // Give up asks first
+  const text = (p, sel) => p.$eval(sel, e => e.textContent);
+  const shown = (p, sel) => p.$eval(sel, e => !e.hidden && e.offsetParent !== null);
+  // the host: Play a friend, a map, Invite
+  await host.click('#friendBtn');
+  await host.click('#inviteBtn');
+  await until(host, () => /^[A-Z2-9]{4}$/.test(document.getElementById('bigCode').textContent), 'the code');
+  const code = await text(host, '#bigCode'), link = await host.$eval('#inviteLink', e => e.value);
+  assert.ok(link.endsWith('#' + code), `the link carries the code (${link})`);
+  await host.type('#hostName', 'Ann');
+  await host.$eval('#hostName', e => e.dispatchEvent(new Event('change')));
+  // the guest opens the link, names themself and joins
+  await guest.goto(`http://127.0.0.1:${server.port}/?test#${code}`);
+  await guest.waitForFunction(() => window.__t);
+  assert.ok(await shown(guest, '#stepJoin'), 'a link opens the welcome card');
+  await guest.type('#guestName', 'Bo');
+  await guest.click('#joinBtn');
+  await until(guest, () => /River Valley|Valley|Lake|Rivers|Pass|Border|Steppe|Greenwood|Highlands|Marshes|Bridges/.test(document.getElementById('joinTitle').textContent), 'the host\'s map on the welcome card');
+  await until(host, () => document.getElementById('waitTitle').textContent === 'Bo has joined', 'the host to see the guest');
+  // the host picks another landscape; the guest's card follows
+  await host.click('#waitBack');
+  await host.click('#landNext');
+  const landName = await text(host, '#landName');
+  await host.click('#inviteBtn');
+  await until(guest, n => document.getElementById('joinTitle').textContent === `A battle on ${n}`, 'the guest to see the new map', 20000, landName);
+  assert.match(await text(guest, '#joinText'), /Ann is choosing/);
+  // the battle: a countdown, then each sees the other on the chip
+  assert.equal(await host.$eval('#beginBtn', e => e.disabled), false);
+  await host.click('#beginBtn');
+  for (const p of [host, guest]) await until(p, () => __t.net().live && __t.net().turn > 5, 'the battle to begin');
+  assert.equal(await text(host, '#oppName'), 'Bo'); assert.equal(await text(guest, '#oppName'), 'Ann');
+  assert.equal(await host.$eval('#speedBtn', e => e.hidden), true, 'no speed button in a match');
+  // either player pauses both battles, and either resumes
+  await host.click('#pauseBtn');
+  await until(guest, () => __t.net().held, 'the pause to reach the guest');
+  const t1 = (await t(guest, 'net')).time;
+  await sleep(600);
+  assert.equal((await t(guest, 'net')).time, t1, 'while paused, the battle stands still');
+  assert.equal(await text(guest, '#pauseBtn'), '▶ Resume');
+  await guest.click('#pauseBtn');
+  await until(host, () => !__t.net().held, 'the resume to reach the host');
+  // the guest gives up: a win for the host
+  await guest.click('#rulesBtn');
+  await guest.click('#giveUpBtn');
+  await until(host, () => !document.getElementById('over').hidden, 'the end of the battle for the host');
+  assert.equal(await text(host, '#overTitle'), 'Bo gave up');
+  assert.match(await text(host, '#overLabel'), /Victory · against Bo/);
+  await until(guest, () => !document.getElementById('over').hidden, 'the end of the battle for the guest');
+  assert.match(await text(guest, '#overLabel'), /Defeat/);
+  // a rematch, once both ask
+  await host.click('#againBtn');
+  assert.match(await text(host, '#againBtn'), /Waiting for Bo/);
+  await guest.click('#againBtn');
+  for (const p of [host, guest]) await until(p, () => __t.net().live && document.getElementById('over').hidden && __t.state() === 'play', 'the rematch to begin');
+  for (const p of [host, guest]) assert.equal((await t(p, 'net')).desync, -1);
+  assert.deepEqual([...host.errors, ...guest.errors], []);
+  await close(host, guest);
+});
+
+test('the weekly choice in a match: each picks their own, and a slow player gets the first reward after 15 s', async () => {
+  const { host, guest } = await match(server, '&week=2');
+  await until(host, () => __t.state() === 'upgrade' && !document.getElementById('upgrade').hidden, 'the end of the week');
+  await host.evaluate(() => document.getElementById('choice0').click());
+  assert.match(await host.$eval('#choices', e => e.textContent), /Waiting for Bo to choose/);
+  await sleep(1000);
+  assert.equal(await t(host, 'state'), 'upgrade', 'the battle waits for the other player');
+  assert.match(await guest.$eval('#upLabel', e => e.textContent), /Week 1 complete · \d+ s/, 'the guest sees the time left');
+  await until(host, () => __t.state() === 'play', 'the guest\'s reward to be chosen for them', 25000);
+  await until(guest, () => __t.state() === 'play' && document.getElementById('upgrade').hidden, 'the guest\'s dialog to close', 5000);
+  for (const p of [host, guest]) assert.equal((await t(p, 'net')).desync, -1);
+  assert.deepEqual([...host.errors, ...guest.errors], []);
+  await close(host, guest);
+});
+
+test('a player who stays away loses by walkover', async () => {
+  const { host, guest } = await match(server, '&away=2');
+  await until(host, () => __t.net().turn > 20, 'the battle to begin');
+  await t(guest, 'netDrop');
+  await until(host, () => !document.getElementById('over').hidden, 'the walkover', 10000);
+  assert.equal(await host.$eval('#overTitle', e => e.textContent), 'Bo left the battle');
+  assert.match(await host.$eval('#overLabel', e => e.textContent), /Victory/);
+  await t(guest, 'netRejoin');
+  await until(guest, () => /over/.test(document.getElementById('toast').textContent), 'the late guest to hear the game is over');
   await close(host, guest);
 });
