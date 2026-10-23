@@ -765,6 +765,8 @@ import * as THREE from 'three';
   function crossingAt(L, b) { for (const br of bridges) if (br.line === L && Math.abs(b - br.b) < br.span) return br; return null; }
   function crossingHere(x, y) { const L = bandAt(x, y); return L ? crossingAt(L, B(x, y)) : null; }
   function onBridge(x, y) { return !!crossingHere(x, y); }
+  // maps without a river have no bridges to buy or be offered
+  function hasRiver() { return lines.some(L => L.kind === 'water'); }
   function isWater(x, y) { const L = bandAt(x, y); return !!L && L.kind === 'water' && !crossingAt(L, B(x, y)); }
   // water or mountainside: somewhere nobody can stand
   function blockedAt(x, y) { const L = bandAt(x, y); return L && !crossingAt(L, B(x, y)) ? L.kind : null; }
@@ -2024,7 +2026,7 @@ import * as THREE from 'three';
   function offerUpgrades() {
     state = 'upgrade';
     Sound.week(); Sound.clash(0);
-    const shuffled = UPGRADES.slice().sort(() => Math.random() - 0.5);
+    const shuffled = UPGRADES.filter(u => u.key !== 'bridge' || hasRiver()).sort(() => Math.random() - 0.5);
     const first = shuffled.find(u => u.place);
     const pool = [first, shuffled.find(u => u !== first)];
     $('upLabel').textContent = `Week ${week} complete`;
@@ -2110,6 +2112,7 @@ import * as THREE from 'three';
     Sound.place();
     if (kind === 'tower') tutorialDid('tower');
   }
+  function trayItems() { return Object.keys(ITEM).filter(k => k !== 'bridge' || hasRiver()); }
   function renderTray() {
     const el = $('tray'); el.innerHTML = '';
     const cb = document.createElement('button');   // Charge first, then a divider, then what gold buys
@@ -2120,7 +2123,7 @@ import * as THREE from 'three';
     const st = tut && tutStep();
     if (st && st.el === 'chargeBtn') cb.classList.add('pulse');
     renderCharge();
-    for (const k of Object.keys(ITEM)) {
+    for (const k of trayItems()) {
       const b = document.createElement('button');
       b.type = 'button'; b.id = 'tray-' + k; b.className = armed === k ? 'armed' : ''; b.title = ITEM[k];
       b.onclick = () => {
@@ -2143,7 +2146,7 @@ import * as THREE from 'three';
   }
   // Keeps tray labels and prices current without rebuilding the buttons.
   function refreshTray(force) {
-    for (const k of Object.keys(ITEM)) {
+    for (const k of trayItems()) {
       const b = $('tray-' + k);
       if (!b) continue;
       const n = inventory[k] || 0, pr = priceOf(k);
@@ -3981,6 +3984,7 @@ import * as THREE from 'three';
       charging: () => units.filter(u => !u.dead && u.charge).length,
       // how many of one side's soldiers stand within r of the ground under a screen point
       near: (team, sx, sy, r) => { const p = pointAt(sx, sy); return units.filter(u => !u.dead && u.team === team && Math.hypot(u.x - p.x, u.y - p.y) < r).length; },
+      offer: () => { offerUpgrades(); return $('choices').textContent; },
       bridgesLeft: () => ({ blue: inventory.bridge || 0, red: redFreeBridge }),
       riverPoint: bn => { const L = waterLines()[0], b = bn * LB, p = XY(lineA(L, b), b); return toScreen(p.x, p.y, 0); },
       layout: () => towns.map(t => ({ name: t.name, owner: t.owner, x: Math.round(t.x), y: Math.round(t.y) })),

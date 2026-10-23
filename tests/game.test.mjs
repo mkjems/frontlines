@@ -278,6 +278,25 @@ test('every landscape builds and plays: towns stay dry and nobody walks through 
   await page.close();
 });
 
+test('maps without a river sell no bridges: none in the tray or among the weekly choices', async () => {
+  for (const k of ['open', 'mountains']) {
+    const page = await openGame(undefined, RANDOM + '&land=' + k);
+    await t(page, 'start');
+    assert.equal(await page.$('#tray-bridge'), null, `${k}: no bridge in the tray`);
+    assert.ok(await page.$('#tray-tower'), `${k}: the rest of the tray is there`);
+    for (let w = 0; w < 30; w++) assert.doesNotMatch(await t(page, 'offer'), /Bridge/, `${k}: no bridge among the weekly choices`);
+    assert.deepEqual(page.errors, []);
+    await page.close();
+  }
+  const page = await openGame();
+  await t(page, 'start');
+  assert.ok(await page.$('#tray-bridge'), 'a river map still sells bridges');
+  let offers = '';
+  for (let w = 0; w < 30; w++) offers += await t(page, 'offer');
+  assert.match(offers, /Bridge/, 'and offers them as a weekly choice');
+  await page.close();
+});
+
 test('armies find their way over two rivers and through a mountain pass', async () => {
   const page = await openGame();
   for (const [k, regions] of [['tworivers', 2], ['mountains', 1]]) {
