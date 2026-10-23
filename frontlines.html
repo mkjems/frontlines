@@ -2947,7 +2947,8 @@ import * as THREE from 'three';
 
     dcv = document.createElement('canvas'); dctx = dcv.getContext('2d');
     const water = waterNormals();
-    waterMat = new THREE.MeshStandardMaterial({ color: '#365f74', roughness: 0.12, metalness: 0.1, transparent: true, opacity: 0.8, side: THREE.DoubleSide, normalMap: water, normalScale: new THREE.Vector2(0.22, 0.22) });
+    // physical only for specularIntensity: the sun's glints on the river at half strength
+    waterMat = new THREE.MeshPhysicalMaterial({ color: '#365f74', roughness: 0.12, specularIntensity: 0.5, metalness: 0.1, transparent: true, opacity: 0.8, side: THREE.DoubleSide, normalMap: water, normalScale: new THREE.Vector2(0.22, 0.22) });
   }
   const MAXU = 3000, WHITE = new THREE.Color('#ffffff'), TEAMC = [new THREE.Color('#6cb0ff'), new THREE.Color('#ff5d47')];   // soldiers: light so they read on the dark board
   let unitMeshes = [], unitOutlines = [];
