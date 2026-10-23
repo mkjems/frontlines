@@ -42,14 +42,23 @@ async function openGame(viewport = { width: 1440, height: 900 }, url = GAME) {
   return page;
 }
 const t = (page, fn, ...args) => page.evaluate((fn, args) => window.__t[fn](...args), fn, args);
+// through the start screen's steps to the last one, where Start campaign is
+async function toStart(page) {
+  if (await page.$eval('#intro', e => e.dataset.step === '1')) await page.click('#step1 [data-go="2"]');
+  if (await page.$eval('#intro', e => e.dataset.step === '2')) await page.click('#step2 [data-go="3"]');
+}
 async function dragTo(page, a, b) {
   await page.mouse.move(a.x, a.y);
   await page.mouse.down();
   for (let i = 1; i <= 25; i++) { await page.mouse.move(a.x + (b.x - a.x) * i / 25, a.y + (b.y - a.y) * i / 25); await sleep(16); }
 }
 
-test('intro: tip carousel and how-to-win fold-out', async () => {
+test('start screen: welcome and tips, then the map, then the difficulty', async () => {
   const page = await openGame();
+  await page.evaluate(() => localStorage.removeItem('frontlines-seen-intro'));
+  await page.reload(); await page.waitForFunction(() => window.__t, { timeout: 20000 });
+  const step = () => page.$eval('#intro', e => +e.dataset.step);
+  assert.equal(await step(), 1, 'a first visit opens on the welcome');
   const active = () => page.evaluate(() => [...document.querySelectorAll('#carousel .slide')].findIndex(s => s.classList.contains('on')));
   // The carousel advances by itself every 7s until touched, and on slow machines (CI renders WebGL in
   // software) the first advance can happen before we look, so start by clicking the first dot.
@@ -59,36 +68,23 @@ test('intro: tip carousel and how-to-win fold-out', async () => {
   assert.equal(await active(), 1, 'the next arrow moves on');
   await page.click('#tipPrev'); await page.click('#tipPrev');
   assert.equal(await active(), 6, 'going back from the first tip wraps to the last');
-  const shown = () => page.evaluate(() => !document.getElementById('diffTips').hidden);
-  const before = await shown();
-  await page.click('#showTips');
-  assert.equal(await shown(), !before, 'the checkbox folds the how-to-win box in and out');
-  await page.click('#diff-hard');
-  assert.match(await page.evaluate(() => document.getElementById('foldLabel').textContent), /Hard/, 'the label follows the difficulty');
-  assert.deepEqual(page.errors, []);
-  await page.close();
-});
-
-test('Peek: hold to see the whole map, or tap and tap again', async () => {
-  const page = await openGame();
-  const peeking = () => page.$eval('#intro', e => e.classList.contains('peeking'));
-  const box = await (await page.$('#peekBtn')).boundingBox();
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down(); await sleep(450);
-  assert.ok(await peeking(), 'holding Peek moves the card out of the way');
-  await page.mouse.up(); await sleep(50);
-  assert.ok(!(await peeking()), 'letting go brings it back');
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2); await sleep(50);
-  assert.ok(await peeking(), 'a quick tap keeps the map in view');
+  await page.click('#step1 [data-go="2"]');
+  assert.equal(await step(), 2, 'Choose a map moves on to the map');
+  assert.ok(await page.$eval('#step1', e => e.hidden) && !(await page.$eval('#step2', e => e.hidden)), 'one card at a time');
   const land = await t(page, 'land');
-  await page.click('#peekNext'); await sleep(50);
-  assert.ok(await peeking(), 'the arrows in the peek bar keep the map in view');
-  assert.notEqual(await t(page, 'land'), land, 'and step to the next landscape');
-  assert.match(await page.$eval('#peekText', e => e.textContent), new RegExp(await page.$eval('#landName', e => e.textContent)), 'the bar names the new landscape');
-  await page.keyboard.press('ArrowLeft'); await sleep(50);
-  assert.equal(await t(page, 'land'), land, 'the arrow keys step back too');
-  await page.mouse.click(700, 450); await sleep(50);
-  assert.ok(!(await peeking()), 'the next tap brings the card back');
+  await page.keyboard.press('ArrowRight');
+  assert.notEqual(await t(page, 'land'), land, 'the arrow keys step through the landscapes on the map step');
+  await page.click('#step2 [data-go="3"]');
+  assert.equal(await step(), 3, 'Next moves on to the difficulty');
+  await page.click('#diff-hard');
+  assert.match(await page.$eval('#tipsTitle', e => e.textContent), /Hard/, 'the how-to-win tips follow the difficulty, shown straight away');
+  await page.click('#step3 [data-go="2"]');
+  assert.equal(await step(), 2, 'Back goes back');
+  await page.reload(); await page.waitForFunction(() => window.__t, { timeout: 20000 });
+  assert.equal(await step(), 2, 'a returning player starts on the map');
+  await toStart(page);
+  await page.click('#startBtn');
+  assert.equal(await t(page, 'state'), 'play', 'Start campaign starts');
   assert.deepEqual(page.errors, []);
   await page.close();
 });
@@ -275,9 +271,9 @@ test('random layouts: the same for both sides, the same for the same map number,
   await t(page, 'newMap', 'highlands', 4821);
   assert.equal(JSON.stringify(await t(page, 'layout')), first, 'a map number always rebuilds the same map');
   assert.match(await page.$eval('#mapNo', e => e.textContent), /Map 4821/, 'the start screen shows the map number');
-  await page.click('#classicTowns');
+  await page.$eval('#classicTowns', e => e.click());
   assert.ok((await t(page, 'layout')).some(o => o.name === 'Millbrook') && (await t(page, 'layout')).length === 10, 'Classic towns brings back the original layout');
-  await page.click('#classicTowns');
+  await page.$eval('#classicTowns', e => e.click());
   await t(page, 'newMap', 'valley', 77);
   await t(page, 'start'); await t(page, 'run', 30);
   assert.ok(await t(page, 'dry') && await t(page, 'alive') > 20, 'a random map plays');
@@ -288,7 +284,8 @@ test('random layouts: the same for both sides, the same for the same map number,
 
 test('the Sound button silences everything', async () => {
   const page = await openGame();
-  await page.click('#startBtn');
+  await toStart(page);
+  await page.click('#startBtn');   // a real click: browsers only let a page play sound after one
   await t(page, 'melee');
   await sleep(300);
   if (await page.evaluate(() => document.getElementById('soundBtn').textContent) === 'Sound off') await page.click('#soundBtn');
@@ -308,6 +305,9 @@ test('the Sound button silences everything', async () => {
 
 test('phone layout with touch', async () => {
   const page = await openGame({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  // through the start screen's steps by touch: the welcome (on a first visit), the map, the difficulty
+  if (await page.$eval('#intro', e => e.dataset.step === '1')) await page.tap('#step1 [data-go="2"]');
+  await page.tap('#step2 [data-go="3"]');
   await page.tap('#startBtn');
   await sleep(500);
   const board = await t(page, 'pos', 'Ashford');

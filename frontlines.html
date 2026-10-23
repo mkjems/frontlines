@@ -207,6 +207,21 @@
   #over { background: rgba(12, 15, 14, .3); backdrop-filter: none; }
   /* the start screen: no blur either, so you can see the map you're about to play */
   #intro { background: rgba(12, 15, 14, .3); backdrop-filter: none; }
+  /* step 2, the map: a compact card along the bottom, with the board in full view above it */
+  #intro[data-step="2"] { background: transparent; }
+  #intro .mapcard { margin: auto auto 0; max-width: 520px; padding: 18px 22px; gap: 10px; }
+  .stepnav { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 2px; }
+  .stepnav .btn.primary { align-self: auto; }
+  .steps { display: flex; gap: 6px; }
+  .steps i { width: 6px; height: 6px; border-radius: 50%; background: var(--line); }
+  .steps i.on { background: var(--blue-ink); }
+  .btn.ghost, .btn.ghost:hover { background: none; box-shadow: none; color: var(--muted); padding: 10px 2px; }
+  .btn.ghost:hover { color: var(--ink); }
+  /* on the map card the heading names the step, so the details line up on the left */
+  .mapcard .land { grid-template-columns: auto 1fr; }
+  .mapcard .land p, .mapcard .land .dots { grid-column: 1 / -1; }
+  .mapcard .land .dots { padding-left: 26px; }
+  .mapcard .landnav { margin-left: -8px; }
   .row-btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .watchbar {
     position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 70px);
@@ -232,18 +247,6 @@
   .land .mapno > * { white-space: nowrap; }
   .land .mapno label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
   .land .mapno input { margin: 0; accent-color: var(--blue); }
-  .mapbtns { display: flex; gap: 6px; justify-self: start; margin-left: 4px; }
-  /* Peek: the card steps aside so the whole map can be seen */
-  #intro .card { transition: opacity .15s ease, transform .15s ease; }
-  #intro.peeking { background: transparent; }
-  #intro.peeking .card { opacity: 0; transform: scale(.98); pointer-events: none; }
-  .peekbar { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 112px); transform: translateX(-50%); z-index: 1;
-    padding: 8px 16px; border-radius: 999px; background: var(--panel); box-shadow: var(--shadow), inset 0 0 0 1px var(--edge);
-    font-size: 13px; font-weight: 600; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .15s ease;
-    display: flex; align-items: center; gap: 4px; padding: 4px 6px; }
-  #intro.peeking .peekbar { opacity: 1; pointer-events: auto; }
-  .peekbar span { padding: 0 6px; }
-  #peekBtn { font: 600 12px var(--font); color: var(--ink); background: var(--raised); border: 1.5px solid var(--line); border-radius: 999px; padding: 5px 11px; cursor: pointer; }
   .diff button {
     font: 600 12px var(--font); color: var(--ink); background: var(--raised); border: 1.5px solid var(--line); border-radius: 999px;
     padding: 6px 12px; cursor: pointer;
@@ -358,13 +361,9 @@
 <div id="toast"></div>
 <button id="tutSkip" type="button" hidden>Skip tips</button>
 
-<div class="overlay" id="intro">
-  <div class="peekbar" id="peekBar">
-    <button type="button" class="cbtn" id="peekPrev" aria-label="Previous landscape">‹</button>
-    <span id="peekText" aria-live="polite"></span>
-    <button type="button" class="cbtn" id="peekNext" aria-label="Next landscape">›</button>
-  </div>
-  <div class="card">
+<div class="overlay" id="intro" data-step="1">
+  <!-- The start screen comes in three steps: welcome and how to play, the map, the difficulty -->
+  <div class="card" id="step1">
     <div class="hero art" id="introHero"><h1>Frontlines</h1></div>
     <p>Two kingdoms, one river. You never command a soldier. You draw the paths they march on, and the armies sort out the rest.</p>
     <!-- How to play, one tip at a time -->
@@ -385,33 +384,49 @@
         <button type="button" class="cbtn" id="tipNext" aria-label="Next tip">›</button>
       </div>
     </div>
-    <div class="diff" id="diff">
-      <span class="label">Difficulty</span>
-      <button type="button" id="diff-easy" data-d="easy">Easy</button>
-      <button type="button" id="diff-normal" data-d="normal">Normal</button>
-      <button type="button" id="diff-hard" data-d="hard">Hard</button>
+    <div class="stepnav">
+      <span></span>
+      <div class="steps" aria-label="Step 1 of 3"><i class="on"></i><i></i><i></i></div>
+      <button class="btn primary" type="button" data-go="2">Choose a map ›</button>
     </div>
+  </div>
+  <div class="card mapcard" id="step2" hidden>
+    <span class="label">Choose your map</span>
     <div class="land">
-      <span class="label">Map</span>
       <div class="landnav">
         <button type="button" class="cbtn" id="landPrev" aria-label="Previous landscape">‹</button>
         <b id="landName"></b>
         <button type="button" class="cbtn" id="landNext" aria-label="Next landscape">›</button>
       </div>
-      <span class="mapbtns"><button type="button" id="peekBtn" title="Hold to see the whole map (or tap, then tap again to come back)">Peek</button></span>
       <div class="dots" id="landDots"></div>
       <p id="landDesc"></p>
       <p class="mapno"><span id="mapNo"></span>
         <button type="button" id="newLayout" title="The same landscape with another town layout">↻ Another layout</button>
         <label><input type="checkbox" id="classicTowns"> Classic towns</label></p>
     </div>
-    <label class="fold"><input type="checkbox" id="showTips"><span id="foldLabel">Show how to win</span></label>
-    <div class="tips" id="diffTips" aria-live="polite" hidden>
+    <div class="stepnav">
+      <button class="btn ghost" type="button" data-go="1">‹ How to play</button>
+      <div class="steps" aria-label="Step 2 of 3"><i></i><i class="on"></i><i></i></div>
+      <button class="btn primary" type="button" data-go="3">Next ›</button>
+    </div>
+  </div>
+  <div class="card" id="step3" hidden>
+    <span class="label">Choose your difficulty</span>
+    <div class="diff" id="diff">
+      <button type="button" id="diff-easy" data-d="easy">Easy</button>
+      <button type="button" id="diff-normal" data-d="normal">Normal</button>
+      <button type="button" id="diff-hard" data-d="hard">Hard</button>
+    </div>
+    <div class="tips" id="diffTips" aria-live="polite">
       <span class="label" id="tipsTitle">How to win</span>
       <p id="tipsIntro"></p>
       <ol id="tipsList"></ol>
     </div>
-    <button class="btn primary" id="startBtn" type="button">Start campaign</button>
+    <div class="stepnav">
+      <button class="btn ghost" type="button" data-go="2">‹ Map</button>
+      <div class="steps" aria-label="Step 3 of 3"><i></i><i></i><i class="on"></i></div>
+      <button class="btn primary" id="startBtn" type="button">Start campaign</button>
+    </div>
   </div>
 </div>
 
@@ -2516,7 +2531,7 @@ import * as THREE from 'three';
   $('tutSkip').onclick = endTutorial;
   $('watchBtn').onclick = () => { $('over').hidden = true; $('watchBar').hidden = false; };
   $('againBtn2').onclick = () => $('againBtn').click();
-  $('againBtn').onclick = () => { $('over').hidden = true; $('watchBar').hidden = true; newGame(); state = 'intro'; setPaused(false); $('intro').hidden = false; $('startBtn').focus(); };
+  $('againBtn').onclick = () => { $('over').hidden = true; $('watchBar').hidden = true; newGame(); state = 'intro'; setPaused(false); $('intro').hidden = false; showStep(2); };
   const TIPS = {
     easy: {
       intro: 'The enemy grows slowly and rarely counters you. A good level to learn the basics.',
@@ -2550,7 +2565,6 @@ import * as THREE from 'three';
     for (const k of Object.keys(DIFF)) $('diff-' + k).className = k === difficulty ? 'on' : '';
     const t = TIPS[difficulty];
     $('tipsTitle').textContent = `How to win on ${difficulty[0].toUpperCase() + difficulty.slice(1)}`;
-    $('foldLabel').textContent = `Show how to win on ${difficulty[0].toUpperCase() + difficulty.slice(1)}`;
     $('tipsIntro').textContent = t.intro;
     $('tipsList').innerHTML = t.list.map(x => `<li>${x}</li>`).join('');
   }
@@ -2567,31 +2581,6 @@ import * as THREE from 'three';
   $('landNext').onclick = () => newGame();
   $('landPrev').onclick = () => newGame(LAND_KEYS[(LAND_KEYS.indexOf(landKey) + LAND_KEYS.length - 1) % LAND_KEYS.length]);
   $('newLayout').onclick = () => newGame(landKey);
-  // Peek: hold to see the whole map, release to come back; a quick tap keeps the card away until the next tap
-  // outside the bar. While peeking, the bar's arrows (or the arrow keys) step through the landscapes.
-  {
-    let downAt = 0, held = false;
-    const peeking = () => $('intro').classList.contains('peeking');
-    const label = () => { $('peekText').textContent = `${land.name} · Map ${mapSeed}${held ? '' : ' · tap the map to go back'}`; };
-    const peek = on => { $('intro').classList.toggle('peeking', on); if (on) label(); };
-    const step = d => { if (d > 0) $('landNext').click(); else $('landPrev').click(); label(); };
-    $('peekBtn').addEventListener('pointerdown', e => { e.preventDefault(); downAt = performance.now(); held = true; peek(true); });
-    addEventListener('pointerup', () => {
-      if (!held) return;
-      held = false;
-      if (performance.now() - downAt > 300) peek(false);   // it was held: back to the card
-      else label();   // a tap: stay until the next tap outside the bar
-    });
-    addEventListener('pointerdown', e => { if (peeking() && !held && !$('peekBar').contains(e.target)) peek(false); });
-    $('peekPrev').onclick = () => step(-1);
-    $('peekNext').onclick = () => step(1);
-    $('peekBtn').addEventListener('click', e => { if (e.detail === 0) { held = false; peek(!peeking()); } });   // keyboard
-    addEventListener('keydown', e => {
-      if (!peeking()) return;
-      if (e.key === 'Escape') peek(false);
-      else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); e.stopImmediatePropagation(); step(e.key === 'ArrowRight' ? 1 : -1); }
-    }, true);
-  }
   // Classic towns: the original hand-made layout instead of a random one (the same map number otherwise)
   $('classicTowns').checked = classic;
   $('classicTowns').onchange = () => {
@@ -2599,13 +2588,22 @@ import * as THREE from 'three';
     try { localStorage.setItem('frontlines-classic', classic ? '1' : '0'); } catch (e) {}
     newGame(landKey, mapSeed);
   };
-  // The "how to win" box folds out from a checkbox; the choice is remembered.
-  try { $('showTips').checked = localStorage.getItem('frontlines-show-tips') === '1'; } catch (e) {}
-  $('diffTips').hidden = !$('showTips').checked;
-  $('showTips').onchange = () => {
-    $('diffTips').hidden = !$('showTips').checked;
-    try { localStorage.setItem('frontlines-show-tips', $('showTips').checked ? '1' : '0'); } catch (e) {}
-  };
+  // The start screen's three steps. Once you've been past the welcome, later visits open on the map.
+  let introStep = 1;
+  function showStep(n) {
+    introStep = n;
+    for (const k of [1, 2, 3]) $('step' + k).hidden = k !== n;
+    $('intro').dataset.step = n;
+    if (n > 1) try { localStorage.setItem('frontlines-seen-intro', '1'); } catch (e) {}
+    const next = $('step' + n).querySelector('.btn.primary');
+    if (next) next.focus({ preventScroll: true });
+  }
+  document.querySelectorAll('#intro [data-go]').forEach(b => b.onclick = () => showStep(+b.dataset.go));
+  addEventListener('keydown', e => {   // Enter moves on, unless a button or box has the focus
+    if ($('intro').hidden || e.key !== 'Enter' || e.target.closest('button, input, label')) return;
+    if (introStep < 3) showStep(introStep + 1); else $('startBtn').click();
+  });
+  try { showStep(localStorage.getItem('frontlines-seen-intro') === '1' ? 2 : 1); } catch (e) { showStep(1); }
   // Intro tips, one at a time: arrows, dots, swipe and arrow keys; it advances by itself until touched.
   const slides = [...document.querySelectorAll('#carousel .slide')];
   let slideAt = 0, slideAuto = setInterval(() => showSlide(slideAt + 1), 7000);
@@ -2623,9 +2621,11 @@ import * as THREE from 'three';
   let swipeX = null;
   $('carousel').addEventListener('pointerdown', e => { swipeX = e.clientX; });
   $('carousel').addEventListener('pointerup', e => { if (swipeX !== null && Math.abs(e.clientX - swipeX) > 40) stepSlide(e.clientX < swipeX ? 1 : -1); swipeX = null; });
-  addEventListener('keydown', e => {
+  addEventListener('keydown', e => {   // arrow keys: the tips on the welcome, the landscapes on the map step
     if ($('intro').hidden || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
-    stepSlide(e.key === 'ArrowRight' ? 1 : -1);
+    const d = e.key === 'ArrowRight' ? 1 : -1;
+    if (introStep === 1) stepSlide(d);
+    else if (introStep === 2) $(d > 0 ? 'landNext' : 'landPrev').click();
   });
   showSlide(0);
   addEventListener('resize', resize);
