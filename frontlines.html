@@ -4003,6 +4003,32 @@ import * as THREE from 'three';
       onCrag: () => units.filter(u => !u.dead && crags.some(c => Math.hypot(c.x - u.x, c.y - u.y) < c.r - 1)).length,
       terrain: () => ({ land: landKey, crags: crags.length, marshes: marshes.length, crossings: bridges.length, lines: lines.map(L => L.kind) }),
       state: () => state,
+      // for tests/drift.mjs (docs/multiplayer.md, phase 0): stop the real-time loop, so only run() moves the battle
+      freeze: () => { paused = true; },
+      // a fingerprint of the game state, part by part, to tell where two copies of a game first differ
+      snapshot: () => {
+        const f = new Float64Array(1), w = new Uint32Array(f.buffer);
+        const hash = vals => {
+          let h = 2166136261;
+          const mix = n => { h = Math.imul(h ^ n, 16777619) >>> 0; };
+          for (const v of vals) {
+            if (typeof v === 'string') { for (let i = 0; i < v.length; i++) mix(v.charCodeAt(i)); continue; }
+            f[0] = v == null ? -0.5 : +v; mix(w[0]); mix(w[1]);
+          }
+          return h.toString(16);
+        };
+        return {
+          parts: {
+            clock: hash([time, week, weekT]),
+            towns: hash(towns.flatMap(t => [t.name, t.owner, t.hold, t.kind, t.barracks || 0, t.spawnT])),
+            units: hash(units.flatMap(u => [u.team, u.kind, u.x, u.y, u.hp])),
+            economy: hash([gold, redGold, ink, redBuys, ...stats.train, ...stats.hp]),
+            buildings: hash(structs.flatMap(s => [s.type, s.team, s.x, s.y]).concat(bridges.map(b => b.b))),
+            enemyPlan: hash(plan ? [plan.phase, plan.target.name, plan.main ? plan.main.b : -1, plan.decoy ? plan.decoy.b : -1] : []),
+          },
+          blue: units.filter(u => u.team === 0).length, red: units.filter(u => u.team === 1).length,
+        };
+      },
     };
   }
 

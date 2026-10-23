@@ -3,7 +3,7 @@
 The plan for playing Frontlines against another person, agreed on 23 October 2026. Work through the phases
 in order. Single player against the computer must keep working, and feel the same, after every phase.
 
-**Current phase:** 0, not started.
+**Current phase:** 1, not started. Phase 0 was done on 23 October.
 
 How to keep this plan up to date:
 - Tick a step (`- [ ]` → `- [x]`) in the same commit as the work, once its tests pass.
@@ -62,10 +62,37 @@ Once phase 1 lands, anything that changes the game state must:
 ## Phases
 
 ### Phase 0: measure (no change to the game)
-- [ ] A test runs two copies of the simulation side by side with the same map number and the same scripted
+- [x] A test runs two copies of the simulation side by side with the same map number and the same scripted
       orders, and reports when and where they first differ.
-- [ ] List every `Math.random()` and `Math.sin/cos/atan2/hypot/exp` call and mark each as simulation or visual.
-      (23 October count: random 23, sin 50, cos 26, atan2 4, hypot 112, sqrt 6, exp 3.)
+      `cd tests && npm run drift` (or `npm run drift -- valley 120` for one landscape and 120 game seconds).
+      It uses two test-only hooks, `__t.freeze()` and `__t.snapshot()`. A full run takes about 15 minutes,
+      because once the scripted blue side loses, the enemy grows to about 1,600 soldiers.
+      Results on 23 October, map 4821, same window size in both copies:
+      - **As is:** the two copies differ from the 1st or 2nd second on every landscape (soldier positions
+        first). After 2–4 minutes they're different battles: on River Valley one copy had 155 enemy soldiers
+        and the other 303, and in one copy blue still held out.
+      - **Seeded** (`Math.random` replaced by the same seeded generator in both, drawing stopped): identical
+        for the full 10 game minutes on all ten landscapes, with up to 1,650 soldiers.
+      - So within one browser engine, `Math.random` is the only source of difference. Caveat: the scripted
+        blue side loses after 2–4 minutes, so the later minutes are mostly the enemy's soldiers alone.
+- [x] Compare the maths functions between browser engines. `tests/math-engines.js` runs in Node (V8, as in
+      Chrome and Edge) and in macOS's built-in `jsc` (JavaScriptCore, as in Safari and every iPhone browser).
+      Over 200,000 inputs each: `Math.sin`, `cos`, `atan2`, `hypot` and `exp` sometimes differ in the last bit
+      (in samples: sin 7%, cos 1%, atan2 19%, exp 12%, hypot 33%). `Math.sqrt` and `Math.sqrt(x*x + y*y)` were
+      identical every time. Firefox wasn't tested (not installed).
+- [x] List every `Math.random()` and `Math.sin/cos/atan2/hypot/exp` call and mark each as simulation or visual.
+      By section of `frontlines.html`, simulation (world, town layouts, terrain, economy, territory, routes,
+      units, structures, AI, game flow, placing items): random 13, sin 20, cos 13, atan2 0, hypot 83, exp 0,
+      sqrt 4. Visual or local (sound, 3D scene, render, input, hover, tips): random 10, sin 30, cos 13, atan2 4,
+      hypot 29, exp 3, sqrt 2. Most battle randomness goes through `rand()`, which is `Math.random` once the
+      map is built (`rng = Math.random` in `newGame`). The 3D ground already uses its own seeded stream.
+- [x] Other sources of difference found while reading:
+      - **The board's size comes from the window.** `newGame` sets `W`/`H` from `innerWidth`/`innerHeight`:
+        the long side is 1,000–1,500 units depending on the screen, and a portrait screen gets a tall board.
+        The same map number gives a different board on a phone and a laptop. A match needs one board size,
+        chosen by the host and sent to the guest, with each screen's camera fitting it.
+      - `t.smokeUntil` uses `performance.now()`, but only for the smoke effect, so it's harmless.
+      - The weekly choices are shuffled with `Math.random`, so the two copies offer different rewards.
 
 Exit: we know how far today's game is from deterministic, and the size of phase 1.
 
@@ -74,9 +101,15 @@ Exit: we know how far today's game is from deterministic, and the size of phase 
 - [ ] Own `sin`, `cos`, `atan2`, `exp`; `hypot` replaced in simulation code. Map generation counts as
       simulation, because both browsers build the map from the map number. (Map numbers will produce
       slightly different layouts once, when this lands.)
+- [ ] The board size is a setting of the match, not taken from the window (see phase 0). In single player it
+      can keep following the screen.
 - [ ] Simulation never reads `performance.now()`, the frame time or the screen size.
 - [ ] `checksum()` of the game state.
-- [ ] Test: two copies, computer against computer, identical checksums for 10 game minutes on every landscape.
+- [ ] Test: two copies, with native `Math.random` and drawing on, identical checksums on every landscape. In
+      `npm test` a few game minutes each, to keep it quick; `npm run drift` for the full 10 minutes.
+- [ ] A check that the simulation gives the same results in Safari's engine as in Chrome's: for example, run
+      the simulation without drawing in Node and in `jsc` and compare checksums. That needs the simulation
+      to run without the page, which ties in with the open question on splitting the file.
 
 Exit: the determinism test passes reliably; single player plays as before.
 

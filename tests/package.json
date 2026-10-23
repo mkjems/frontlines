@@ -5,7 +5,8 @@
   "description": "Browser tests for Frontlines: drives the built game in headless Chrome with real mouse and touch input.",
   "scripts": {
     "pretest": "../build.sh",
-    "test": "node --test --test-concurrency=1 game.test.mjs"
+    "test": "node --test --test-concurrency=1 game.test.mjs",
+    "drift": "../build.sh >/dev/null && node drift.mjs"
   },
   "devDependencies": {
     "puppeteer-core": "^23.11.1"
