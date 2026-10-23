@@ -7,6 +7,7 @@ march on, and thousands of soldiers clash on a 3D tabletop battlefield.
 
 ## How to play
 
+- **The start screen** has three steps: a welcome with how-to-play tips, the map, then the difficulty.
 - **Drag from one of your blue towns** to draw its march route. New soldiers follow it. End the route
   on an enemy or unclaimed town to attack it, or on open ground to gather an army there.
 - **Drag from a gathered army** to send it on.
@@ -15,6 +16,8 @@ march on, and thousands of soldiers clash on a 3D tabletop battlefield.
   - archers beat spearmen;
   - cavalry beat archers.
 - **Spend gold** from the tray on farms, watchtowers, forts, barracks and bridges. Farms and gold mines earn it.
+- **Charge** (first in the tray, or press C, every 25 seconds): click on a fight and your soldiers in the
+  circle run at the enemy there, sprinting, and their first blow hits two to three times as hard.
 - **Take Redmarsh, the enemy capital, to win.** Lose Ashford and the war is over.
 - **Every game is dealt a landscape:** River Valley, The Great Lake, Two Rivers, Mountain Pass, Open Border,
   The Steppe, The Greenwood, Highlands, Marshes or Broken Bridges. Step through them with the arrows or dots on the start screen, or add
@@ -28,7 +31,8 @@ march on, and thousands of soldiers clash on a 3D tabletop battlefield.
   - scroll or pinch to zoom;
   - drag open ground to look around;
   - double-click to zoom in or back out.
-- **Shortcuts:** Space pauses. Hold Shift and hover over anything to see what it does.
+- **Shortcuts:** Space pauses, C arms Charge, Esc cancels. Hold Shift and hover over anything to see what it does.
+- **Tips** appear as you play; any tip can turn them off, and the Rules sheet turns them back on.
 
 The full rules are in the game under **Rules**.
 
@@ -42,11 +46,15 @@ The whole game is a single file, [frontlines.html](frontlines.html), with no bui
   blended into the ground's shader.
 - **Text:** names, icons and labels are drawn on a 2D canvas on top, so they stay sharp.
 - **Simulation:** runs at a fixed 40 steps per second, independent of the frame rate.
-- **The enemy:** a scripted AI that gathers at bridges, feints and hunts weak towns.
+- **The enemy:** a scripted AI that gathers at bridges, feints, hunts weak towns, counters your most common
+  troop type, and builds bridges where it needs them.
 - **Sound:** all synthesized with the Web Audio API. There are no audio files.
 
 `frontlines.html` is written without the `<html>`/`<head>` wrapper. [build.sh](build.sh) wraps it into
-a complete page with sharing metadata and an icon at `site/index.html`.
+a complete page with sharing metadata at `site/index.html`, and copies [art/](art/) into `site/`: the
+start, victory and defeat paintings, the icons and the link-preview image.
+
+Ideas that have been discussed but not built yet are collected in [docs/ideas.md](docs/ideas.md).
 
 ## Running it locally
 
@@ -58,11 +66,18 @@ open site/index.html
 ## Tests
 
 [tests/](tests/) plays the built game in headless Chrome with real mouse and touch input. It checks:
+- the three-step start screen and its tips carousel;
 - drawing routes and snapping onto towns;
-- that an army sent into the enemy capital takes it;
+- that an army sent into the enemy capital takes it, and that the battle plays on afterwards;
 - zoom and pan;
-- placing a watchtower;
+- placing a watchtower, and Broken Bridges' free bridges for both sides;
+- Charge: in the tray, armed with C, and soldiers running at the spot;
 - battles, captures and attacks on your capital;
+- every landscape: towns stay dry, nobody walks through rivers, mountains or crags, both sides field armies;
+- armies crossing two rivers and a mountain pass;
+- random layouts: mirrored for both sides, rebuilt by their map number, playable, and the landscape carousel;
+- turning tips off and on;
+- the Sound button silencing everything;
 - the phone layout.
 
 ```sh
@@ -73,7 +88,9 @@ npm test      # rebuilds site/index.html, then runs the suite
 
 The tests need Google Chrome or Chromium, which they find automatically on macOS and Linux. Set
 `CHROME_PATH` to use another browser binary. Opening the game with `?test` in the URL exposes the small
-`window.__t` hook the tests use.
+`window.__t` hook the tests use. In that mode the board is drawn small, without shadows and only every
+8th frame, which keeps the suite quick on CI, where Chrome draws in software; add `&lite=0` for the full
+picture.
 
 ## Deployment
 
