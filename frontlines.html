@@ -2604,9 +2604,9 @@ import * as THREE from 'three';
     if (introStep < 3) showStep(introStep + 1); else $('startBtn').click();
   });
   try { showStep(localStorage.getItem('frontlines-seen-intro') === '1' ? 2 : 1); } catch (e) { showStep(1); }
-  // Intro tips, one at a time: arrows, dots, swipe and arrow keys; it advances by itself until touched.
+  // Intro tips, one at a time, at the reader's own pace: arrows, dots, swipe and arrow keys.
   const slides = [...document.querySelectorAll('#carousel .slide')];
-  let slideAt = 0, slideAuto = setInterval(() => showSlide(slideAt + 1), 7000);
+  let slideAt = 0;
   $('tipDots').innerHTML = slides.map((_, i) => `<button type="button" aria-label="Tip ${i + 1} of ${slides.length}"></button>`).join('');
   const dots = [...$('tipDots').children];
   function showSlide(i) {
@@ -2614,10 +2614,10 @@ import * as THREE from 'three';
     slides.forEach((s, k) => { s.classList.toggle('on', k === slideAt); s.setAttribute('aria-hidden', k !== slideAt); });
     dots.forEach((d, k) => d.classList.toggle('on', k === slideAt));
   }
-  const stepSlide = d => { clearInterval(slideAuto); showSlide(slideAt + d); };
+  const stepSlide = d => showSlide(slideAt + d);
   $('tipPrev').onclick = () => stepSlide(-1);
   $('tipNext').onclick = () => stepSlide(1);
-  dots.forEach((d, k) => d.onclick = () => { clearInterval(slideAuto); showSlide(k); });
+  dots.forEach((d, k) => d.onclick = () => showSlide(k));
   let swipeX = null;
   $('carousel').addEventListener('pointerdown', e => { swipeX = e.clientX; });
   $('carousel').addEventListener('pointerup', e => { if (swipeX !== null && Math.abs(e.clientX - swipeX) > 40) stepSlide(e.clientX < swipeX ? 1 : -1); swipeX = null; });

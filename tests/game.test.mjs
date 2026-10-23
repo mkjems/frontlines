@@ -60,10 +60,12 @@ test('start screen: welcome and tips, then the map, then the difficulty', async 
   const step = () => page.$eval('#intro', e => +e.dataset.step);
   assert.equal(await step(), 1, 'a first visit opens on the welcome');
   const active = () => page.evaluate(() => [...document.querySelectorAll('#carousel .slide')].findIndex(s => s.classList.contains('on')));
-  // The carousel advances by itself every 7s until touched, and on slow machines (CI renders WebGL in
-  // software) the first advance can happen before we look, so start by clicking the first dot.
+  assert.equal(await active(), 0, 'the tips start at the first one');
+  await sleep(8000);
+  assert.equal(await active(), 0, 'and wait for the reader: they never move on by themselves');
+  await page.click('#tipDots button:nth-child(3)');
+  assert.equal(await active(), 2, 'a dot jumps to its tip');
   await page.click('#tipDots button:first-child');
-  assert.equal(await active(), 0, 'a dot jumps to its tip');
   await page.click('#tipNext');
   assert.equal(await active(), 1, 'the next arrow moves on');
   await page.click('#tipPrev'); await page.click('#tipPrev');
