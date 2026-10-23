@@ -3,7 +3,9 @@
 The plan for playing Frontlines against another person, agreed on 23 October 2026. Work through the phases
 in order. Single player against the computer must keep working, and feel the same, after every phase.
 
-**Current phase:** 4, not started. Phase 3 was done on 23 October.
+**Current phase:** 4, built and tested locally on 23 October; not yet deployed, so its exit (a battle between two
+machines through the VPS) is still open. Without the phase 5 screens, a match can only be started from the browser
+console with `?test` (`__t.netHost`, `__t.netJoin`, `__t.netStart`).
 
 How to keep this plan up to date:
 - Tick a step (`- [ ]` → `- [x]`) in the same commit as the work, once its tests pass.
@@ -206,16 +208,36 @@ Done: the test "playing red by hand while the computer plays blue" draws a route
 the weekly reward with the mouse in the turned view, while the computer takes towns as blue.
 
 ### Phase 4: the relay server
-- [ ] A small Node service with WebSockets: create a room, join with a code, pass turn messages and checksums
+- [x] A small Node service with WebSockets: create a room, join with a code, pass turn messages and checksums
       between the two players, hand over full state on reconnect. Rooms hold two players and expire after
       about 30 minutes without activity.
-- [ ] Its own container next to the existing nginx one (for example on `127.0.0.1:8084`), with Caddy sending
-      `frontlines.mkjems.dk/ws` to it. The Caddy config lives with the VPS setup (`~/Code/infrastructure`).
-- [ ] The deploy workflow builds and starts both containers.
-- [ ] Network code in the game: connect, send and receive turns, wait for the other player, adapt the delay,
+      [server/relay.mjs](../server/relay.mjs), with the `ws` package. A rejoining player gets every turn so far
+      and replays them, instead of a full state: the battle is deterministic, so that's exact, and it spares
+      writing the whole game state out and back in. Each player has a key to rejoin with; a code can't be
+      joined by a third person, even while the guest is away.
+- [x] ~~Its own container next to the existing nginx one (for example on `127.0.0.1:8084`), with Caddy sending
+      `frontlines.mkjems.dk/ws` to it. The Caddy config lives with the VPS setup (`~/Code/infrastructure`).~~
+      Simpler: the one container now runs the Node server, which serves the game's files as well as the relay
+      on `/ws`. Same image name, port 8080 inside, 8083 outside, so `compose.yaml` on the VPS and Caddy (which
+      passes WebSocket connections through) need no change. The image runs as the `node` user and stops cleanly.
+- [x] The deploy workflow builds and starts both containers.
+      One container; the workflow now also installs the server's package and runs the match tests.
+- [x] Network code in the game: connect, send and receive turns, wait for the other player, adapt the delay,
       checksum comparison and resync.
-- [ ] Orders waiting in the queue are drawn: a route faintly until it takes effect. In single player the wait
+      The section "two-player matches" in `frontlines.html`. Turns of 2 steps (50 ms); each browser sends its
+      orders for 3 turns ahead (150 ms) and runs a turn only once both players' orders are in. Checksums every
+      20 turns (half a second). Not done: adapting the delay (fixed at 3 turns for now), and repairing a
+      mismatch (it's reported; it would mean a determinism bug, to be fixed rather than papered over).
+      While waiting for the other player the hint says so, and the battle holds still for both.
+- [x] Orders waiting in the queue are drawn: a route faintly until it takes effect. In single player the wait
       is one step (25 ms) and invisible; with the network delay it's 100–150 ms.
+- [x] Tests: `tests/match.test.mjs` starts the server on a free port; a host on a laptop and a guest on a
+      phone play through it, each drawing a route. They check that both games get both routes, that
+      checksums are compared and agree, that it holds with 60 ms added to every message, and that a player
+      who drops out holds the battle still, rejoins, replays and carries on in sync.
+
+Found: the board's shape is the host's window, so a laptop host and a phone guest play on a wide board that
+looks small on the phone. See the open questions.
 
 Exit: two browsers on different machines play a whole battle through the VPS.
 
@@ -247,6 +269,8 @@ Exit: a friend who has never seen the game can join from a link on a phone and f
 - **Pauses:** must the other player accept, or does each player get a few pauses of their own?
 - **Background tabs:** browsers slow hidden tabs, which stalls both players in lockstep. Pause the match when
   either tab is hidden, or run the simulation in a Worker?
+- **Board shape in a match:** it's the host's window. Pick a shape that suits both players' screens
+  (for example the guest's too, sent when joining), or a fixed one?
 - **Phones:** the slower device sets the pace for both. Needs checking on an older phone in phase 6.
 - **Later, if there's traffic:** "Find an opponent" (pair the next two waiting), quick messages ("Good game"),
   two players against the computer.

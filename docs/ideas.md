@@ -55,6 +55,8 @@ Each formation is roughly one focused session.
 
 The project keeps one dark colour scheme (see Decided against). Ideas that were listed and not done yet:
 - **Living water:** sparkle on the river, and foam where it runs round the ford stones and bridge piers.
+  The sun's glints were toned down on 23 October (`specularIntensity` 0.3 on the water); the user feels the
+  water needs more work.
 - **Battle readability:** a brief bright flash where groups clash, and fallen soldiers fading into small
   dark marks, so the front lines show.
 - **A hint of winter:** a light frosting on roofs, pines and hilltops, keeping the board dark.

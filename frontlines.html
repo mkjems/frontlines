@@ -2244,6 +2244,7 @@ import * as THREE from 'three';
   let orderQueue = [], orderLog = [];
   const townNamed = n => towns.find(t => t.name === n);
   function order(team, o) {
+    if (net && net.live) { net.outbox.push(o); return; }   // a match: sent to both browsers for a turn ahead
     if (state === 'play' && !paused) orderQueue.push({ ...o, team }); else { orderLog.push({ ...o, team, at: frameNo }); carryOut(team, o, true); }
   }
   function applyOrders() {
@@ -2332,6 +2333,102 @@ import * as THREE from 'three';
       state = 'play';
     },
   };
+
+  // ---------- two-player matches: lockstep over the relay (docs/multiplayer.md) ----------
+  // Both browsers run the whole battle and exchange only orders, a turn (TURN_TICKS steps, 50 ms) at a time.
+  // Each sends its orders for the turn DELAY turns ahead, an empty list if it has none, and runs a turn only
+  // once both players' orders for it are in, team 0's first. Every SUM_EVERY turns they compare checksums.
+  // A player who drops out rejoins with their key: the relay sends every turn so far, and they replay them.
+  const TURN_TICKS = 2, DELAY = 3, SUM_EVERY = 20;
+  let net = null;   // { ws, code, team, key, names, setup, live, turn, sent, acc, inbox: [Map, Map], outbox, sums, peerSums, desync, waitT }
+  const relayURL = () => new URLSearchParams(location.search).get('relay') || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+  function netOpen(first) {
+    const ws = new WebSocket(relayURL());
+    net = { ws, code: null, team: -1, key: null, names: ['', ''], setup: null, live: false, turn: 0, sent: DELAY - 1, acc: 0,
+      inbox: [new Map(), new Map()], outbox: [], sums: new Map(), peerSums: new Map(), desync: -1, agreed: 0, waitT: 0, away: false };
+    ws.onopen = () => ws.send(JSON.stringify(first));
+    ws.onmessage = e => netMessage(JSON.parse(e.data));
+    ws.onclose = () => { if (net && net.ws === ws && net.live) toast('Lost the connection to the game server', 'bad'); };
+  }
+  const netSend = m => { if (net && net.ws.readyState === 1) net.ws.send(JSON.stringify(m)); };
+  const netHost = name => netOpen({ t: 'host', name });
+  const netJoin = (code, name) => netOpen({ t: 'join', code, name });
+  // the host starts the match: map, board and settings, the same for both
+  function netStart(land, seed) {
+    netSend({ t: 'start', setup: { land, map: seed || 1 + (Math.random() * 9999 | 0), board: { w: innerWidth, h: innerHeight }, match: { ai: -1, difficulty: 'normal', classic: false, grace: 6 } } });
+  }
+  function netMessage(m) {
+    if (m.t === 'room') { Object.assign(net, { code: m.code, team: m.team, key: m.key, names: m.names }); try { sessionStorage.setItem('frontlines-match', JSON.stringify({ code: m.code, team: m.team, key: m.key })); } catch (e) {} }
+    else if (m.t === 'joined') { net.names = m.names; toast(`${m.names[1] || 'Your opponent'} has joined`, 'good'); }
+    else if (m.t === 'start') beginMatch(m.setup);
+    else if (m.t === 'turn') net.inbox[1 - net.team].set(m.n, m.orders);
+    else if (m.t === 'sum') { net.peerSums.set(m.n, m.sum); compareSums(m.n); }
+    else if (m.t === 'left') { net.away = true; toast('Your opponent lost the connection. Waiting for them…', 'bad'); }
+    else if (m.t === 'back') { net.away = false; toast('Your opponent is back', 'good'); }
+    else if (m.t === 'catchup') {
+      Object.assign(net, { code: m.code, team: m.team, names: m.names });
+      if (!m.setup) return;
+      beginMatch(m.setup);
+      for (const team of [0, 1]) m.turns[team].forEach((o, n) => { if (o) net.inbox[team].set(n, o); });
+      net.sent = Math.max(DELAY - 1, m.turns[net.team].length - 1);
+      net.replaying = true;
+      while (haveTurn(net.turn)) runTurn();   // replay the battle so far
+      net.replaying = false;
+    }
+    else if (m.t === 'error') toast(m.message, 'bad');
+  }
+  function beginMatch(setup) {
+    net.setup = setup; board = setup.board; presetMatch = setup.match; me = net.team;
+    newGame(setup.land, setup.map);
+    Object.assign(net, { live: true, turn: 0, sent: DELAY - 1, acc: 0, inbox: [new Map(), new Map()], outbox: [], sums: new Map(), peerSums: new Map(), desync: -1 });
+    for (let n = 0; n < DELAY; n++) for (const team of [0, 1]) net.inbox[team].set(n, []);   // the first turns carry no orders
+    $('intro').hidden = true; state = 'play'; setPaused(false); speed = 1;
+  }
+  const haveTurn = n => net.inbox[0].has(n) && net.inbox[1].has(n);
+  function runTurn() {
+    const n = net.turn;
+    if (n + DELAY > net.sent) {   // this browser's orders, for the turn DELAY ahead
+      const mine = JSON.parse(JSON.stringify(net.outbox));
+      net.outbox = []; net.sent = n + DELAY;
+      net.inbox[net.team].set(n + DELAY, mine);
+      netSend({ t: 'turn', n: n + DELAY, orders: mine });
+    }
+    for (const team of [0, 1]) {
+      for (const o of net.inbox[team].get(n)) { orderLog.push({ ...o, team, at: frameNo, turn: n }); carryOut(team, o, true); }
+      net.inbox[team].delete(n);
+    }
+    for (let i = 0; i < TURN_TICKS; i++) if (running()) step(STEP);
+    net.turn++;
+    if (n % SUM_EVERY === 0 && !net.replaying) { net.sums.set(n, JSON.stringify(checksum())); netSend({ t: 'sum', n, sum: net.sums.get(n) }); compareSums(n); }
+  }
+  function compareSums(n) {
+    const a = net.sums.get(n), b = net.peerSums.get(n);
+    if (a === undefined || b === undefined) return;
+    net.sums.delete(n); net.peerSums.delete(n);
+    if (a === b) net.agreed++;
+    else if (net.desync < 0) { net.desync = n; console.error('Frontlines: out of sync at turn', n, a, b); toast('The two games have gone out of sync', 'bad'); }
+  }
+  // called every frame in a match: runs the turns that are due, as long as both players' orders are in
+  function netFrame(dt) {
+    net.acc = Math.min(net.acc + dt, 0.5);
+    const T = TURN_TICKS * STEP;
+    let ran = 0;
+    while (net.acc >= T && ran < 10) {
+      if (!haveTurn(net.turn)) break;
+      runTurn(); net.acc -= T; ran++;
+    }
+    const waiting = net.acc >= T && !haveTurn(net.turn);
+    net.waitT = waiting ? net.waitT + dt : 0;
+    if (net.waitT > 1 && !$('hint').textContent.startsWith('Waiting')) { $('hint').textContent = 'Waiting for your opponent…'; $('hint').style.opacity = 1; }
+    else if (!net.waitT && $('hint').textContent.startsWith('Waiting')) setHint(hintBase);
+  }
+  // this player's orders on their way: drawn faintly until they take effect
+  function pendingRoutes() {
+    if (!net || !net.live) return [];
+    const out = [...net.outbox];
+    for (const [n, os] of net.inbox[net.team]) if (n >= net.turn) out.push(...os);
+    return out.filter(o => o.pts);
+  }
 
   // ---------- input ----------
   let drawing = null, hover = null, hoverGroup = null, pointerId = null;
@@ -2565,8 +2662,8 @@ import * as THREE from 'three';
     paused = v;
     $('pauseBtn').textContent = paused ? '▶ Resume' : '❚❚ Pause';
   }
-  $('pauseBtn').onclick = () => setPaused(!paused);
-  $('speedBtn').onclick = () => { speed = speed === 1 ? 2 : speed === 2 ? 3 : 1; $('speedBtn').textContent = speed + '×'; };
+  $('pauseBtn').onclick = () => { if (!(net && net.live)) setPaused(!paused); };   // a match can't be paused by one side (yet)
+  $('speedBtn').onclick = () => { if (net && net.live) return; speed = speed === 1 ? 2 : speed === 2 ? 3 : 1; $('speedBtn').textContent = speed + '×'; };
   // Holding Shift shows what is under the pointer; letting go hides it.
   addEventListener('keydown', e => {
     if (e.key === 'Shift' && lastPointer && !drawing && !armed && state === 'play') { inspectAt = lastPointer; showInspect(); }
@@ -2574,7 +2671,7 @@ import * as THREE from 'three';
   addEventListener('keyup', e => { if (e.key === 'Shift') { inspectAt = null; showInspect(); } });
   addEventListener('blur', () => { inspectAt = null; showInspect(); });
   addEventListener('keydown', e => {
-    if (e.code === 'Space' && running()) { e.preventDefault(); setPaused(!paused); }
+    if (e.code === 'Space' && running() && !(net && net.live)) { e.preventDefault(); setPaused(!paused); }
     if ((e.key === 'c' || e.key === 'C') && !e.metaKey && !e.ctrlKey && !e.altKey) toggleCharge();
     if (e.key === 'Escape') { if (armed) { armed = null; renderTray(); } closeMenu(); if (!$('rules').hidden) $('rulesClose').onclick(); }
   });
@@ -2948,7 +3045,7 @@ import * as THREE from 'three';
     dcv = document.createElement('canvas'); dctx = dcv.getContext('2d');
     const water = waterNormals();
     // physical only for specularIntensity: the sun's glints on the river, toned well down
-    waterMat = new THREE.MeshPhysicalMaterial({ color: '#365f74', roughness: 0.12, specularIntensity: 0.3, metalness: 0.1, transparent: true, opacity: 0.8, side: THREE.DoubleSide, normalMap: water, normalScale: new THREE.Vector2(0.22, 0.22) });
+    waterMat = new THREE.MeshPhysicalMaterial({ color: '#365f74', roughness: 0.12, specularIntensity: 0.1, metalness: 0.1, transparent: true, opacity: 0.8, side: THREE.DoubleSide, normalMap: water, normalScale: new THREE.Vector2(0.22, 0.22) });
   }
   const MAXU = 3000, WHITE = new THREE.Color('#ffffff'), TEAMC = [new THREE.Color('#6cb0ff'), new THREE.Color('#ff5d47')];   // soldiers: light so they read on the dark board
   let unitMeshes = [], unitOutlines = [];
@@ -3750,6 +3847,9 @@ import * as THREE from 'three';
     }
     for (const t of towns) if (t.route && t.owner === 1 - me) drawRoute(t.route, 1 - me);
     for (const t of towns) if (t.route && t.owner === me && (!drawing || drawing.town !== t)) drawRoute(t.route, me);
+    ctx.globalAlpha = 0.45;
+    for (const o of pendingRoutes()) drawRoute(o, me);
+    ctx.globalAlpha = 1;
     if (drawing && drawing.pts.length > 1) {
       strokeRoute(drawing.pts, ROUTE[0], 8);
       if (drawing.lock) {   // locked onto a town: the line runs into it and the town is ringed
@@ -4057,7 +4157,8 @@ import * as THREE from 'three';
   function frame(now) {
     adaptResolution(now - last, now);
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
-    if (running() && !paused) {
+    if (net && net.live) netFrame(dt);
+    else if (running() && !paused) {
       acc += dt * speed;
       while (acc >= STEP && running()) { step(STEP); acc -= STEP; }
     } else acc = 0;
@@ -4136,6 +4237,13 @@ import * as THREE from 'three';
       terrain: () => ({ land: landKey, crags: crags.length, marshes: marshes.length, crossings: bridges.length, lines: lines.map(L => L.kind) }),
       state: () => state,
       me: () => me,
+      // two-player matches (docs/multiplayer.md): host, join, start, drop the connection and rejoin
+      netHost: name => netHost(name),
+      netJoin: (code, name) => netJoin(code, name),
+      netStart: (land, seed) => netStart(land, seed),
+      net: () => net && { code: net.code, team: net.team, live: net.live, turn: net.turn, desync: net.desync, agreed: net.agreed, waiting: net.waitT > 0 },
+      netDrop: () => net.ws.close(),
+      netRejoin: () => netOpen({ t: 'rejoin', ...JSON.parse(sessionStorage.getItem('frontlines-match')) }),
       // for tests/drift.mjs (docs/multiplayer.md, phase 0): stop the real-time loop, so only run() moves the battle
       freeze: () => { paused = true; },
       board: b => { board = b; },

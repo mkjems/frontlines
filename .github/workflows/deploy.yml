@@ -40,14 +40,17 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: tests/package-lock.json
+          cache-dependency-path: |
+            tests/package-lock.json
+            server/package-lock.json
 
-      # Plays the built game in headless Chrome; a failure stops the deploy.
+      # Plays the built game in headless Chrome, alone and as two players through the relay; a failure stops the deploy.
       - name: Browser tests
         working-directory: tests
         run: |
           npm ci
-          node --test --test-concurrency=1 game.test.mjs
+          npm --prefix ../server ci
+          node --test --test-concurrency=1 game.test.mjs match.test.mjs
 
       - uses: docker/setup-buildx-action@v3
 

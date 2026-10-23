@@ -98,7 +98,9 @@ picture.
 Every push to `main` runs [.github/workflows/deploy.yml](.github/workflows/deploy.yml):
 
 1. Builds `site/index.html` and runs the browser tests. A failing test stops the deploy.
-2. Builds a Docker image (nginx serving `site/`) and pushes it to `ghcr.io/mkjems/frontlines`.
+2. Builds a Docker image and pushes it to `ghcr.io/mkjems/frontlines`. It runs [server/relay.mjs](server/relay.mjs), a
+   small Node server that serves `site/` and, on `/ws`, relays two-player matches (see
+   [docs/multiplayer.md](docs/multiplayer.md)). Caddy passes WebSocket connections through as they are.
 3. Connects to the VPS over SSH and runs `docker compose pull && docker compose up -d` in `/opt/frontlines`.
 
 On the VPS the container listens on `127.0.0.1:8083`, and Caddy serves it at `frontlines.mkjems.dk`

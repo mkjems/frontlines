@@ -1,0 +1,12 @@
+{
+  "name": "frontlines-server",
+  "private": true,
+  "type": "module",
+  "description": "Serves the built game and relays two-player matches (see docs/multiplayer.md).",
+  "scripts": {
+    "start": "node relay.mjs"
+  },
+  "dependencies": {
+    "ws": "8.22.0"
+  }
+}
