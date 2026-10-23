@@ -4067,10 +4067,10 @@ import * as THREE from 'three';
     for (const o of pendingRoutes()) drawRoute(o, me);
     ctx.globalAlpha = 1;
     if (drawing && drawing.pts.length > 1) {
-      strokeRoute(drawing.pts, ROUTE[0], 8);
+      strokeRoute(drawing.pts, ROUTE[me], 8);
       if (drawing.lock) {   // locked onto a town: the line runs into it and the town is ringed
         const L = drawing.lock, e = drawing.pts[drawing.pts.length - 1], col = lockColor(L);
-        strokeRoute([e, { x: L.x, y: L.y }], ROUTE[0], 8);
+        strokeRoute([e, { x: L.x, y: L.y }], ROUTE[me], 8);
         const age = (performance.now() - drawing.lockT) / 1000, R = (townRing(L) + 18) * (1 + 0.4 * Math.max(0, 1 - age * 5));
         ctx.globalAlpha = 0.16; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(L.x, L.y, R, 0, Math.PI * 2); ctx.fill();
         ctx.globalAlpha = 1; ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.stroke();
