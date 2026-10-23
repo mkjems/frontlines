@@ -55,10 +55,8 @@ async function dragTo(page, a, b) {
 
 test('start screen: welcome and tips, then the map, then the difficulty', async () => {
   const page = await openGame();
-  await page.evaluate(() => localStorage.removeItem('frontlines-seen-intro'));
-  await page.reload(); await page.waitForFunction(() => window.__t, { timeout: 20000 });
   const step = () => page.$eval('#intro', e => +e.dataset.step);
-  assert.equal(await step(), 1, 'a first visit opens on the welcome');
+  assert.equal(await step(), 1, 'the start screen opens on the welcome');
   const active = () => page.evaluate(() => [...document.querySelectorAll('#carousel .slide')].findIndex(s => s.classList.contains('on')));
   assert.equal(await active(), 0, 'the tips start at the first one');
   await sleep(8000);
@@ -83,7 +81,7 @@ test('start screen: welcome and tips, then the map, then the difficulty', async 
   await page.click('#step3 [data-go="2"]');
   assert.equal(await step(), 2, 'Back goes back');
   await page.reload(); await page.waitForFunction(() => window.__t, { timeout: 20000 });
-  assert.equal(await step(), 2, 'a returning player starts on the map');
+  assert.equal(await step(), 1, 'and it does every visit');
   await toStart(page);
   await page.click('#startBtn');
   assert.equal(await t(page, 'state'), 'play', 'Start campaign starts');

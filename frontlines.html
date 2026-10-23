@@ -784,7 +784,7 @@ import * as THREE from 'three';
       let near = null;
       for (const br of bridges) if (br.line === L && Math.abs(b - br.b) < br.span + 10) { near = br; break; }
       if (near) { if (Math.abs(b - near.b) > near.span - 3) b = near.b + Math.sign(b - near.b) * (near.span - 3); }
-      else a = c + (d < 0 ? -1 : 1) * hw;
+      else a = c + (d < 0 ? -1 : 1) * (hw + 0.01);   // just clear of the edge, so rounding never leaves it a hair inside
     }
     a = clamp(a, 6, LA - 6); b = clamp(b, 6, LB - 6);
     const p = XY(a, b); u.x = p.x; u.y = p.y;
@@ -2640,13 +2640,12 @@ import * as THREE from 'three';
     try { localStorage.setItem('frontlines-classic', classic ? '1' : '0'); } catch (e) {}
     newGame(landKey, mapSeed);
   };
-  // The start screen's three steps. Once you've been past the welcome, later visits open on the map.
+  // The start screen's three steps. Every visit opens on the welcome; Play again goes straight to the map.
   let introStep = 1;
   function showStep(n) {
     introStep = n;
     for (const k of [1, 2, 3]) $('step' + k).hidden = k !== n;
     $('intro').dataset.step = n;
-    if (n > 1) try { localStorage.setItem('frontlines-seen-intro', '1'); } catch (e) {}
     const next = $('step' + n).querySelector('.btn.primary');
     if (next) next.focus({ preventScroll: true });
   }
@@ -2655,7 +2654,7 @@ import * as THREE from 'three';
     if ($('intro').hidden || e.key !== 'Enter' || e.target.closest('button, input, label')) return;
     if (introStep < 3) showStep(introStep + 1); else $('startBtn').click();
   });
-  try { showStep(localStorage.getItem('frontlines-seen-intro') === '1' ? 2 : 1); } catch (e) { showStep(1); }
+  showStep(1);
   // Intro tips, one at a time, at the reader's own pace: arrows, dots, swipe and arrow keys.
   const slides = [...document.querySelectorAll('#carousel .slide')];
   let slideAt = 0;
