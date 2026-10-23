@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
+import { race } from './twins.mjs';
 
 // the tests run on the classic town layout, whose towns have known names and places
 const GAME = new URL('../site/index.html?test&land=valley&layout=classic', import.meta.url).href;
@@ -295,6 +296,15 @@ test('maps without a river sell no bridges: none in the tray or among the weekly
   for (let w = 0; w < 30; w++) offers += await t(page, 'offer');
   assert.match(offers, /Bridge/, 'and offers them as a weekly choice');
   await page.close();
+});
+
+test('two copies of a battle stay identical, as two players\' browsers must (docs/multiplayer.md)', async () => {
+  // different windows, drawing, Math.random and history; same map number, board and orders. npm run drift runs it longer.
+  for (const land of ['valley', 'lake', 'tworivers', 'mountains', 'open', 'steppe', 'greenwood', 'highlands', 'marsh', 'broken']) {
+    const r = await race(browser, land, 90);
+    assert.equal(r.first, null, `${land}: the copies differ from second ${r.first?.s} (${r.first?.parts})`);
+    assert.deepEqual(r.errors, []);
+  }
 });
 
 test('armies find their way over two rivers and through a mountain pass', async () => {

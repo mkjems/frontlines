@@ -673,8 +673,8 @@ import * as THREE from 'three';
           nextBeat += [0.6, 0.3, 0.3][beat++ % 3];
         }
         if (playing && drums < 0.3 && now > nextBird) {   // birdsong in the quiet
-          nextBird = now + rand(3, 9);
-          for (let i = 0, n = 2 + (Math.random() * 3 | 0), f = rand(2400, 3400); i < n; i++) tone(f, 0.09, { at: now + i * 0.13, type: 'sine', vol: 0.018, glide: f * rand(1.15, 1.35) });
+          nextBird = now + fxRand(3, 9);
+          for (let i = 0, n = 2 + (Math.random() * 3 | 0), f = fxRand(2400, 3400); i < n; i++) tone(f, 0.09, { at: now + i * 0.13, type: 'sine', vol: 0.018, glide: f * rand(1.15, 1.35) });
         }
       },
       clash(level) { if (rumbleGain) rumbleGain.gain.setTargetAtTime(muted ? 0 : Math.min(0.55, level * 0.012), ac.currentTime, 0.25); },
@@ -695,10 +695,20 @@ import * as THREE from 'three';
   const icon = (k, size = 24) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k] || ''}</svg>`;
 
   const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
-  // Map generation draws from a seeded generator, so a map number always rebuilds the same land;
-  // everything else (battles, the enemy's choices) uses Math.random.
+  // Two random streams. rng/rand build the map and drive the battle: they are seeded from the map number, so the
+  // same map and the same orders always give the same game (two-player play depends on it, docs/multiplayer.md).
+  // fxRand is for looks and sound only, which may differ from machine to machine.
   let rng = Math.random;
   const rand = (a, b) => a + rng() * (b - a);
+  const fxRand = (a, b) => a + Math.random() * (b - a);
+  // The simulation's own sin, cos and hypot: browsers differ in the last bit on Math.sin, cos and hypot, while
+  // + - * / and Math.sqrt agree everywhere. sin and cos are fdlibm's kernels after reducing to ±π/4.
+  const PIO2 = 1.57079632673412561417, PIO2T = 6.07710050650619224932e-11;
+  const kSin = x => { const z = x * x; return x + x * z * (-1.66666666666666324348e-1 + z * (8.33333333332248946124e-3 + z * (-1.98412698298579493134e-4 + z * (2.75573137070700676789e-6 + z * (-2.50507602534068634195e-8 + z * 1.58969099521155010221e-10))))); };
+  const kCos = x => { const z = x * x; return 1 - 0.5 * z + z * z * (4.16666666666666019037e-2 + z * (-1.38888888888741095749e-3 + z * (2.48015872894767294178e-5 + z * (-2.75573143513906633035e-7 + z * (2.08757232129817482790e-9 + z * -1.13596475577881948265e-11))))); };
+  function sin(x) { const k = Math.round(x / PIO2), r = (x - k * PIO2) - k * PIO2T, q = k & 3; return q === 0 ? kSin(r) : q === 1 ? kCos(r) : q === 2 ? -kSin(r) : -kCos(r); }
+  function cos(x) { const k = Math.round(x / PIO2), r = (x - k * PIO2) - k * PIO2T, q = k & 3; return q === 0 ? kCos(r) : q === 1 ? -kSin(r) : q === 2 ? -kCos(r) : kSin(r); }
+  const hypot = (x, y) => Math.sqrt(x * x + y * y);
   function seeded(seed) {   // mulberry32
     let x = seed >>> 0;
     return () => { x = (x + 0x6d2b79f5) >>> 0; let t = x; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -746,7 +756,7 @@ import * as THREE from 'three';
   // Barriers run between the two kingdoms along the b axis: rivers, crossed at bridges and fords, and
   // mountain ranges, crossed at passes. They cut the board into strips (regions), numbered from a = 0.
   // Each crossing in bridges knows its barrier (line); a map can have none, one or two barriers.
-  function lineA(L, b) { return LA * (L.c + L.amp * Math.sin(b / LB * Math.PI * 2 * L.freq + L.phase)); }
+  function lineA(L, b) { return LA * (L.c + L.amp * sin(b / LB * Math.PI * 2 * L.freq + L.phase)); }
   // half a barrier's width at b: on the Great Lake the river swells into a lake in the middle of the board
   function hwAt(L, b) {
     if (!L.lake) return L.hw;
@@ -782,7 +792,7 @@ import * as THREE from 'three';
     for (const br of bridges) {
       if (br.line !== L) continue;
       const en = bridgeEnd(br, s0), ex = bridgeEnd(br, -s0);
-      const d = Math.hypot(en.x - x0, en.y - y0) + Math.hypot(x1 - ex.x, y1 - ex.y) + (br.ford ? 90 : 0);
+      const d = hypot(en.x - x0, en.y - y0) + hypot(x1 - ex.x, y1 - ex.y) + (br.ford ? 90 : 0);
       if (d < bd) { bd = d; best = br; }
     }
     return best;
@@ -794,7 +804,7 @@ import * as THREE from 'three';
     const L = nextLine(x, y, tx, ty), br = L && bestBridge(x, y, tx, ty, L);
     if (!br) return [tx, ty];
     const s0 = sideOfLine(L, x, y), en = bridgeEnd(br, s0);
-    if (Math.hypot(en.x - x, en.y - y) < 22) { const ex = bridgeEnd(br, -s0); return [ex.x, ex.y]; }
+    if (hypot(en.x - x, en.y - y) < 22) { const ex = bridgeEnd(br, -s0); return [ex.x, ex.y]; }
     return [en.x, en.y];
   }
 
@@ -935,8 +945,8 @@ import * as THREE from 'three';
       keepClearOfBarriers(out);
       const cap = out[0], k = clamp(Math.min(LA / 1440, LB / 840), 0.6, 1);   // smaller boards (phones) space towns closer
       const ok = out.every(t => t.x > 50 && t.y > 50 && t.x < W - 50 && t.y < H - 50)
-        && out.every((t, i) => out.every((o, j) => j <= i || Math.hypot(t.x - o.x, t.y - o.y) > (t.capital || o.capital ? 210 : 165) * k))
-        && out.every(t => t.owner !== 0 || Math.hypot(t.x - cap.x, t.y - cap.y) < LA * 0.42);
+        && out.every((t, i) => out.every((o, j) => j <= i || hypot(t.x - o.x, t.y - o.y) > (t.capital || o.capital ? 210 : 165) * k))
+        && out.every(t => t.owner !== 0 || hypot(t.x - cap.x, t.y - cap.y) < LA * 0.42);
       if (ok) return out;
     }
     layoutFallbacks++;   // counted for the tests: should almost never happen
@@ -945,12 +955,15 @@ import * as THREE from 'three';
 
   function baseHold(t) { return t.capital ? 40 : 20; }
 
+  // The board's size and shape follow the screen it is first shown on. A two-player match sets one board for both
+  // players instead (board = { w, h }, a window size), since the same map number on another board is another battle.
+  let board = null;
   function newGame(force, seed) {
     pickLand(force);
     mapSeed = seed > 0 ? seed | 0 : 1 + (Math.random() * 9999 | 0);
     $('mapNo').textContent = classic ? `Map ${mapSeed} · classic towns` : `Map ${mapSeed}`;
     rng = seeded(mapSeed * 7919 + Object.keys(LANDS).indexOf(landKey));
-    const vw = innerWidth, vh = innerHeight;
+    const vw = board ? board.w : innerWidth, vh = board ? board.h : innerHeight;
     P = vh > vw * 1.1;
     const long = clamp(Math.max(vw, vh), 1000, 1500), ratio = Math.min(vw, vh) / Math.max(vw, vh);
     const short = Math.max(long * ratio, long * 0.56);
@@ -984,7 +997,7 @@ import * as THREE from 'three';
     {
       const own = towns.filter(t => t.owner === 0 && !t.capital), free = towns.filter(t => t.owner < 0);
       let best = null, bd = Infinity;
-      for (const o of own) for (const f of free) { const d = Math.hypot(o.x - f.x, o.y - f.y) * (regionOf(o.x, o.y) === regionOf(f.x, f.y) ? 1 : 3); if (d < bd) { bd = d; best = [o, f]; } }
+      for (const o of own) for (const f of free) { const d = hypot(o.x - f.x, o.y - f.y) * (regionOf(o.x, o.y) === regionOf(f.x, f.y) ? 1 : 3); if (d < bd) { bd = d; best = [o, f]; } }
       const from = best ? best[0] : towns[0], to = best ? best[1] : free[0];
       tutTowns = { from: from.name, to: to ? to.name : from.name, menu: (own.find(o => o !== from) || from).name };
     }
@@ -992,8 +1005,8 @@ import * as THREE from 'three';
     // Everything else is placed on blue's half and copied, turned about the centre, onto red's.
     const nearRiver = (x, y, m) => riverGap(x, y) < m;
     compass = { x: 54, y: H - 54 };
-    const compass2 = mirror(compass), nearCompass = (x, y, m) => Math.hypot(compass.x - x, compass.y - y) < m || Math.hypot(compass2.x - x, compass2.y - y) < m;
-    const twinGap = (x, y, m) => Math.hypot(W - 2 * x, H - 2 * y) >= m;   // far enough from its own mirror image
+    const compass2 = mirror(compass), nearCompass = (x, y, m) => hypot(compass.x - x, compass.y - y) < m || hypot(compass2.x - x, compass2.y - y) < m;
+    const twinGap = (x, y, m) => hypot(W - 2 * x, H - 2 * y) >= m;   // far enough from its own mirror image
     const pairs = n => Math.round(n / 2);
     const blueSpot = (m) => { for (;;) { const x = rand(m, W - m), y = rand(m, H - m); if (onBlueHalf(x, y) || rng() < 0.02) return { x, y }; } };
     const turn = pts => pts.slice(pts.length / 2).concat(pts.slice(0, pts.length / 2));   // a blob's outline, seen from the other side
@@ -1005,22 +1018,22 @@ import * as THREE from 'three';
       for (let tries = 0; tries < 80; tries++) {
         const p = at01(an + rand(-0.014, 0.014), rand(0.1, 0.9));
         if (p.x < 40 || p.y < 40 || p.x > W - 40 || p.y > H - 40 || nearRiver(p.x, p.y, 40) || !twinGap(p.x, p.y, 220)) continue;
-        if (towns.some(t => Math.hypot(t.x - p.x, t.y - p.y) < 110) || mines.some(m => Math.hypot(m.x - p.x, m.y - p.y) < 220)) continue;
-        if (bridges.some(br => { const q = XY(lineA(br.line, br.b), br.b); return Math.hypot(q.x - p.x, q.y - p.y) < 90; })) continue;
+        if (towns.some(t => hypot(t.x - p.x, t.y - p.y) < 110) || mines.some(m => hypot(m.x - p.x, m.y - p.y) < 220)) continue;
+        if (bridges.some(br => { const q = XY(lineA(br.line, br.b), br.b); return hypot(q.x - p.x, q.y - p.y) < 90; })) continue;
         const q = mirror(p);
         mines.push({ x: p.x, y: p.y, owner: -1, acc: 0, glow: 0 }, { x: q.x, y: q.y, owner: -1, acc: 0, glow: 0 });
         break;
       }
     }
-    const nearMine = (x, y, m) => mines.some(mn => Math.hypot(mn.x - x, mn.y - y) < m);
+    const nearMine = (x, y, m) => mines.some(mn => hypot(mn.x - x, mn.y - y) < m);
     // crop fields outside each town, and the same fields outside its twin
     fields = [];
     for (const t of towns) {
       if (!t.lead) continue;
       for (let k = 0, tries = 0, want = Math.round((t.capital ? 3 : 2) * land.fields); k < want && tries < 90; tries++) {
-        const ang = rand(0, Math.PI * 2), r = t.capital ? rand(100, 128) : rand(80, 112), x = t.x + Math.cos(ang) * r, y = t.y + Math.sin(ang) * r;
+        const ang = rand(0, Math.PI * 2), r = t.capital ? rand(100, 128) : rand(80, 112), x = t.x + cos(ang) * r, y = t.y + sin(ang) * r;
         if (x < 30 || y < 30 || x > W - 30 || y > H - 30 || nearRiver(x, y, 34) || !twinGap(x, y, 46)) continue;
-        if (towns.some(o => Math.hypot(o.x - x, o.y - y) < 72) || fields.some(f => Math.hypot(f.x - x, f.y - y) < 46) || nearMine(x, y, 50)) continue;
+        if (towns.some(o => hypot(o.x - x, o.y - y) < 72) || fields.some(f => hypot(f.x - x, f.y - y) < 46) || nearMine(x, y, 50)) continue;
         const f = makeField(x, y, t);
         fields.push(f, { ...f, ...mirror(f), town: t.twin, acc: rand(0, 1) }); k++;
       }
@@ -1029,22 +1042,22 @@ import * as THREE from 'three';
     hills = [];
     for (let tries = 0; tries < 300 && hills.length < pairs(land.hills[0]) * 2; tries++) {
       const r = rand(land.hills[1], land.hills[2]), { x, y } = blueSpot(60);
-      if (nearRiver(x, y, r + 30) || towns.some(t => Math.hypot(t.x - x, t.y - y) < r + 60) || hills.some(h => Math.hypot(h.x - x, h.y - y) < h.r + r)) continue;
-      if (fields.some(f => Math.hypot(f.x - x, f.y - y) < r + 20) || nearMine(x, y, r + 30) || !twinGap(x, y, 2 * r)) continue;
-      const pts = Array.from({ length: 20 }, (_, i) => 1 + 0.16 * Math.sin(i * 0.9 + x) + rand(-0.06, 0.06));
+      if (nearRiver(x, y, r + 30) || towns.some(t => hypot(t.x - x, t.y - y) < r + 60) || hills.some(h => hypot(h.x - x, h.y - y) < h.r + r)) continue;
+      if (fields.some(f => hypot(f.x - x, f.y - y) < r + 20) || nearMine(x, y, r + 30) || !twinGap(x, y, 2 * r)) continue;
+      const pts = Array.from({ length: 20 }, (_, i) => 1 + 0.16 * sin(i * 0.9 + x) + rand(-0.06, 0.06));
       hills.push({ x, y, r, pts }, { ...mirror({ x, y }), r, pts: turn(pts) });
     }
     // old dirt roads: each town to its nearest neighbours on the same bank, and each crossing to the nearest towns
     // (the bend depends only on the road's length, so a road and its mirror image bend alike)
     roads = [];
-    const link = (a, b) => { if (!roads.some(r => (r.a === a && r.b === b) || (r.a === b && r.b === a))) roads.push({ a, b, bend: 0.12 * Math.sin(Math.hypot(b.x - a.x, b.y - a.y) * 0.037) }); };
+    const link = (a, b) => { if (!roads.some(r => (r.a === a && r.b === b) || (r.a === b && r.b === a))) roads.push({ a, b, bend: 0.12 * sin(hypot(b.x - a.x, b.y - a.y) * 0.037) }); };
     for (const t of towns) {
       towns.filter(o => o !== t && regionOf(o.x, o.y) === regionOf(t.x, t.y))
-        .sort((p, q) => Math.hypot(p.x - t.x, p.y - t.y) - Math.hypot(q.x - t.x, q.y - t.y)).slice(0, land.roads ?? 2).forEach(o => link(t, o));
+        .sort((p, q) => hypot(p.x - t.x, p.y - t.y) - hypot(q.x - t.x, q.y - t.y)).slice(0, land.roads ?? 2).forEach(o => link(t, o));
     }
     for (const br of bridges) for (const sd of [-1, 1]) {
       const e = bridgeEnd(br, sd), reg = lines.indexOf(br.line) + (sd > 0 ? 1 : 0);
-      const near = towns.filter(o => regionOf(o.x, o.y) === reg).sort((p, q) => Math.hypot(p.x - e.x, p.y - e.y) - Math.hypot(q.x - e.x, q.y - e.y))[0];
+      const near = towns.filter(o => regionOf(o.x, o.y) === reg).sort((p, q) => hypot(p.x - e.x, p.y - e.y) - hypot(q.x - e.x, q.y - e.y))[0];
       if (near) link(near, e);
     }
     // crags: rocky outcrops nobody can cross, kept off the roads so the old ways stay open
@@ -1052,44 +1065,44 @@ import * as THREE from 'three';
     const roadPts = roads.flatMap(roadCurve);
     for (let tries = 0; tries < 400 && crags.length < pairs(land.crags || 0) * 2; tries++) {
       const r = rand(30, 46), { x, y } = blueSpot(70);
-      if (nearRiver(x, y, r + 40) || towns.some(t => Math.hypot(t.x - x, t.y - y) < r + 95) || nearMine(x, y, r + 50) || !twinGap(x, y, 2 * r + 50)) continue;
-      if (fields.some(f => Math.hypot(f.x - x, f.y - y) < r + 34) || crags.some(c => Math.hypot(c.x - x, c.y - y) < c.r + r + 50)) continue;
-      if (roadPts.some(q => Math.hypot(q.x - x, q.y - y) < r + 18) || nearCompass(x, y, r + 60)) continue;
+      if (nearRiver(x, y, r + 40) || towns.some(t => hypot(t.x - x, t.y - y) < r + 95) || nearMine(x, y, r + 50) || !twinGap(x, y, 2 * r + 50)) continue;
+      if (fields.some(f => hypot(f.x - x, f.y - y) < r + 34) || crags.some(c => hypot(c.x - x, c.y - y) < c.r + r + 50)) continue;
+      if (roadPts.some(q => hypot(q.x - x, q.y - y) < r + 18) || nearCompass(x, y, r + 60)) continue;
       crags.push({ x, y, r }, { ...mirror({ x, y }), r });
     }
     // marshes: boggy ground that slows everyone (a road across one is a causeway, and stays quick)
     marshes = [];
     for (let tries = 0; tries < 400 && marshes.length < pairs(land.marsh || 0) * 2; tries++) {
       const r = rand(42, 72), { x, y } = blueSpot(60);
-      if (nearRiver(x, y, -8) || towns.some(t => Math.hypot(t.x - x, t.y - y) < r + 80) || nearMine(x, y, r + 40) || !twinGap(x, y, 2 * r + 20)) continue;
-      if (fields.some(f => Math.hypot(f.x - x, f.y - y) < r + 26) || marshes.some(m => Math.hypot(m.x - x, m.y - y) < m.r + r + 20)) continue;
-      if (hills.some(h => Math.hypot(h.x - x, h.y - y) < h.r + r) || nearCompass(x, y, r + 50)) continue;
-      if (bridges.some(br => { const q = XY(lineA(br.line, br.b), br.b); return Math.hypot(q.x - x, q.y - y) < r + 70; })) continue;
-      const pts = Array.from({ length: 18 }, (_, i) => 1 + 0.18 * Math.sin(i * 1.3 + x) + rand(-0.08, 0.08));
+      if (nearRiver(x, y, -8) || towns.some(t => hypot(t.x - x, t.y - y) < r + 80) || nearMine(x, y, r + 40) || !twinGap(x, y, 2 * r + 20)) continue;
+      if (fields.some(f => hypot(f.x - x, f.y - y) < r + 26) || marshes.some(m => hypot(m.x - x, m.y - y) < m.r + r + 20)) continue;
+      if (hills.some(h => hypot(h.x - x, h.y - y) < h.r + r) || nearCompass(x, y, r + 50)) continue;
+      if (bridges.some(br => { const q = XY(lineA(br.line, br.b), br.b); return hypot(q.x - x, q.y - y) < r + 70; })) continue;
+      const pts = Array.from({ length: 18 }, (_, i) => 1 + 0.18 * sin(i * 1.3 + x) + rand(-0.08, 0.08));
       marshes.push({ x, y, r, pts }, { ...mirror({ x, y }), r, pts: turn(pts) });
     }
     rocks = [];
     for (let tries = 0; tries < 200 && rocks.length < (land.rocks ?? 22); tries++) {
       const { x, y } = blueSpot(20);
-      if (nearRiver(x, y, 20) || towns.some(t => Math.hypot(t.x - x, t.y - y) < 80) || fields.some(f => Math.hypot(f.x - x, f.y - y) < 36) || nearMine(x, y, 40) || nearCrag(x, y, 8) || inMarsh(x, y)) continue;
+      if (nearRiver(x, y, 20) || towns.some(t => hypot(t.x - x, t.y - y) < 80) || fields.some(f => hypot(f.x - x, f.y - y) < 36) || nearMine(x, y, 40) || nearCrag(x, y, 8) || inMarsh(x, y)) continue;
       const r = rand(2.5, 5);
       rocks.push({ x, y, r }, { ...mirror({ x, y }), r });
     }
     const tree = (x, y, r, pine) => { const t = { x, y, r, c: rng() < .5 ? COL.tree : COL.tree2, pine }; trees.push(t, { ...t, ...mirror(t) }); };
     for (let w = 0, tries = 0; w < pairs(land.woods[0]) && tries < 600; tries++) {   // proper woods, big enough to matter
       const R = rand(land.woods[1], land.woods[2]), { x, y } = blueSpot(80);
-      if (nearRiver(x, y, R + 20) || nearCrag(x, y, R + 20) || marshes.some(m => Math.hypot(m.x - x, m.y - y) < m.r + R) || !twinGap(x, y, 2 * R)) continue;
-      if (towns.some(t => Math.hypot(t.x - x, t.y - y) < R + 70) || fields.some(f => Math.hypot(f.x - x, f.y - y) < R + 30)) continue;
-      if (nearCompass(x, y, R + 40) || nearMine(x, y, R + 40) || hills.some(h => Math.hypot(h.x - x, h.y - y) < h.r + R)) continue;
-      for (let k = 0, n = Math.round(26 * (land.thick ?? 1) * (R / 60) ** (land.thick ? 2 : 0)); k < n; k++) { const a = rand(0, Math.PI * 2), d = Math.sqrt(rng()) * R; tree(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.85, rand(7, 12), rng() < 0.45); }
+      if (nearRiver(x, y, R + 20) || nearCrag(x, y, R + 20) || marshes.some(m => hypot(m.x - x, m.y - y) < m.r + R) || !twinGap(x, y, 2 * R)) continue;
+      if (towns.some(t => hypot(t.x - x, t.y - y) < R + 70) || fields.some(f => hypot(f.x - x, f.y - y) < R + 30)) continue;
+      if (nearCompass(x, y, R + 40) || nearMine(x, y, R + 40) || hills.some(h => hypot(h.x - x, h.y - y) < h.r + R)) continue;
+      for (let k = 0, n = Math.round(26 * (land.thick ?? 1) * (R / 60) ** (land.thick ? 2 : 0)); k < n; k++) { const a = rand(0, Math.PI * 2), d = Math.sqrt(rng()) * R; tree(x + cos(a) * d, y + sin(a) * d * 0.85, rand(7, 12), rng() < 0.45); }
       w++;
     }
     for (let tries = 0, want = Math.max(land.trees, trees.length + (land.scatter ?? 0)); tries < 3000 && trees.length < want; tries++) {
       const { x, y } = blueSpot(20);
       if (nearRiver(x, y, 26) || nearCrag(x, y, 14) || inMarsh(x, y) || !twinGap(x, y, 30)) continue;
-      if (towns.some(t => Math.hypot(t.x - x, t.y - y) < 80)) continue;
-      if (fields.some(f => Math.hypot(f.x - x, f.y - y) < 44) || nearCompass(x, y, 70) || nearMine(x, y, 45)) continue;
-      if (bridges.some(br => { const p = XY(lineA(br.line, br.b), br.b); return Math.hypot(p.x - x, p.y - y) < 120; })) continue;
+      if (towns.some(t => hypot(t.x - x, t.y - y) < 80)) continue;
+      if (fields.some(f => hypot(f.x - x, f.y - y) < 44) || nearCompass(x, y, 70) || nearMine(x, y, 45)) continue;
+      if (bridges.some(br => { const p = XY(lineA(br.line, br.b), br.b); return hypot(p.x - x, p.y - y) < 120; })) continue;
       for (let k = 0, n = 2 + (rng() * 3 | 0); k < n; k++) tree(x + rand(-14, 14), y + rand(-14, 14), rand(5, 11), rng() < 0.3);
     }
 
@@ -1103,8 +1116,8 @@ import * as THREE from 'three';
       for (let tries = 0; t.houses.length < 20 && tries < 600; tries++) {
         const ang = rand(0, Math.PI * 2);
         if (Math.abs(((ang - Math.PI / 2 + Math.PI * 3) % (Math.PI * 2)) - Math.PI) < 1.05) continue;
-        const r = rand(42, 68), hx = t.x + Math.cos(ang) * r, hy = t.y + Math.sin(ang) * r;
-        if (t.houses.some(h => Math.hypot(h.x - hx, h.y - hy) < 11.5) || bandAt(hx, hy)) continue;
+        const r = rand(42, 68), hx = t.x + cos(ang) * r, hy = t.y + sin(ang) * r;
+        if (t.houses.some(h => hypot(h.x - hx, h.y - hy) < 11.5) || bandAt(hx, hy)) continue;
         t.houses.push({ x: hx, y: hy, s: rand(7, 8.8), r });
       }
       t.houses.sort((a, b) => a.r - b.r);
@@ -1113,6 +1126,7 @@ import * as THREE from 'three';
     initTerritory();
     stats = { train: [D().blueTrain, D().redTrain], hp: [3, 3], cap: [0, 0], holdMult: [1, 1] };
     time = 0; week = 1; weekT = 0; aiT = 6; ink = 0; chargeCd = 0; closeMenu(); routesDrawn = 0; drawing = null;
+    uid = 0; routeSeq = 0; frameNo = 0; structT = 0;   // counters the battle depends on start afresh, so a game never depends on the one before
     alerts = []; tally = { trained: 0, lost: 0, killed: 0, captured: 0, fallen: 0 };
     structs = []; tracers = []; inventory = land.freeBridge ? { tower: 1, bridge: 1 } : { tower: 1 }; armed = null; plan = null;
     gold = 0; bought = {}; coins = []; redGold = 0; redBought = {}; redBuys = 0; redFreeBridge = land.freeBridge ? 1 : 0;
@@ -1123,7 +1137,7 @@ import * as THREE from 'three';
     view.z = 1; view.x = view.y = 0;
     FX.clear();
     buildStatic();
-    rng = Math.random;
+    rng = seeded(mapSeed * 104729 + 13);   // the battle's own stream, after the map's
     resize();
   }
 
@@ -1152,7 +1166,7 @@ import * as THREE from 'three';
       const R = t.r + 4, k = Math.ceil(R / FC);
       for (let j = Math.max(0, (t.y / FC | 0) - k); j <= Math.min(Math.ceil(H / FC) - 1, (t.y / FC | 0) + k); j++)
         for (let i = Math.max(0, (t.x / FC | 0) - k); i <= Math.min(fgw - 1, (t.x / FC | 0) + k); i++)
-          if (Math.hypot((i + 0.5) * FC - t.x, (j + 0.5) * FC - t.y) < R) forestGrid[i + j * fgw] = 1;
+          if (hypot((i + 0.5) * FC - t.x, (j + 0.5) * FC - t.y) < R) forestGrid[i + j * fgw] = 1;
     }
   }
   // Roads: soldiers march 40% faster on them, and the enemy plans its routes along them.
@@ -1160,7 +1174,7 @@ import * as THREE from 'three';
   let roadGrid = null, rgw = 0;
   function roadCurve(r) {
     const mx = (r.a.x + r.b.x) / 2 - (r.b.y - r.a.y) * r.bend, my = (r.a.y + r.b.y) / 2 + (r.b.x - r.a.x) * r.bend;
-    const n = Math.max(4, Math.ceil(Math.hypot(r.b.x - r.a.x, r.b.y - r.a.y) / 6)), pts = [];
+    const n = Math.max(4, Math.ceil(hypot(r.b.x - r.a.x, r.b.y - r.a.y) / 6)), pts = [];
     for (let i = 0; i <= n; i++) {
       const t = i / n, u = 1 - t;
       pts.push({ x: u * u * r.a.x + 2 * u * t * mx + t * t * r.b.x, y: u * u * r.a.y + 2 * u * t * my + t * t * r.b.y });
@@ -1176,7 +1190,7 @@ import * as THREE from 'three';
       for (const p of r.pts) {
         for (let j = Math.max(0, (p.y - 6) / RC | 0); j <= Math.min(rgh - 1, (p.y + 6) / RC | 0); j++)
           for (let i = Math.max(0, (p.x - 6) / RC | 0); i <= Math.min(rgw - 1, (p.x + 6) / RC | 0); i++)
-            if (Math.hypot((i + 0.5) * RC - p.x, (j + 0.5) * RC - p.y) < 7) roadGrid[i + j * rgw] = 1;
+            if (hypot((i + 0.5) * RC - p.x, (j + 0.5) * RC - p.y) < 7) roadGrid[i + j * rgw] = 1;
       }
     }
   }
@@ -1192,13 +1206,13 @@ import * as THREE from 'three';
     const idOf = p => {
       const ti = towns.indexOf(p);
       if (ti >= 0) return 'T' + ti;
-      for (let i = 0; i < bridges.length; i++) for (const sd of [-1, 1]) { const e = bridgeEnd(bridges[i], sd); if (Math.hypot(e.x - p.x, e.y - p.y) < 2) return 'B' + i + sd; }
+      for (let i = 0; i < bridges.length; i++) for (const sd of [-1, 1]) { const e = bridgeEnd(bridges[i], sd); if (hypot(e.x - p.x, e.y - p.y) < 2) return 'B' + i + sd; }
       return null;
     };
     const N = nodes.length, edges = Array.from({ length: N }, () => []);
     for (let i = 0; i < N; i++) for (let j = 0; j < i; j++) {
       if (nodes[i].side !== nodes[j].side) continue;
-      const d = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y);
+      const d = hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y);
       edges[i].push({ to: j, cost: d }); edges[j].push({ to: i, cost: d });
     }
     for (const r of roads) {
@@ -1234,14 +1248,14 @@ import * as THREE from 'three';
 
   const inForest = (x, y) => forestGrid[(x / FC | 0) + (y / FC | 0) * fgw] === 1;
   function inMarsh(x, y) {
-    for (const m of marshes) if (Math.hypot(x - m.x, (y - m.y) / 0.8) < m.r * 0.92) return true;
+    for (const m of marshes) if (hypot(x - m.x, (y - m.y) / 0.8) < m.r * 0.92) return true;
     return false;
   }
   const MARSH_SPEED = 0.55;
-  const nearCrag = (x, y, m) => crags.some(c => Math.hypot(c.x - x, c.y - y) < c.r + m);
+  const nearCrag = (x, y, m) => crags.some(c => hypot(c.x - x, c.y - y) < c.r + m);
   function hillLevel(x, y) {   // 0 = flat ground, 3 = hilltop
     for (const h of hills) {
-      const q = Math.hypot(x - h.x, (y - h.y) / 0.8) / h.r;
+      const q = hypot(x - h.x, (y - h.y) / 0.8) / h.r;
       if (q < 1) return q < 0.36 ? 3 : q < 0.68 ? 2 : 1;
     }
     return 0;
@@ -1285,7 +1299,7 @@ import * as THREE from 'three';
     for (const h of hills) {
       [[1, '#3a413a'], [0.68, '#3f463e'], [0.36, '#444b42']].forEach(([k, col]) => {
         c.beginPath();
-        h.pts.forEach((m, i) => { const a = i / h.pts.length * Math.PI * 2, rr2 = h.r * k * m; const x = h.x + Math.cos(a) * rr2, y = h.y + Math.sin(a) * rr2 * 0.8; i ? c.lineTo(x, y) : c.moveTo(x, y); });
+        h.pts.forEach((m, i) => { const a = i / h.pts.length * Math.PI * 2, rr2 = h.r * k * m; const x = h.x + cos(a) * rr2, y = h.y + sin(a) * rr2 * 0.8; i ? c.lineTo(x, y) : c.moveTo(x, y); });
         c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = 'rgba(12,15,13,.4)'; c.lineWidth = 1; c.stroke();
       });
     }
@@ -1298,11 +1312,11 @@ import * as THREE from 'three';
     }
     // marshes: dark wet ground with standing pools
     for (const m of marshes) {
-      const blob = (k, jit) => { c.beginPath(); m.pts.forEach((q, i) => { const a = i / m.pts.length * Math.PI * 2, r = m.r * k * q * (1 + jit * Math.sin(i * 2.1 + m.x)); const x = m.x + Math.cos(a) * r, y = m.y + Math.sin(a) * r * 0.8; i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.closePath(); };
+      const blob = (k, jit) => { c.beginPath(); m.pts.forEach((q, i) => { const a = i / m.pts.length * Math.PI * 2, r = m.r * k * q * (1 + jit * sin(i * 2.1 + m.x)); const x = m.x + cos(a) * r, y = m.y + sin(a) * r * 0.8; i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.closePath(); };
       blob(1, 0); c.fillStyle = '#2a3330'; c.fill(); c.strokeStyle = 'rgba(120,130,90,.3)'; c.lineWidth = 1.5; c.stroke();
       blob(0.82, 0.05); c.fillStyle = '#26302d'; c.fill();
       for (let i = 0; i < 12; i++) {
-        const a = rand(0, Math.PI * 2), d = rand(0, m.r * 0.65), x = m.x + Math.cos(a) * d, y = m.y + Math.sin(a) * d * 0.8;
+        const a = rand(0, Math.PI * 2), d = rand(0, m.r * 0.65), x = m.x + cos(a) * d, y = m.y + sin(a) * d * 0.8;
         c.beginPath(); c.ellipse(x, y, rand(6, 15), rand(3.5, 8), rand(0, 3), 0, Math.PI * 2); c.fillStyle = '#31525f'; c.fill();
         c.strokeStyle = 'rgba(20,26,24,.5)'; c.lineWidth = 1; c.stroke();
       }
@@ -1348,8 +1362,8 @@ import * as THREE from 'three';
       const ca = lineA(br.line, br.b), hw = hwAt(br.line, br.b);
       c.fillStyle = '#4c4a40';
       c.beginPath();
-      for (let a = ca - hw - 4; a <= ca + hw + 4; a += 4) { const q = XY(a, br.b - br.span + Math.sin(a * 0.3) * 2); a === ca - hw - 4 ? c.moveTo(q.x, q.y) : c.lineTo(q.x, q.y); }
-      for (let a = ca + hw + 4; a >= ca - hw - 4; a -= 4) { const q = XY(a, br.b + br.span + Math.sin(a * 0.3) * 2); c.lineTo(q.x, q.y); }
+      for (let a = ca - hw - 4; a <= ca + hw + 4; a += 4) { const q = XY(a, br.b - br.span + sin(a * 0.3) * 2); a === ca - hw - 4 ? c.moveTo(q.x, q.y) : c.lineTo(q.x, q.y); }
+      for (let a = ca + hw + 4; a >= ca - hw - 4; a -= 4) { const q = XY(a, br.b + br.span + sin(a * 0.3) * 2); c.lineTo(q.x, q.y); }
       c.closePath(); c.fill();
     }
     // compass rose
@@ -1360,9 +1374,9 @@ import * as THREE from 'three';
     for (let i = 0; i < 4; i++) {
       const a = i * Math.PI / 2 - Math.PI / 2, L = i === 0 ? 17 : 13;
       c.beginPath();
-      c.moveTo(cp.x + Math.cos(a) * L, cp.y + Math.sin(a) * L);
-      c.lineTo(cp.x + Math.cos(a + Math.PI / 2) * 3.5, cp.y + Math.sin(a + Math.PI / 2) * 3.5);
-      c.lineTo(cp.x + Math.cos(a - Math.PI / 2) * 3.5, cp.y + Math.sin(a - Math.PI / 2) * 3.5);
+      c.moveTo(cp.x + cos(a) * L, cp.y + sin(a) * L);
+      c.lineTo(cp.x + cos(a + Math.PI / 2) * 3.5, cp.y + sin(a + Math.PI / 2) * 3.5);
+      c.lineTo(cp.x + cos(a - Math.PI / 2) * 3.5, cp.y + sin(a - Math.PI / 2) * 3.5);
       c.closePath(); c.fillStyle = i === 0 ? '#d8ddd4' : '#6f7871'; c.fill();
     }
     c.fillStyle = '#d8ddd4'; c.font = '600 9px Lexend, system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'bottom';
@@ -1375,7 +1389,7 @@ import * as THREE from 'three';
     src.acc += dt * rate;
     if (src.acc >= 1) {
       src.acc -= 1; gold++;
-      if (coins.length < 60) coins.push({ x: src.x + rand(-6, 6), y: src.y - 6, t: 0 });
+      if (coins.length < 60) coins.push({ x: src.x + fxRand(-6, 6), y: src.y - 6, t: 0 });
     }
   }
   function goldPerSecond() {
@@ -1420,7 +1434,7 @@ import * as THREE from 'three';
     const k = Math.ceil(R / TC), ci = x / TC | 0, cj = y / TC | 0;
     for (let j = Math.max(0, cj - k); j <= Math.min(th - 1, cj + k); j++)
       for (let i = Math.max(0, ci - k); i <= Math.min(tw - 1, ci + k); i++) {
-        const d = Math.hypot((i + 0.5) * TC - x, (j + 0.5) * TC - y);
+        const d = hypot((i + 0.5) * TC - x, (j + 0.5) * TC - y);
         if (d < R) terrTmp[i + j * tw] += v * (1 - d / R) ** 2;
       }
   }
@@ -1470,7 +1484,7 @@ import * as THREE from 'three';
     const out = [{ x: pts[0].x, y: pts[0].y }];
     let carry = 0;
     for (let i = 1; i < pts.length; i++) {
-      const a = pts[i - 1], b = pts[i], L = Math.hypot(b.x - a.x, b.y - a.y);
+      const a = pts[i - 1], b = pts[i], L = hypot(b.x - a.x, b.y - a.y);
       let d = step - carry;
       while (d <= L) { out.push({ x: a.x + (b.x - a.x) * d / L, y: a.y + (b.y - a.y) * d / L }); d += step; }
       carry = L - (d - step);
@@ -1478,7 +1492,7 @@ import * as THREE from 'three';
     const e = pts[pts.length - 1]; out.push({ x: e.x, y: e.y });
     return out;
   }
-  function routeLen(pts) { let L = 0; for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y); return L; }
+  function routeLen(pts) { let L = 0; for (let i = 1; i < pts.length; i++) L += hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y); return L; }
   function pathPts(x0, y0, x1, y1, via) {
     const viaRoads = roadPath(x0, y0, x1, y1, via);
     if (viaRoads && viaRoads.length > 1) return resample(viaRoads, 14);
@@ -1508,11 +1522,11 @@ import * as THREE from 'three';
 
   // ---------- units ----------
   function spawn(t) {
-    const a = rand(0, Math.PI * 2), r = rand(0, 10), ang = rand(0, Math.PI * 2), rad = 20 + Math.sqrt(Math.random()) * 16;
+    const a = rand(0, Math.PI * 2), r = rand(0, 10), ang = rand(0, Math.PI * 2), rad = 20 + Math.sqrt(rng()) * 16;
     units.push({
-      x: t.x + Math.cos(a) * r, y: t.y + Math.sin(a) * r, vx: 0, vy: 0, team: t.owner, kind: t.kind, hp: K_HP[t.kind] + stats.hp[t.owner] - 3, boost: 0,
+      x: t.x + cos(a) * r, y: t.y + sin(a) * r, vx: 0, vy: 0, team: t.owner, kind: t.kind, hp: K_HP[t.kind] + stats.hp[t.owner] - 3, boost: 0,
       town: t, route: null, rid: -1, ri: 0, arrived: false, cd: 0, flash: 0, enemy: null, calm: 0,
-      ox: Math.cos(ang) * rad, oy: Math.sin(ang) * rad, id: uid++, dead: false
+      ox: cos(ang) * rad, oy: sin(ang) * rad, id: uid++, dead: false
     });
     if (t.owner === 0) tally.trained++;
   }
@@ -1590,7 +1604,7 @@ import * as THREE from 'three';
   function kill(e) {
     e.dead = true;
     if (e.team === 0) tally.lost++; else tally.killed++;
-    scars.push({ x: e.x + rand(-1.5, 1.5), y: e.y + rand(-1.5, 1.5), born: time, team: e.team, r: rand(1.6, 3) });
+    scars.push({ x: e.x + fxRand(-1.5, 1.5), y: e.y + fxRand(-1.5, 1.5), born: time, team: e.team, r: fxRand(1.6, 3) });
     if (scars.length > 1500) scars.shift();
     deaths.push({ x: e.x, y: e.y, team: e.team, t: 0 });
     puff(e.x, e.y, 'rgba(46,55,53,.35)', 9);
@@ -1626,7 +1640,7 @@ import * as THREE from 'three';
     u.dead = true;
     t.hold -= 1; t.hit = 0.6;
     puff(t.x, t.y, COL.team[u.team], 20);
-    FX.dust(t.x + rand(-10, 10), t.y + rand(-10, 10), 2);
+    FX.dust(t.x + fxRand(-10, 10), t.y + fxRand(-10, 10), 2);
     if (t.capital && t.owner === 0) Sound.horn();   // your capital is under attack (rate-limited inside)
     if (t.hold <= 0) capture(t, u.team);
   }
@@ -1638,7 +1652,7 @@ import * as THREE from 'three';
     t.hold = t.holdMax * 0.4;
     t.route = null; t.spawnT = 2;
     for (const u of units) if (u.town === t && u.team !== team) u.town = null;
-    for (let i = 0; i < 10; i++) puff(t.x + rand(-14, 14), t.y + rand(-14, 14), COL.team[team], rand(16, 30));
+    for (let i = 0; i < 10; i++) puff(t.x + fxRand(-14, 14), t.y + fxRand(-14, 14), COL.team[team], fxRand(16, 30));
     waves.push({ x: t.x, y: t.y, t: 0, color: COL.team[team] });
     FX.capture(t, team); Sound.crumble();
     if (prev === 0) FX.shake(0.7);
@@ -1695,7 +1709,7 @@ import * as THREE from 'three';
       else if (inMarsh(u.x, u.y)) spd *= MARSH_SPEED;
       else if (onFord(u.x, u.y)) spd *= 0.45;
       if (u.enemy) {
-        const e = u.enemy, dx = e.x - u.x, dy = e.y - u.y, d = Math.hypot(dx, dy) || 1;
+        const e = u.enemy, dx = e.x - u.x, dy = e.y - u.y, d = hypot(dx, dy) || 1;
         if (u.kind === 1 && d >= 8.5 && d < 44 + 10 * hillLevel(u.x, u.y)) {   // archers stop and shoot
           spd *= 0.08;
           if (u.cd <= 0) { u.cd = rand(0.9, 1.25); strike(u, e, dx / d, dy / d, allies, true); }
@@ -1709,16 +1723,16 @@ import * as THREE from 'three';
       } else {
         u.calm += dt;
         [tx, ty] = nav(u.x, u.y, g.x, g.y);
-        if (g.hold) { const d = Math.hypot(g.x - u.x, g.y - u.y); if (d < 10) spd *= d / 10; }
+        if (g.hold) { const d = hypot(g.x - u.x, g.y - u.y); if (d < 10) spd *= d / 10; }
       }
       let dx = tx - u.x, dy = ty - u.y;
-      const dl = Math.hypot(dx, dy) || 1;
+      const dl = hypot(dx, dy) || 1;
       for (const c of crags) {   // a crag in the way: turn along its face, on whichever side the goal lies
-        const ox = c.x - u.x, oy = c.y - u.y, od = Math.hypot(ox, oy) || 1;
+        const ox = c.x - u.x, oy = c.y - u.y, od = hypot(ox, oy) || 1;
         if (od > c.r + 30 || od > dl + c.r) continue;
         const ux = ox / od, uy = oy / od, along = (dx * ux + dy * uy) / dl;
         if (along <= 0 || Math.abs(dx * oy - dy * ox) / dl > c.r + 6) continue;
-        let px = dx / dl - along * ux, py = dy / dl - along * uy, pl = Math.hypot(px, py);
+        let px = dx / dl - along * ux, py = dy / dl - along * uy, pl = hypot(px, py);
         if (pl < 0.05) { const s = u.id % 2 ? 1 : -1; px = -uy * s; py = ux * s; pl = 1; }
         dx = px / pl * dl; dy = py / pl * dl;
       }
@@ -1781,7 +1795,7 @@ import * as THREE from 'three';
       for (const s of structs) {
         if (countNear(1 - s.team, s.x, s.y, 50) >= 8 && countNear(s.team, s.x, s.y, 80) === 0) {
           s.team = 1 - s.team;
-          for (let i = 0; i < 6; i++) puff(s.x + rand(-10, 10), s.y + rand(-10, 10), COL.team[s.team], rand(14, 24));
+          for (let i = 0; i < 6; i++) puff(s.x + fxRand(-10, 10), s.y + fxRand(-10, 10), COL.team[s.team], fxRand(14, 24));
           toast(s.team === 0 ? `You took an enemy ${ITEM[s.type].toLowerCase()}` : `Your ${ITEM[s.type].toLowerCase()} was taken`, s.team === 0 ? 'good' : 'bad');
         }
       }
@@ -1797,7 +1811,7 @@ import * as THREE from 'three';
     let best = null, bs = Infinity;
     for (const o of towns) {
       if (o.owner === 1) continue;
-      const d = Math.hypot(o.x - from.x, o.y - from.y);
+      const d = hypot(o.x - from.x, o.y - from.y);
       const guards = o.owner === 0 ? countNear(0, o.x, o.y, 120) : 0;
       const s = d * (0.6 + o.hold / o.holdMax) * (1 + guards / 8) * (o.capital ? 1.25 : 1) * rand(0.85, 1.15);
       if (s < bs) { bs = s; best = o; }
@@ -1809,7 +1823,7 @@ import * as THREE from 'three';
     for (const u of units) if (u.team === 0 && !u.dead) n[u.kind]++;
     const common = n.indexOf(Math.max(...n));
     const counter = [1, 2, 0][common];   // archers vs spears, cavalry vs archers, spears vs cavalry
-    for (const t of red) t.kind = Math.random() < D().counter ? counter : (Math.random() * 3 | 0);
+    for (const t of red) t.kind = rng() < D().counter ? counter : (rng() * 3 | 0);
   }
   // A bridge of its own: where a river stands between the enemy and its target with no way across (or while it
   // still has the free bridge some maps give), it builds one where it best links home and target.
@@ -1821,7 +1835,7 @@ import * as THREE from 'three';
       const b = bn * LB;
       if (hwAt(L, b) > L.hw * 1.25 || bridges.some(br => br.line === L && Math.abs(br.b - b) < 90)) continue;
       const br = { line: L, b, span: 20 }, s = sideOfLine(L, from.x, from.y), en = bridgeEnd(br, s), ex = bridgeEnd(br, -s);
-      const d = Math.hypot(en.x - from.x, en.y - from.y) + Math.hypot(to.x - ex.x, to.y - ex.y);
+      const d = hypot(en.x - from.x, en.y - from.y) + hypot(to.x - ex.x, to.y - ex.y);
       if (d < bs) { bs = d; best = br; }
     }
     if (!best) return null;
@@ -1844,11 +1858,11 @@ import * as THREE from 'three';
     if (L && (!main || redFreeBridge)) main = aiBridge(L, home, target) || main;
     let decoy = null, decoyTarget = null;
     const others = main ? bridges.filter(b => b !== main && b.line === main.line) : [];
-    if (others.length && red.length >= 3 && Math.random() < 0.45) {
-      decoy = others[Math.random() * others.length | 0];
+    if (others.length && red.length >= 3 && rng() < 0.45) {
+      decoy = others[rng() * others.length | 0];
       const ex = bridgeEnd(decoy, blueSide());
       let bd = Infinity;
-      for (const o of towns) if (o.owner !== 1) { const d = Math.hypot(o.x - ex.x, o.y - ex.y); if (d < bd) { bd = d; decoyTarget = o; } }
+      for (const o of towns) if (o.owner !== 1) { const d = hypot(o.x - ex.x, o.y - ex.y); if (d < bd) { bd = d; decoyTarget = o; } }
     }
     plan = { target, main, decoy, decoyTarget, phase: main ? 'mass' : 'strike', t: time, t2: time };
   }
@@ -1859,7 +1873,7 @@ import * as THREE from 'three';
   }
   function setPoint(t, p) {
     const r = t.route, end = r && r.pts[r.pts.length - 1];
-    if (r && !r.target && Math.hypot(end.x - p.x, end.y - p.y) < 4) return;
+    if (r && !r.target && hypot(end.x - p.x, end.y - p.y) < 4) return;
     t.route = makeRoute(t, null, p);
   }
   function aiStep(dt) {
@@ -1873,7 +1887,7 @@ import * as THREE from 'three';
       const home = red.find(t => t.capital) || red[0], rh = regionOf(home.x, home.y);
       const across = towns.filter(t => t.owner !== 1 && regionOf(t.x, t.y) !== rh);
       if (across.length && (time > 30 || !towns.some(t => t.owner !== 1 && regionOf(t.x, t.y) === rh))) {
-        const to = across.reduce((a, t) => Math.hypot(t.x - home.x, t.y - home.y) < Math.hypot(a.x - home.x, a.y - home.y) ? t : a);
+        const to = across.reduce((a, t) => hypot(t.x - home.x, t.y - home.y) < hypot(a.x - home.x, a.y - home.y) ? t : a);
         if (aiBridge(nextLine(home.x, home.y, to.x, to.y), home, to)) newPlan();
       }
     }
@@ -1908,20 +1922,20 @@ import * as THREE from 'three';
       let bd = Infinity;
       for (const m of wanted) for (const t of red) {
         if (t.capital) continue;
-        const d = Math.hypot(t.x - m.x, t.y - m.y);
+        const d = hypot(t.x - m.x, t.y - m.y);
         if (d < bd) { bd = d; minerTown = t; minerSpot = m; }
       }
     }
     let decoyTown = null;
     if (plan.decoy) {
       let bd = Infinity; const st = stagingPoint(plan.decoy);
-      for (const t of red) if (!t.capital) { const d = Math.hypot(t.x - st.x, t.y - st.y); if (d < bd) { bd = d; decoyTown = t; } }
+      for (const t of red) if (!t.capital) { const d = hypot(t.x - st.x, t.y - st.y); if (d < bd) { bd = d; decoyTown = t; } }
     }
     for (const t of red) {
       if ((threat.get(t) || 0) > 4) { t.route = null; continue; }
       let helping = null;
       for (const [o, n] of threat) if (o !== t && n > 6) { helping = o; break; }
-      if (helping && Math.random() < 0.5) { setRoute(t, helping); continue; }
+      if (helping && rng() < 0.5) { setRoute(t, helping); continue; }
       if (t.capital && red.length < 4 && week < 3) { t.route = null; continue; }
       const onRedSide = sideOf(t.x, t.y) === redSide();
       if (t === minerTown && t !== decoyTown && plan.phase === 'mass') { setPoint(t, { x: minerSpot.x, y: minerSpot.y }); continue; }
@@ -1953,9 +1967,9 @@ import * as THREE from 'three';
   function aiSpotOk(p, side) {
     if (p.x < 30 || p.y < 30 || p.x > W - 30 || p.y > H - 30) return false;
     if (riverGap(p.x, p.y) < 14) return false;
-    if (towns.some(t => Math.hypot(t.x - p.x, t.y - p.y) < 55) || structs.some(st => Math.hypot(st.x - p.x, st.y - p.y) < 40)) return false;
-    if (fields.some(f => Math.hypot(f.x - p.x, f.y - p.y) < 40) || mines.some(m => Math.hypot(m.x - p.x, m.y - p.y) < 34)) return false;
-    return sideOf(p.x, p.y) === side || towns.some(t => t.owner === 1 && Math.hypot(t.x - p.x, t.y - p.y) < 160);
+    if (towns.some(t => hypot(t.x - p.x, t.y - p.y) < 55) || structs.some(st => hypot(st.x - p.x, st.y - p.y) < 40)) return false;
+    if (fields.some(f => hypot(f.x - p.x, f.y - p.y) < 40) || mines.some(m => hypot(m.x - p.x, m.y - p.y) < 34)) return false;
+    return sideOf(p.x, p.y) === side || towns.some(t => t.owner === 1 && hypot(t.x - p.x, t.y - p.y) < 160);
   }
   function aiSpot(k) {
     const red = towns.filter(t => t.owner === 1);
@@ -1966,8 +1980,8 @@ import * as THREE from 'three';
     }
     if (k === 'farm') {
       for (let tries = 0; tries < 40; tries++) {
-        const t = red[Math.random() * red.length | 0], a = rand(0, Math.PI * 2), r = rand(80, 120);
-        const p = { x: t.x + Math.cos(a) * r, y: t.y + Math.sin(a) * r };
+        const t = red[rng() * red.length | 0], a = rand(0, Math.PI * 2), r = rand(80, 120);
+        const p = { x: t.x + cos(a) * r, y: t.y + sin(a) * r };
         if (aiSpotOk(p, sideOf(t.x, t.y))) return { ...p, town: t };
       }
       return null;
@@ -1976,7 +1990,7 @@ import * as THREE from 'three';
     if (!anchors.length) anchors.push(...red);
     if (plan && plan.main) anchors.unshift(stagingPoint(plan.main), stagingPoint(plan.main));
     for (let tries = 0; tries < 40; tries++) {
-      const a = anchors[Math.random() * anchors.length | 0];
+      const a = anchors[rng() * anchors.length | 0];
       const p = { x: a.x + rand(-60, 60), y: a.y + rand(-60, 60) };
       if (aiSpotOk(p, redSide())) return p;
     }
@@ -1994,19 +2008,19 @@ import * as THREE from 'three';
     else if (k === 'farm') { fields.push(makeField(spot.x, spot.y, spot.town)); buildStatic(); }
     else structs.push({ type: k, x: spot.x, y: spot.y, team: 1, cd: 0 });
     const at = spot.town && k === 'barracks' ? spot.town : spot;
-    for (let i = 0; i < 6; i++) puff(at.x + rand(-8, 8), at.y + rand(-8, 8), COL.team[1], rand(12, 22));
+    for (let i = 0; i < 6; i++) puff(at.x + fxRand(-8, 8), at.y + fxRand(-8, 8), COL.team[1], fxRand(12, 22));
   }
 
   // Each week the enemy also fortifies one of its bridgeheads.
   function aiBuild() {
     for (let tries = 0; tries < 20; tries++) {
-      const br = bridges[Math.random() * bridges.length | 0], t = !br && towns.filter(o => o.owner === 1)[0];
+      const br = bridges[rng() * bridges.length | 0], t = !br && towns.filter(o => o.owner === 1)[0];
       const p = br ? XY(lineA(br.line, br.b) + redSide() * (hwAt(br.line, br.b) + rand(80, 140)), br.b + rand(-60, 60))
         : t ? XY(A(t.x, t.y) - redSide() * rand(60, 140), B(t.x, t.y) + rand(-80, 80)) : null;   // no crossings: guard the front of a town
       if (!p) return;
       if (p.x < 20 || p.y < 20 || p.x > W - 20 || p.y > H - 20) continue;
       if (riverGap(p.x, p.y) < 10) continue;
-      if (towns.some(t => Math.hypot(t.x - p.x, t.y - p.y) < 40) || structs.some(s => Math.hypot(s.x - p.x, s.y - p.y) < 40)) continue;
+      if (towns.some(t => hypot(t.x - p.x, t.y - p.y) < 40) || structs.some(s => hypot(s.x - p.x, s.y - p.y) < 40)) continue;
       structs.push({ type: week % 2 ? 'fort' : 'tower', x: p.x, y: p.y, team: 1, cd: 0 });
       return;
     }
@@ -2026,7 +2040,9 @@ import * as THREE from 'three';
   function offerUpgrades() {
     state = 'upgrade';
     Sound.week(); Sound.clash(0);
-    const shuffled = UPGRADES.filter(u => u.key !== 'bridge' || hasRiver()).sort(() => Math.random() - 0.5);
+    // a Fisher-Yates shuffle: sorting by a random comparison comes out differently in different browsers
+    const shuffled = UPGRADES.filter(u => u.key !== 'bridge' || hasRiver());
+    for (let i = shuffled.length - 1; i > 0; i--) { const j = rng() * (i + 1) | 0; [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
     const first = shuffled.find(u => u.place);
     const pool = [first, shuffled.find(u => u !== first)];
     $('upLabel').textContent = `Week ${week} complete`;
@@ -2052,6 +2068,29 @@ import * as THREE from 'three';
     box.firstChild.focus();
   }
 
+  // A fingerprint of the game state, part by part. Two copies of the same game (two players' browsers) must
+  // always agree on it; the parts tell where they first differ.
+  function checksum() {
+    const f = new Float64Array(1), w = new Uint32Array(f.buffer);
+    const hash = vals => {
+      let h = 2166136261;
+      const mix = n => { h = Math.imul(h ^ n, 16777619) >>> 0; };
+      for (const v of vals) {
+        if (typeof v === 'string') { for (let i = 0; i < v.length; i++) mix(v.charCodeAt(i)); continue; }
+        f[0] = v == null ? -0.5 : +v; mix(w[0]); mix(w[1]);
+      }
+      return h.toString(16);
+    };
+    return {
+      clock: hash([time, week, weekT]),
+      towns: hash(towns.flatMap(t => [t.name, t.owner, t.hold, t.kind, t.barracks || 0, t.spawnT])),
+      units: hash(units.flatMap(u => [u.team, u.kind, u.x, u.y, u.hp])),
+      economy: hash([gold, redGold, ink, redBuys, ...stats.train, ...stats.hp]),
+      buildings: hash(structs.flatMap(s => [s.type, s.team, s.x, s.y]).concat(bridges.map(b => b.b))),
+      enemyPlan: hash(plan ? [plan.phase, plan.target.name, plan.main ? plan.main.b : -1, plan.decoy ? plan.decoy.b : -1] : []),
+    };
+  }
+
   // ---------- placing items from the tray ----------
   function placeCheck(kind, p) {
     if (p.x < 10 || p.y < 10 || p.x > W - 10 || p.y > H - 10) return 'Place it inside the map';
@@ -2068,17 +2107,17 @@ import * as THREE from 'three';
     if (kind === 'barracks') return townAt(p.x, p.y, 30, 0) ? null : 'Barracks go on one of your towns';
     if (kind === 'farm') {
       if (riverGap(p.x, p.y) < 24) return 'Too close to the water';
-      if (!towns.some(t => t.owner === 0 && Math.hypot(t.x - p.x, t.y - p.y) < 150)) return 'Farms go next to one of your towns';
-      if (towns.some(t => Math.hypot(t.x - p.x, t.y - p.y) < 60)) return 'Too close to the town';
-      if (fields.some(f => Math.hypot(f.x - p.x, f.y - p.y) < 40) || mines.some(m => Math.hypot(m.x - p.x, m.y - p.y) < 50)) return 'Too close to other fields';
+      if (!towns.some(t => t.owner === 0 && hypot(t.x - p.x, t.y - p.y) < 150)) return 'Farms go next to one of your towns';
+      if (towns.some(t => hypot(t.x - p.x, t.y - p.y) < 60)) return 'Too close to the town';
+      if (fields.some(f => hypot(f.x - p.x, f.y - p.y) < 40) || mines.some(m => hypot(m.x - p.x, m.y - p.y) < 50)) return 'Too close to other fields';
       return null;
     }
     if (riverGap(p.x, p.y) < 8) return 'Too close to the water';
-    if (crags.some(c => Math.hypot(c.x - p.x, c.y - p.y) < c.r + 12)) return 'Too close to the rocks';
-    const own = sideOf(p.x, p.y) === blueSide() || towns.some(t => t.owner === 0 && Math.hypot(t.x - p.x, t.y - p.y) < 160);
+    if (crags.some(c => hypot(c.x - p.x, c.y - p.y) < c.r + 12)) return 'Too close to the rocks';
+    const own = sideOf(p.x, p.y) === blueSide() || towns.some(t => t.owner === 0 && hypot(t.x - p.x, t.y - p.y) < 160);
     if (!own) return 'Build on your side of the river or near your towns';
-    if (towns.some(t => Math.hypot(t.x - p.x, t.y - p.y) < 34)) return 'Too close to a town';
-    if (structs.some(s => Math.hypot(s.x - p.x, s.y - p.y) < 30)) return 'Too close to another building';
+    if (towns.some(t => hypot(t.x - p.x, t.y - p.y) < 34)) return 'Too close to a town';
+    if (structs.some(s => hypot(s.x - p.x, s.y - p.y) < 30)) return 'Too close to another building';
     return null;
   }
   function place(kind, p) {
@@ -2089,7 +2128,7 @@ import * as THREE from 'three';
       }
       waves.push({ x: p.x, y: p.y, t: 0, color: COL.team[0] });
       for (let i = 0; i < 3; i++) puffs.push({ x: p.x, y: p.y, t: -i * 0.08, color: COL.team[0], size: 140 });
-      for (let i = 0; i < 18; i++) { const a = i / 18 * Math.PI * 2; FX.dust(p.x + Math.cos(a) * 60, p.y + Math.sin(a) * 60, 1); }
+      for (let i = 0; i < 18; i++) { const a = i / 18 * Math.PI * 2; FX.dust(p.x + cos(a) * 60, p.y + sin(a) * 60, 1); }
       chargeCd = CHARGE_CD; armed = null; renderTray();
       Sound.charge(); tutorialDid('charge');
       toast(n ? `Charge! ${n} soldiers crash into the enemy` : 'No soldiers in range', n ? 'good' : '');
@@ -2099,12 +2138,12 @@ import * as THREE from 'three';
     else if (kind === 'barracks') { const t = townAt(p.x, p.y, 30, 0); t.barracks++; toast(`${t.name} now trains faster`, 'good'); }
     else if (kind === 'farm') {
       let near = null, bd = Infinity;
-      for (const t of towns) if (t.owner === 0) { const d = Math.hypot(t.x - p.x, t.y - p.y); if (d < bd) { bd = d; near = t; } }
+      for (const t of towns) if (t.owner === 0) { const d = hypot(t.x - p.x, t.y - p.y); if (d < bd) { bd = d; near = t; } }
       fields.push(makeField(p.x, p.y, near)); buildStatic();
       toast(`New farm for ${near.name}`, 'good');
     }
     else structs.push({ type: kind, x: p.x, y: p.y, team: 0, cd: 0 });
-    for (let i = 0; i < 6; i++) puff(p.x + rand(-8, 8), p.y + rand(-8, 8), COL.team[0], rand(12, 22));
+    for (let i = 0; i < 6; i++) puff(p.x + fxRand(-8, 8), p.y + fxRand(-8, 8), COL.team[0], fxRand(12, 22));
     if (inventory[kind] > 0) inventory[kind]--;
     else { gold -= priceOf(kind); bought[kind] = (bought[kind] || 0) + 1; }
     armed = null;
@@ -3185,10 +3224,10 @@ import * as THREE from 'three';
     function emit(kind, x, y, h, n = 1, col) {
       const K = KIND[kind];
       for (let i = 0; i < n && parts.length < MAX; i++) {
-        const a = rand(0, Math.PI * 2), sp = rand(0.3, 1) * K.spread;
-        srgb.set(col || K.col).offsetHSL(0, 0, rand(-0.04, 0.04)).convertLinearToSRGB();   // the particle shader writes colours as-is
-        parts.push({ x: x + rand(-2, 2), y: y + rand(-2, 2), h: h + rand(0, 2), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, vh: rand(...K.rise),
-          t: 0, life: rand(...K.life), s: rand(...K.size), K, r: srgb.r, g: srgb.g, b: srgb.b });
+        const a = fxRand(0, Math.PI * 2), sp = fxRand(0.3, 1) * K.spread;
+        srgb.set(col || K.col).offsetHSL(0, 0, fxRand(-0.04, 0.04)).convertLinearToSRGB();   // the particle shader writes colours as-is
+        parts.push({ x: x + fxRand(-2, 2), y: y + fxRand(-2, 2), h: h + fxRand(0, 2), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, vh: fxRand(...K.rise),
+          t: 0, life: fxRand(...K.life), s: fxRand(...K.size), K, r: srgb.r, g: srgb.g, b: srgb.b });
       }
     }
     return {
@@ -3219,7 +3258,7 @@ import * as THREE from 'three';
           const h = t.houses[(Math.random() * Math.min(6, t.houses.length)) | 0] || t;
           emit('smoke', h.x, h.y, groundAt(h.x, h.y) + 5, 1);
         }
-        for (const m of mines) if (m.owner >= 0 && Math.random() < dt * 4) emit('glint', m.x + rand(-8, 8), m.y + rand(-6, 6), groundAt(m.x, m.y) + 6, 1);   // held mines glint
+        for (const m of mines) if (m.owner >= 0 && Math.random() < dt * 4) emit('glint', m.x + fxRand(-8, 8), m.y + fxRand(-6, 6), groundAt(m.x, m.y) + 6, 1);   // held mines glint
         for (const u of units) if (u.kind === 2 && !u.dead && u.vx * u.vx + u.vy * u.vy > 1400 && Math.random() < dt * 7) this.kick(u.x, u.y);
         // particles
         let n = 0;
@@ -3543,7 +3582,7 @@ import * as THREE from 'three';
     sync3D(nowS);
     FX.update(fxDt, nowS);
     const sh = FX.shakeAmount * baseDist / view.z * 0.006;   // a short shake when one of your towns falls
-    if (sh > 0.01) { camera.position.x += rand(-sh, sh); camera.position.y += rand(-sh, sh) * 0.5; camera.updateMatrixWorld(); }
+    if (sh > 0.01) { camera.position.x += fxRand(-sh, sh); camera.position.y += fxRand(-sh, sh) * 0.5; camera.updateMatrixWorld(); }
     LIT().emissiveIntensity = 1.25 + 0.12 * Math.sin(nowS * 7.3) + 0.08 * Math.sin(nowS * 12.9 + 1);
     renderer.render(scene, camera);
     drawOverlay(nowS);
@@ -4005,30 +4044,8 @@ import * as THREE from 'three';
       state: () => state,
       // for tests/drift.mjs (docs/multiplayer.md, phase 0): stop the real-time loop, so only run() moves the battle
       freeze: () => { paused = true; },
-      // a fingerprint of the game state, part by part, to tell where two copies of a game first differ
-      snapshot: () => {
-        const f = new Float64Array(1), w = new Uint32Array(f.buffer);
-        const hash = vals => {
-          let h = 2166136261;
-          const mix = n => { h = Math.imul(h ^ n, 16777619) >>> 0; };
-          for (const v of vals) {
-            if (typeof v === 'string') { for (let i = 0; i < v.length; i++) mix(v.charCodeAt(i)); continue; }
-            f[0] = v == null ? -0.5 : +v; mix(w[0]); mix(w[1]);
-          }
-          return h.toString(16);
-        };
-        return {
-          parts: {
-            clock: hash([time, week, weekT]),
-            towns: hash(towns.flatMap(t => [t.name, t.owner, t.hold, t.kind, t.barracks || 0, t.spawnT])),
-            units: hash(units.flatMap(u => [u.team, u.kind, u.x, u.y, u.hp])),
-            economy: hash([gold, redGold, ink, redBuys, ...stats.train, ...stats.hp]),
-            buildings: hash(structs.flatMap(s => [s.type, s.team, s.x, s.y]).concat(bridges.map(b => b.b))),
-            enemyPlan: hash(plan ? [plan.phase, plan.target.name, plan.main ? plan.main.b : -1, plan.decoy ? plan.decoy.b : -1] : []),
-          },
-          blue: units.filter(u => u.team === 0).length, red: units.filter(u => u.team === 1).length,
-        };
-      },
+      board: b => { board = b; },
+      snapshot: () => ({ parts: checksum(), blue: units.filter(u => u.team === 0).length, red: units.filter(u => u.team === 1).length }),
     };
   }
 

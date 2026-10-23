@@ -3,7 +3,7 @@
 The plan for playing Frontlines against another person, agreed on 23 October 2026. Work through the phases
 in order. Single player against the computer must keep working, and feel the same, after every phase.
 
-**Current phase:** 1, not started. Phase 0 was done on 23 October.
+**Current phase:** 2, not started. Phase 1 was done on 23 October (one check left open, see there).
 
 How to keep this plan up to date:
 - Tick a step (`- [ ]` → `- [x]`) in the same commit as the work, once its tests pass.
@@ -52,12 +52,18 @@ How to keep this plan up to date:
 
 ### Rules for code that affects the battle
 
-Once phase 1 lands, anything that changes the game state must:
-- use `rng`/`rand`, never `Math.random()` (visual effects may keep `Math.random()`)
-- use the game's own `sin`, `cos`, `atan2` and `exp`, and `Math.sqrt(x*x + y*y)` instead of `Math.hypot`.
-  `+ − × ÷` and `Math.sqrt` give identical results in every browser; the other `Math` functions may not.
-- never depend on wall-clock time, frame rate or screen size
+Since phase 1, anything that changes the game state must:
+- use `rng`/`rand`, never `Math.random()`. Looks and sound must use `fxRand` or `Math.random()` instead, never
+  `rand`, because drawing and sound run differently on each machine (muted, hidden tab, particle limits).
+- use the game's own `sin`, `cos` and `hypot`, never `Math.sin`, `Math.cos`, `Math.hypot`, `Math.atan2` or
+  `Math.exp`. `+ − × ÷`, `Math.sqrt`, `Math.round`/`floor` and `**` give identical results in every browser.
+- never shuffle by sorting with a random comparison (browsers sort differently); use a Fisher-Yates shuffle.
+- never depend on wall-clock time, frame rate, screen size or anything left over from an earlier game:
+  counters the battle uses (such as unit and route numbers) are reset in `newGame`.
 - change state only through orders (for players and the computer alike), not straight from input handlers
+  (from phase 2).
+
+The test "two copies of a battle stay identical" in `npm test` catches most slips.
 
 ## Phases
 
@@ -97,17 +103,31 @@ Once phase 1 lands, anything that changes the game state must:
 Exit: we know how far today's game is from deterministic, and the size of phase 1.
 
 ### Phase 1: deterministic simulation
-- [ ] Simulation randomness through `rng`. The AI's choices included.
-- [ ] Own `sin`, `cos`, `atan2`, `exp`; `hypot` replaced in simulation code. Map generation counts as
-      simulation, because both browsers build the map from the map number. (Map numbers will produce
-      slightly different layouts once, when this lands.)
-- [ ] The board size is a setting of the match, not taken from the window (see phase 0). In single player it
-      can keep following the screen.
-- [ ] Simulation never reads `performance.now()`, the frame time or the screen size.
-- [ ] `checksum()` of the game state.
-- [ ] Test: two copies, with native `Math.random` and drawing on, identical checksums on every landscape. In
+- [x] Simulation randomness through `rng`. The AI's choices included.
+      After the map is built, `rng` is a seeded stream for the battle (`seeded(mapSeed * 104729 + 13)`), so in
+      single player too the same map and the same orders replay the same battle. Visual randomness moved to
+      `fxRand`: puffs, sparks, particles, scars, coins, camera shake and bird song all used to draw from
+      `rand`, and particles drew a varying amount depending on how many were on screen.
+- [x] Own `sin`, `cos`; `hypot` replaced in simulation code (world through placing items: sin 20, cos 13,
+      hypot 83). `atan2` and `exp` aren't used in the simulation. `sin`/`cos` are fdlibm's kernels; in
+      V8 and JavaScriptCore they give bit-identical results, within one rounding step of `Math.sin`/`cos`.
+      Map numbers did **not** change: 30 layouts checked (10 landscapes × 3 map numbers) are identical.
+- [x] The board size is a setting of the match, not taken from the window (see phase 0). In single player it
+      can keep following the screen. `board = { w, h }` (a window size) in `newGame`; `__t.board()` sets it.
+- [x] Simulation never reads `performance.now()`, the frame time or the screen size.
+      Also found: unit numbers, route numbers and the step counter weren't reset between games, and soldiers
+      look for enemies on the tick given by `(u.id + frameNo) % 5`. So a copy that had played another game
+      first (a rematch) drifted. Now reset in `newGame`.
+- [x] `checksum()` of the game state, by part (clock, towns, units, economy, buildings, enemy plan).
+- [x] Test: two copies, with native `Math.random` and drawing on, identical checksums on every landscape. In
       `npm test` a few game minutes each, to keep it quick; `npm run drift` for the full 10 minutes.
-- [ ] A check that the simulation gives the same results in Safari's engine as in Chrome's: for example, run
+      `tests/twins.mjs` runs both copies with different windows (laptop and portrait phone) and history (one
+      plays another battle first). In `npm test` 90 game seconds per landscape. Checked that it fails if the
+      counter reset or one `rng()` in the AI is undone.
+      Full run on 23 October (`npm run drift`): identical for 10 game minutes on all ten landscapes, up to
+      1,650 soldiers.
+      Each copy runs in its own browser profile with the same saved settings; see phase 3 for why.
+- [ ] Left open: a check that the simulation gives the same results in Safari's engine as in Chrome's: for example, run
       the simulation without drawing in Node and in `jsc` and compare checksums. That needs the simulation
       to run without the page, which ties in with the open question on splitting the file.
 
@@ -129,6 +149,10 @@ Exit: no input handler or AI routine changes the game state directly.
       follow "me".
 - [ ] Drawing mirrored for team 1 so that player also sees their kingdom as blue on the near side.
 - [ ] The computer opponent becomes "a player on team 1" that can be switched off.
+- [ ] Settings that change the battle are settings of the match, the same for both players, not read from
+      each browser's saved settings: difficulty (`D()` also sets blue's training speed), classic towns, and the
+      tutorial (a player who hasn't finished it gets a 25-second grace before the first enemy push, `aiT`).
+      Found in phase 1, when a copy that had finished the tutorial drifted from one that hadn't.
 
 Exit: a test can play team 1 by hand while the computer plays team 0.
 

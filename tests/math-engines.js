@@ -21,6 +21,9 @@ var cases = {
   hypot: function () { var a = (r() - 0.5) * 2000, b = (r() - 0.5) * 2000; return [a + ',' + b, Math.hypot(a, b)]; },
   sqrt: function () { var a = r() * 4e6; return [a, Math.sqrt(a)]; },
   exp: function () { var a = (r() - 0.5) * 20; return [a, Math.exp(a)]; },
+  'x**2': function () { var a = (r() - 0.5) * 3000; return [a, a ** 2]; },
+  'x**2==x*x': function () { var a = (r() - 0.5) * 3000; return [a, a ** 2 === a * a ? 1 : 0]; },
+  '1.5**n': function () { var n = (r() * 30) | 0; return [n, 1.5 ** n]; },
   'sqrt(x*x+y*y)': function () { var a = (r() - 0.5) * 2000, b = (r() - 0.5) * 2000; return [a + ',' + b, Math.sqrt(a * a + b * b)]; },
 };
 for (var name in cases) {
