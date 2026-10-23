@@ -117,28 +117,13 @@ Options weighed for counting visitors (none set up yet):
 - **Hosted:** Plausible (paid), GoatCounter's free hosted plan, or Cloudflare Web Analytics. Avoid Google
   Analytics (needs a cookie banner, overkill).
 
-## Human against human (on hold)
+## Human against human
 
-The user decided on 22 October 2026 not to work on this, or on splitting the code, for now. The plan, for
-when it comes back:
-1. **Split `frontlines.html` into files** under `src/` (`sound.js`, `world.js`, `units.js`, `ai.js`,
-   `scene.js`, `render.js` and so on, plus CSS and HTML), joined by `build.sh` into the same single page.
-   A first pass (same scope, files concatenated in order) was built and verified identical, then reset
-   unpushed. The deeper step is a game-state object, because many module-level variables are reassigned
-   across sections (`towns`, `units`, `W`, `H`, `P`, `state`, `view`).
-2. **Per-team economy:** gold, purchases and ink per team (today `gold`/`redGold`, `bought`/`redBought`).
-3. **An event seam:** the simulation emits events (capture, death, arrow) instead of calling toast, Sound
-   and FX directly (about 60 places), so a host can forward them to a guest.
-4. **Commands:** every action (route, troop type, purchase, charge, reinforcement) goes through one
-   function, so the mouse, the AI and a remote player are interchangeable.
-5. **Host-authoritative networking:** one player's browser runs the game; a small WebSocket relay on the VPS
-   passes the guest's commands in and state snapshots out (15–20 a second), with a lobby link to share.
-   - Expected lag for the guest: about 150–250 ms from action to seeing soldiers react; the host has none.
-     Fine for this kind of game.
-   - Risks: the host's tab being throttled in the background (run the simulation in a worker), a slow host
-     device, bandwidth (about 150–200 KB/s naive, 30–60 KB/s with deltas and packing), and dropouts.
-   - Lockstep was ruled out: browsers compute some maths differently, so the two games drift apart.
-6. Fairness matters more against a person; the maps are already mirrored.
+Being planned: see [multiplayer.md](multiplayer.md) (lockstep, invite links, phases). Notes on splitting the
+file into modules, kept for when that question comes up: a first pass (`src/` files such as `sound.js`,
+`world.js`, `units.js`, `ai.js`, `render.js`, concatenated in order by `build.sh` into the same single page)
+was built and verified identical, then reset unpushed. The deeper step is a game-state object, because many
+module-level variables are reassigned across sections (`towns`, `units`, `W`, `H`, `P`, `state`, `view`).
 
 ## Tooling
 

@@ -24,5 +24,5 @@ Ideas:
   Fetch before pushing: Copilot or other agents sometimes push to `main` too.
 - **Look:** one dark colour scheme only (no seasons or light themes); soldiers should be the brightest
   things on the board.
-- **Code structure:** splitting the file into modules, and human-against-human play, are on hold until the
-  user brings them up (the plan is in [docs/ideas.md](docs/ideas.md)).
+- **Two-player online play** is being built in phases; [docs/multiplayer.md](docs/multiplayer.md) holds the
+  plan and the progress. Splitting the file into modules is still undecided (an open question there).
