@@ -307,6 +307,33 @@ test('two copies of a battle stay identical, as two players\' browsers must (doc
   }
 });
 
+test('playing red by hand while the computer plays blue: the view turns and red is drawn blue', async () => {
+  const page = await openGame();
+  await page.evaluate(() => { __t.match({ ai: 0, difficulty: 'normal', classic: true, grace: 6 }); __t.newMap('valley', 4821); __t.start(); });
+  assert.equal(await page.evaluate(() => __t.me()), 1, 'this browser plays red');
+  const red = await t(page, 'pos', 'Redmarsh'), blue = await t(page, 'pos', 'Ashford');
+  assert.ok(red.x < blue.x, 'red\'s capital is on the left, where blue\'s usually is');
+  await dragTo(page, await t(page, 'pos', 'Thornby'), await t(page, 'pos', 'Fennick'));   // a route from one of red's towns
+  await page.mouse.up();
+  await sleep(100);
+  assert.equal(await t(page, 'route', 'Thornby'), 'Fennick', 'red draws routes from its own towns');
+  await page.click('#tray-tower');
+  const spot = await t(page, 'pos', 'Redmarsh', -70, -40);
+  await page.mouse.move(spot.x, spot.y);
+  await page.mouse.click(spot.x, spot.y);
+  await sleep(100);
+  assert.equal(await t(page, 'buildings'), 1, 'red builds from its own tray');
+  await t(page, 'freeze');
+  await t(page, 'run', 50);
+  assert.equal(await t(page, 'state'), 'upgrade', 'red gets the weekly choice');
+  await page.evaluate(() => document.getElementById('choice0').click());
+  assert.equal(await t(page, 'state'), 'play', 'and the next week begins');
+  const owners = (await t(page, 'layout')).filter(t => t.owner === 0).length;
+  assert.ok(owners > 3, `the computer plays blue: it holds ${owners} towns after a week`);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
 test('a battle replays exactly from its orders: everything the player does goes through them', async () => {
   // a real game played with the mouse, in real time and while frozen, then its orders played back in a fresh copy
   const page = await openGame();

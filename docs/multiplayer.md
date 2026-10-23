@@ -3,7 +3,7 @@
 The plan for playing Frontlines against another person, agreed on 23 October 2026. Work through the phases
 in order. Single player against the computer must keep working, and feel the same, after every phase.
 
-**Current phase:** 3, not started. Phase 2 was done on 23 October.
+**Current phase:** 4, not started. Phase 3 was done on 23 October.
 
 How to keep this plan up to date:
 - Tick a step (`- [ ]` → `- [x]`) in the same commit as the work, once its tests pass.
@@ -173,9 +173,19 @@ Exit: no input handler or AI routine changes the game state directly.
       a player's are checked again when carried out (`carryOut(team, o, check)`), the computer's aren't, as it
       only picks allowed moves. Weekly rewards: every side played by a person gets its own two offers
       (`offers[team]`), and the next week begins once all have chosen.
-- [ ] "Me" is a setting (team 0 or 1), not assumed to be team 0. The HUD, tray, hints, toasts and sounds
+- [x] "Me" is a setting (team 0 or 1), not assumed to be team 0. The HUD, tray, hints, toasts and sounds
       follow "me".
-- [ ] Drawing mirrored for team 1 so that player also sees their kingdom as blue on the near side.
+      `me` is the team this browser plays. The interface, tips, hover info, toasts, sounds, the end of the game
+      and the end-of-game stats compare with `me`; so do gathered groups you can drag. The capitals' names are
+      fixed per side (`CAPITAL`). The one rule that differed by team now depends on who plays it: the computer's
+      soldiers follow their town's current orders, a person's keep the route they set out on.
+- [x] Drawing mirrored for team 1 so that player also sees their kingdom as blue on the near side.
+      Not a mirror image but a half turn, as the maps are point-symmetric: the camera looks from the north
+      (`VIEWDIR`), and `paintTeams()` swaps the two entries of every team palette (`COL.team/light/mid`, `KEEPC`,
+      `TEAMC`, `LIGHTC`, `ROUTE`, `CHEVRON`), so code that colours by team needs no change; "mine" is
+      `COL.team[me]`. The territory wash flips sign and the sun turns with the camera. Found along the way: the
+      sun's `target.position.set()` sits inside a comment in `fitCamera`, so it shines at the board's corner;
+      left as it is (it's the look of the board), with the direction mirrored for red.
 - [x] The computer opponent becomes "a player on team 1" that can be switched off.
       It plays `match.ai` (0, 1, or -1 for none) against the other team; the AI code uses `aiTeam`/`aiFoe`
       instead of 1/0. Checked: against an idle opponent it takes the whole map as blue just as it does as red.
@@ -190,6 +200,8 @@ Exit: no input handler or AI routine changes the game state directly.
       computer, both sides train at the same speed.
 
 Exit: a test can play team 1 by hand while the computer plays team 0.
+Done: the test "playing red by hand while the computer plays blue" draws a route, builds a watchtower and takes
+the weekly reward with the mouse in the turned view, while the computer takes towns as blue.
 
 ### Phase 4: the relay server
 - [ ] A small Node service with WebSockets: create a room, join with a code, pass turn messages and checksums

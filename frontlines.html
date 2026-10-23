@@ -973,6 +973,7 @@ import * as THREE from 'three';
     match = presetMatch ? { ...presetMatch } : { ai: 1, difficulty, classic };
     aiTeam = match.ai; aiFoe = 1 - match.ai;
     if (me === match.ai) me = 1 - me;   // this browser plays a side the computer doesn't
+    paintTeams();
     $('mapNo').textContent = match.classic ? `Map ${mapSeed} · classic towns` : `Map ${mapSeed}`;
     rng = seeded(mapSeed * 7919 + Object.keys(LANDS).indexOf(landKey));
     const vw = board ? board.w : innerWidth, vh = board ? board.h : innerHeight;
@@ -1477,7 +1478,7 @@ import * as THREE from 'three';
   function drawTerritory() {
     const d = terrImg.data;
     for (let i = 0; i < terr.length; i++) {
-      const v = terr[i], o = i * 4;
+      const v = me ? -terr[i] : terr[i], o = i * 4;   // positive: blue's ground; drawn blue for whoever plays it
       if (v >= 0) { d[o] = 80; d[o + 1] = 135; d[o + 2] = 255; } else { d[o] = 255; d[o + 1] = 100; d[o + 2] = 80; }
       d[o + 3] = Math.min(1, Math.abs(v)) * (v >= 0 ? 30 : 21);   // a gentle wash; red reads hotter than blue on dark ground, so it gets less
     }
@@ -1537,7 +1538,7 @@ import * as THREE from 'three';
       town: t, route: null, rid: -1, ri: 0, arrived: false, cd: 0, flash: 0, enemy: null, calm: 0,
       ox: cos(ang) * rad, oy: sin(ang) * rad, id: uid++, dead: false
     });
-    if (t.owner === 0) tally.trained++;
+    if (t.owner === me) tally.trained++;
   }
 
   let grid = null, gcols = 0, grows = 0;
@@ -1564,10 +1565,10 @@ import * as THREE from 'three';
   }
 
   // Soldiers take their town's route when they leave and keep it, even if the town gets new orders later.
-  // Red armies follow their town's current orders, which is how the AI gathers troops and then strikes.
+  // The computer's armies follow their town's current orders, which is how it gathers troops and then strikes.
   function goalOf(u) {
     const t = u.town;
-    if (u.team === 1) u.route = t && t.owner === 1 ? t.route : null;
+    if (u.team === match.ai) u.route = t && t.owner === u.team ? t.route : null;
     else if (!u.route && t && t.owner === u.team && t.route) u.route = t.route;
     const r = u.route;
     if (r) {
@@ -1594,16 +1595,16 @@ import * as THREE from 'three';
     return best ? { x: best.x, y: best.y, hold: false } : { x: u.x, y: u.y, hold: true };
   }
 
-  // A gathered group: blue soldiers waiting at the end of a route on open ground.
+  // A gathered group: this player's soldiers waiting at the end of a route on open ground.
   function groupAt(x, y) {
     let best = null, bd = 45 * 45;
     for (const u of units) {
-      if (u.team !== 0 || u.dead || !u.route || !u.arrived || u.route.target) continue;
+      if (u.team !== me || u.dead || !u.route || !u.arrived || u.route.target) continue;
       const d = (u.x - x) ** 2 + (u.y - y) ** 2;
       if (d < bd) { bd = d; best = u; }
     }
     if (!best) return null;
-    return units.filter(u => u.team === 0 && !u.dead && u.arrived && u.route && !u.route.target &&
+    return units.filter(u => u.team === me && !u.dead && u.arrived && u.route && !u.route.target &&
       (u.route === best.route || (u.x - best.x) ** 2 + (u.y - best.y) ** 2 < 70 * 70));
   }
 
@@ -1612,7 +1613,7 @@ import * as THREE from 'three';
   }
   function kill(e) {
     e.dead = true;
-    if (e.team === 0) tally.lost++; else tally.killed++;
+    if (e.team === me) tally.lost++; else tally.killed++;
     scars.push({ x: e.x + fxRand(-1.5, 1.5), y: e.y + fxRand(-1.5, 1.5), born: time, team: e.team, r: fxRand(1.6, 3) });
     if (scars.length > 1500) scars.shift();
     deaths.push({ x: e.x, y: e.y, team: e.team, t: 0 });
@@ -1650,7 +1651,7 @@ import * as THREE from 'three';
     t.hold -= 1; t.hit = 0.6;
     puff(t.x, t.y, COL.team[u.team], 20);
     FX.dust(t.x + fxRand(-10, 10), t.y + fxRand(-10, 10), 2);
-    if (t.capital && t.owner === 0) Sound.horn();   // your capital is under attack (rate-limited inside)
+    if (t.capital && t.owner === me) Sound.horn();   // your capital is under attack (rate-limited inside)
     if (t.hold <= 0) capture(t, u.team);
   }
 
@@ -1664,14 +1665,14 @@ import * as THREE from 'three';
     for (let i = 0; i < 10; i++) puff(t.x + fxRand(-14, 14), t.y + fxRand(-14, 14), COL.team[team], fxRand(16, 30));
     waves.push({ x: t.x, y: t.y, t: 0, color: COL.team[team] });
     FX.capture(t, team); Sound.crumble();
-    if (prev === 0) FX.shake(0.7);
+    if (prev === me) FX.shake(0.7);
     if (menuTown === t) closeMenu();
-    if (team === 0) tally.captured++;
-    if (prev === 0) tally.fallen++;
-    if (t.capital && state === 'play') { endGame(team === 0); return; }
-    if (team === 0) Sound.good(); else if (prev === 0) Sound.bad();
-    if (team === 0) toast(towns.some(o => o.owner === 0 && o.route && o.route.target === t) ? `${t.name} captured. Its attackers now guard it` : `${t.name} captured`, 'good');
-    else if (prev === 0) toast(`${t.name} has fallen`, 'bad');
+    if (team === me) tally.captured++;
+    if (prev === me) tally.fallen++;
+    if (t.capital && state === 'play') { endGame(team === me); return; }
+    if (team === me) Sound.good(); else if (prev === me) Sound.bad();
+    if (team === me) toast(towns.some(o => o.owner === me && o.route && o.route.target === t) ? `${t.name} captured. Its attackers now guard it` : `${t.name} captured`, 'good');
+    else if (prev === me) toast(`${t.name} has fallen`, 'bad');
     aiT = Math.min(aiT, 0.5);
   }
 
@@ -1805,7 +1806,7 @@ import * as THREE from 'three';
         if (countNear(1 - s.team, s.x, s.y, 50) >= 8 && countNear(s.team, s.x, s.y, 80) === 0) {
           s.team = 1 - s.team;
           for (let i = 0; i < 6; i++) puff(s.x + fxRand(-10, 10), s.y + fxRand(-10, 10), COL.team[s.team], fxRand(14, 24));
-          toast(s.team === 0 ? `You took an enemy ${ITEM[s.type].toLowerCase()}` : `Your ${ITEM[s.type].toLowerCase()} was taken`, s.team === 0 ? 'good' : 'bad');
+          toast(s.team === me ? `You took an enemy ${ITEM[s.type].toLowerCase()}` : `Your ${ITEM[s.type].toLowerCase()} was taken`, s.team === me ? 'good' : 'bad');
         }
       }
     }
@@ -2128,8 +2129,8 @@ import * as THREE from 'three';
     return null;
   }
   function place(kind, p) {
-    if (kind === 'charge') order(0, { type: 'charge', x: p.x, y: p.y });
-    else order(0, { type: 'build', kind, x: p.x, y: p.y });
+    if (kind === 'charge') order(me, { type: 'charge', x: p.x, y: p.y });
+    else order(me, { type: 'build', kind, x: p.x, y: p.y });
     armed = null;
     renderTray();
     if (kind === 'charge') { Sound.charge(); tutorialDid('charge'); }
@@ -2185,10 +2186,11 @@ import * as THREE from 'three';
   const running = () => state === 'play' || state === 'over';
   function endGame(won) {
     state = 'over';   // the battle plays on behind the dialog; only the player's part is over
-    $('watchText').textContent = `${won ? 'Victory' : 'Defeat'} · ${won ? 'Redmarsh' : 'Ashford'} has fallen`;
+    const fallen = CAPITAL[won ? 1 - me : me];
+    $('watchText').textContent = `${won ? 'Victory' : 'Defeat'} · ${fallen} has fallen`;
     const level = match.difficulty[0].toUpperCase() + match.difficulty.slice(1);
     $('overLabel').textContent = `${won ? 'Victory' : 'Defeat'} · ${level}`;
-    $('overTitle').textContent = won ? 'Redmarsh has fallen' : 'Ashford has fallen';
+    $('overTitle').textContent = `${fallen} has fallen`;
     $('overText').textContent = won
       ? `You took the enemy capital in week ${week} on ${level} difficulty. ${match.difficulty === 'hard' ? 'Try again and see if you can do it faster.' : 'Ready to try a harder level?'}`
       : `You held the river until week ${week}. Gather troops before you attack, and guard the bridges.`;
@@ -2300,7 +2302,7 @@ import * as THREE from 'three';
       if (k === 'bridge') {
         made = o.line !== undefined ? { line: lines[o.line], b: o.b, span: 20 } : { line: bandAt(p.x, p.y), b: B(p.x, p.y), span: 20 };
         bridges.push(made); buildStatic();
-        if (team !== me) alertAt(bridgeEnd(made, blueSide()), `The enemy has built a bridge: the ${bridgeName(made)}`, false);
+        if (team !== me) alertAt(bridgeEnd(made, sideOfTeam(me)), `The enemy has built a bridge: the ${bridgeName(made)}`, false);
       } else if (k === 'barracks') {
         const t = o.town ? townNamed(o.town) : townAt(p.x, p.y, 30, team);
         t.barracks++;
@@ -2422,7 +2424,7 @@ import * as THREE from 'three';
   }
   function commit() {
     const d = drawing, t = d.town;
-    if (t && t.owner !== 0) return;
+    if (t && t.owner !== me) return;
     if (d.len < 24 && !d.lock) { if (t) openMenu(t); return; }
     const target = d.lock || null;
     const pts = d.pts.slice();
@@ -2430,12 +2432,12 @@ import * as THREE from 'three';
     const route = { pts, target: target && target.name, len: d.len };
     if (!t) {
       const group = d.group.filter(u => !u.dead);
-      order(0, { type: 'group', units: group.map(u => u.id), ...route });
+      order(me, { type: 'group', units: group.map(u => u.id), ...route });
       Sound.commit();
       toast(`${group.length} soldiers on the move`);
       return;
     }
-    order(0, { type: 'route', town: t.name, ...route });
+    order(me, { type: 'route', town: t.name, ...route });
     routesDrawn++;
     Sound.commit();
     tutorialDid('route');
@@ -2459,12 +2461,12 @@ import * as THREE from 'three';
   }
   function closeMenu() { menuTown = null; $('townMenu').hidden = true; }
   for (let k = 0; k < 3; k++) $('tmK' + k).onclick = () => {
-    if (menuTown && menuTown.owner === 0) { order(0, { type: 'train', town: menuTown.name, kind: k }); Sound.select(); toast(`${menuTown.name} now trains ${KIND[k].toLowerCase()}`); }
+    if (menuTown && menuTown.owner === me) { order(me, { type: 'train', town: menuTown.name, kind: k }); Sound.select(); toast(`${menuTown.name} now trains ${KIND[k].toLowerCase()}`); }
     closeMenu();
   };
   // Clearing cancels the orders: soldiers still marching on that route head home; groups that already arrived stay put.
   $('tmClear').onclick = () => {
-    if (menuTown && menuTown.route) order(0, { type: 'route', town: menuTown.name, recall: true });
+    if (menuTown && menuTown.route) order(me, { type: 'route', town: menuTown.name, recall: true });
     closeMenu();
   };
   // the Charge button: Ready, or a countdown while it recharges, with the button filling as it does
@@ -2516,7 +2518,7 @@ import * as THREE from 'three';
       e.preventDefault();
       return;
     }
-    const t = townAt(p.x, p.y, 30, 0);
+    const t = townAt(p.x, p.y, 30, me);
     const group = t ? null : groupAt(p.x, p.y);
     if (!t && !group) { startPan(e); return; }
     drawing = t ? { town: t, pts: [{ x: t.x, y: t.y }], len: 0, blocked: null, tip: null }
@@ -2543,7 +2545,7 @@ import * as THREE from 'three';
     inspectAt = e.shiftKey && !drawing && !armed && state === 'play' ? lastPointer : null;
     showInspect();
     if (!drawing) {
-      hover = state === 'play' && !armed ? townAt(p.x, p.y, 30, 0) : null;
+      hover = state === 'play' && !armed ? townAt(p.x, p.y, 30, me) : null;
       hoverGroup = state === 'play' && !armed && !hover ? groupAt(p.x, p.y) : null;
       cvs.style.cursor = hover || hoverGroup || armed ? 'pointer' : view.z > 1 ? 'grab' : 'default';
       return;
@@ -2580,7 +2582,7 @@ import * as THREE from 'three';
 
   // ---------- hover to inspect: what is under the pointer and what it does ----------
   let inspectAt = null, lastPointer = null;
-  const OWN = o => o === 0 ? ['Yours', '#9fc0ff'] : o === 1 ? ['Enemy', '#ff9a88'] : ['Unclaimed', '#9aa49d'];
+  const OWN = o => o === me ? ['Yours', '#9fc0ff'] : o >= 0 ? ['Enemy', '#ff9a88'] : ['Unclaimed', '#9aa49d'];
   function inField(f, x, y) {
     const dx = x - f.x, dy = y - f.y, c = Math.cos(-f.rot), s2 = Math.sin(-f.rot);
     const lx = dx * c - dy * s2, ly = dx * s2 + dy * c;
@@ -2597,13 +2599,13 @@ import * as THREE from 'three';
       } else lines.push('Capture it by marching soldiers into it.');
       if (t.barracks) lines.push(`${t.barracks} barracks: trains faster, holds more`);
       const farms = fields.filter(f => f.town === t).length;
-      if (farms) lines.push(`${farms} farms · ${t.owner === 0 ? `+${Math.round(farms * FARM_RATE * WEEK)} gold a week` : 'pay whoever holds the town'}`);
+      if (farms) lines.push(`${farms} farms · ${t.owner === me ? `+${Math.round(farms * FARM_RATE * WEEK)} gold a week` : 'pay whoever holds the town'}`);
       lines.push(`Defence ${Math.ceil(t.hold)} of ${Math.round(t.holdMax)}`);
-      if (t.capital) lines.push(t.owner === 0 ? 'Your capital. Lose it and the war is over.' : 'Enemy capital. Take it to win.');
+      if (t.capital) lines.push(t.owner === me ? 'Your capital. Lose it and the war is over.' : 'Enemy capital. Take it to win.');
       return { title: t.name, own: OWN(t.owner), lines };
     }
     for (const m of mines) if (Math.hypot(m.x - x, m.y - y) < 30) {
-      return { title: 'Gold mine', own: OWN(m.owner), lines: [`+${Math.round(MINE_RATE * WEEK)} gold a week for whoever holds the land around it.`, m.owner === 0 ? 'Keep your territory here to keep it.' : 'Camp troops or build a fort nearby to turn the land your color.'] };
+      return { title: 'Gold mine', own: OWN(m.owner), lines: [`+${Math.round(MINE_RATE * WEEK)} gold a week for whoever holds the land around it.`, m.owner === me ? 'Keep your territory here to keep it.' : 'Camp troops or build a fort nearby to turn the land your color.'] };
     }
     for (const st of structs) if (Math.hypot(st.x - x, st.y - y) < 16) {
       const lines = st.type === 'fort' ? ['Soldiers of its side inside the circle take 55% less damage.'] : ['Shoots enemies within its range, even across the river. Arrows do half damage in woods.'];
@@ -2663,15 +2665,15 @@ import * as THREE from 'three';
   const COACH = [
     { id: 'inspect', when: () => time > 25, text: 'Hold Shift and hover over a town, mine, farm or patch of ground to see what it does.' },
     { id: 'gold', when: () => gold[me] >= 30, text: 'You have gold to spend. Buy farms, watchtowers and more from the tray at the bottom right.' },
-    { id: 'mineNear', when: () => mines.some(m => m.owner !== 0 && units.some(u => u.team === 0 && Math.hypot(u.x - m.x, u.y - m.y) < 70)), text: 'Your troops are near a gold mine. Keep them there until the land turns blue to claim it.' },
-    { id: 'mine', when: () => mines.some(m => m.owner === 0), text: 'You hold a gold mine: +27 gold a week while your color covers the land around it.' },
-    { id: 'road', when: () => units.some(u => u.team === 0 && onRoad(u.x, u.y) && Math.hypot(u.vx, u.vy) > 20 && Math.hypot(u.x - u.town?.x, u.y - u.town?.y) > 80), text: 'Your troops are on a road, marching 40% faster. Draw routes along roads to reach the front sooner.' },
-    { id: 'hill', when: () => units.some(u => u.team === 0 && u.kind === 1 && hillLevel(u.x, u.y) > 0), text: 'Your archers are on a hill: they shoot further from up here. Hills make great defensive spots.' },
-    { id: 'forest', when: () => units.some(u => u.team === 0 && inForest(u.x, u.y) && !onRoad(u.x, u.y)), text: 'Woods slow your troops down, but arrows only do half damage to them there.' },
+    { id: 'mineNear', when: () => mines.some(m => m.owner !== me && units.some(u => u.team === me && Math.hypot(u.x - m.x, u.y - m.y) < 70)), text: 'Your troops are near a gold mine. Keep them there until the land turns blue to claim it.' },
+    { id: 'mine', when: () => mines.some(m => m.owner === me), text: 'You hold a gold mine: +27 gold a week while your color covers the land around it.' },
+    { id: 'road', when: () => units.some(u => u.team === me && onRoad(u.x, u.y) && Math.hypot(u.vx, u.vy) > 20 && Math.hypot(u.x - u.town?.x, u.y - u.town?.y) > 80), text: 'Your troops are on a road, marching 40% faster. Draw routes along roads to reach the front sooner.' },
+    { id: 'hill', when: () => units.some(u => u.team === me && u.kind === 1 && hillLevel(u.x, u.y) > 0), text: 'Your archers are on a hill: they shoot further from up here. Hills make great defensive spots.' },
+    { id: 'forest', when: () => units.some(u => u.team === me && inForest(u.x, u.y) && !onRoad(u.x, u.y)), text: 'Woods slow your troops down, but arrows only do half damage to them there.' },
     { id: 'ford', when: () => units.some(u => onFord(u.x, u.y)), text: 'Troops are wading the ford. It is slow, but it gets around the bridges, so watch it.' },
     { id: 'clash', when: () => chargeCd[me] === 0 && clashLevel > 6, text: 'A big fight! Press Charge and click on it to send your soldiers in at a sprint.' },
     { id: 'lost', when: () => tally.fallen > 0, text: 'A lost town stops training for you and its farms pay the enemy. Take it back to restore your income.' },
-    { id: 'enemyBuild', when: () => structs.some(st => st.team === 1), text: 'The enemy has built defences. Hold Shift and hover over anything on the map to see what it does.' },
+    { id: 'enemyBuild', when: () => structs.some(st => st.team !== me), text: 'The enemy has built defences. Hold Shift and hover over anything on the map to see what it does.' },
   ];
   let coachSeen = {}, coachT = 4, coachHide = 0, tipsOff = false;
   try { tipsOff = localStorage.getItem('frontlines-tips-off') === '1'; } catch (e) {}
@@ -2866,6 +2868,15 @@ import * as THREE from 'three';
   const WALL = '#6e6c65', WALL2 = '#7a7871', HOUSE = '#a8a49a';   // capital walls and towers, house and hall walls
   const LIT = () => mat('#ffd892', { emissive: '#ff9a35', emissiveIntensity: 1.3, roughness: 1 });   // lamplit windows, flickering in render()
   const KEEPC = ['#3466c8', '#b8433a'];   // keeps, forts and tower roofs: deeper than the soldiers' colours
+  const CAPITAL = ['Ashford', 'Redmarsh'];   // each side's capital, wherever the map puts it
+  // A browser always draws its own side blue: playing red, the team colours trade places (the camera turns too,
+  // see placeCamera). Colours by team, COL.team[t] and the like, then just work; "mine" is COL.team[me].
+  let paintedFor = 0;
+  function paintTeams() {
+    if (paintedFor === me) return;
+    for (const a of [COL.team, COL.light, COL.mid, KEEPC, TEAMC, LIGHTC, ROUTE, CHEVRON]) a.reverse();
+    paintedFor = me;
+  }
 
   function init3D() {
     if (renderer) return;
@@ -3400,7 +3411,7 @@ import * as THREE from 'three';
         put(g, GEO.box, mat(keep), x + e * (s - 1.1), y0 + KH, z + o, 2.2, 3, mw);
       }
     }
-    put(g, GEO.box, mat(t.owner < 0 ? '#9a978b' : t.owner === 0 ? '#2f5fbd' : '#c4443a'), x, y0 + KH - 0.3, z, s * 2 - 4.4, 0.5, s * 2 - 4.4);
+    put(g, GEO.box, mat(t.owner < 0 ? '#9a978b' : t.owner === me ? '#2f5fbd' : '#c4443a'), x, y0 + KH - 0.3, z, s * 2 - 4.4, 0.5, s * 2 - 4.4);
     // lamplight in the keep's windows, a row on every side
     const wn = t.capital ? 3 : 2, wy = y0 + KH * 0.5;
     for (let i = 0; i < wn; i++) {
@@ -3562,12 +3573,14 @@ import * as THREE from 'three';
   // zoom and pan: the camera looks at the board centre plus (view.x, view.y), from baseDist / view.z away
   const view = { z: 1, x: 0, y: 0 }, MAXZ = 4;
   let baseDist = 1000;
+  // the camera looks from the south, or for the red player from the north, so each sees their own side nearest
+  const VIEWDIR = () => me ? -1 : 1;
   function placeCamera() {
     view.z = clamp(view.z, 1, MAXZ);
     const fx = W / 2 * (1 - 1 / view.z), fy = H / 2 * (1 - 1 / view.z);
     view.x = clamp(view.x, -fx, fx); view.y = clamp(view.y, -fy, fy);
     const d = baseDist / view.z, tx = W / 2 + view.x, tz = H / 2 + view.y;
-    camera.position.set(tx, Math.cos(TILT) * d, tz + Math.sin(TILT) * d);
+    camera.position.set(tx, Math.cos(TILT) * d, tz + Math.sin(TILT) * d * VIEWDIR());
     camera.lookAt(tx, 0, tz); camera.updateProjectionMatrix(); camera.updateMatrixWorld();
   }
   // where a screen point meets the ground plane (refine: follow hills and bridges)
@@ -3595,9 +3608,9 @@ import * as THREE from 'three';
     const aw = vw - side * 2, ah = vh - top - bottom;
     renderer.setSize(vw, vh, false);
     camera.aspect = vw / vh; camera.clearViewOffset();
-    const pts = [[0, 0, 0], [W, 0, 0], [0, 0, H], [W, 0, H], [0, -BASE, H], [W, -BASE, H]];
+    const near = me ? 0 : H, pts = [[0, 0, 0], [W, 0, 0], [0, 0, H], [W, 0, H], [0, -BASE, near], [W, -BASE, near]];
     const place = dist => {
-      camera.position.set(W / 2, Math.cos(TILT) * dist, H / 2 + Math.sin(TILT) * dist);
+      camera.position.set(W / 2, Math.cos(TILT) * dist, H / 2 + Math.sin(TILT) * dist * VIEWDIR());
       camera.lookAt(W / 2, 0, H / 2); camera.updateProjectionMatrix(); camera.updateMatrixWorld();
       let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
       for (const [x, h, y] of pts) { const s = toScreen(x, y, h); x0 = Math.min(x0, s.x); x1 = Math.max(x1, s.x); y0 = Math.min(y0, s.y); y1 = Math.max(y1, s.y); }
@@ -3610,7 +3623,7 @@ import * as THREE from 'three';
     camera.setViewOffset(vw, vh, (b.x0 + b.x1) / 2 - (side + aw / 2), (b.y0 + b.y1) / 2 - (top + ah / 2), vw, vh);
     placeCamera();
     const R = Math.max(W, H) * 0.8;
-    sun.position.set(W / 2 - 560, 640, H / 2 - 690);   // low in the north-west: long evening shadows sun.target.position.set(W / 2, 0, H / 2);
+    sun.position.set((W / 2 - 560) * VIEWDIR(), 640, (H / 2 - 690) * VIEWDIR());   // turned with the camera for the red player (it shines at the origin)   // low in the north-west: long evening shadows sun.target.position.set(W / 2, 0, H / 2);
     Object.assign(sun.shadow.camera, { left: -R, right: R, top: R, bottom: -R, near: 300, far: 2600 });
     sun.shadow.camera.updateProjectionMatrix();
   }
@@ -3721,18 +3734,18 @@ import * as THREE from 'three';
     ctx.globalAlpha = 1;
 
     const live = new Set();
-    for (const u of units) if (u.team === 0 && !u.dead && u.route && !u.arrived) live.add(u.route);   // only routes someone is still walking
+    for (const u of units) if (u.team === me && !u.dead && u.route && !u.arrived) live.add(u.route);   // only routes someone is still walking
     for (const t of towns) if (t.route) live.delete(t.route);
     ctx.globalAlpha = 0.55;
     for (const r of live) drawRoute(r, 0);
     ctx.globalAlpha = 1;
     if (hoverGroup && !drawing) {
-      ctx.strokeStyle = COL.team[0]; ctx.lineWidth = 2; ctx.setLineDash([3, 4]);
+      ctx.strokeStyle = COL.team[me]; ctx.lineWidth = 2; ctx.setLineDash([3, 4]);
       for (const u of hoverGroup) { ctx.beginPath(); ctx.arc(u.x, u.y, 6, 0, Math.PI * 2); ctx.stroke(); }
       ctx.setLineDash([]);
     }
-    for (const t of towns) if (t.route && t.owner === 1) drawRoute(t.route, 1);
-    for (const t of towns) if (t.route && t.owner === 0 && (!drawing || drawing.town !== t)) drawRoute(t.route, 0);
+    for (const t of towns) if (t.route && t.owner === 1 - me) drawRoute(t.route, 1 - me);
+    for (const t of towns) if (t.route && t.owner === me && (!drawing || drawing.town !== t)) drawRoute(t.route, me);
     if (drawing && drawing.pts.length > 1) {
       strokeRoute(drawing.pts, ROUTE[0], 8);
       if (drawing.lock) {   // locked onto a town: the line runs into it and the town is ringed
@@ -3744,12 +3757,12 @@ import * as THREE from 'three';
         ctx.lineWidth = 4.5; ctx.lineCap = 'round';
         for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + nowS * 0.9; ctx.beginPath(); ctx.arc(L.x, L.y, R + 8, a - 0.28, a + 0.28); ctx.stroke(); }
       } else if (drawing.snap && !drawing.blocked) {   // shows the line is following a road
-        ctx.strokeStyle = COL.team[0]; ctx.lineWidth = 2;
+        ctx.strokeStyle = COL.team[me]; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(drawing.snap.x, drawing.snap.y, 7, 0, Math.PI * 2); ctx.stroke();
       }
       if (drawing.blocked && drawing.tip) {
         const p = drawing.tip;
-        ctx.strokeStyle = COL.team[1]; ctx.lineWidth = 2.5;
+        ctx.strokeStyle = COL.team[1 - me]; ctx.lineWidth = 2.5;
         ctx.beginPath(); ctx.moveTo(p.x - 5, p.y - 5); ctx.lineTo(p.x + 5, p.y + 5); ctx.moveTo(p.x + 5, p.y - 5); ctx.lineTo(p.x - 5, p.y + 5); ctx.stroke();
       }
     }
@@ -3773,7 +3786,7 @@ import * as THREE from 'three';
     for (const a of alerts) {
       const k = a.t / 6, wob = Math.sin(nowS * 8) * 3;
       ctx.globalAlpha = (1 - k) * (a.loud ? 0.9 : 0.6);
-      ctx.strokeStyle = COL.team[1]; ctx.lineWidth = 3;
+      ctx.strokeStyle = COL.team[1 - me]; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(a.x, a.y, 26 + wob, 0, Math.PI * 2); ctx.stroke();
       ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(a.x, a.y, 40 + ((nowS * 40) % 30), 0, Math.PI * 2); ctx.stroke();
     }
@@ -3782,7 +3795,7 @@ import * as THREE from 'three';
     if (st && st.towns) for (const name of st.towns()) {
       const t = towns.find(o => o.name === name);
       if (!t) continue;
-      ctx.strokeStyle = COL.team[0]; ctx.lineWidth = 2.5; ctx.globalAlpha = 0.5 + 0.4 * Math.sin(nowS * 5);
+      ctx.strokeStyle = COL.team[me]; ctx.lineWidth = 2.5; ctx.globalAlpha = 0.5 + 0.4 * Math.sin(nowS * 5);
       ctx.beginPath(); ctx.arc(t.x, t.y, townRing(t) + 12 + Math.sin(nowS * 5) * 4, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 1;
     }
@@ -3812,13 +3825,13 @@ import * as THREE from 'three';
         ctx.globalAlpha = 1;
       }
       if (hover === t && !drawing) {
-        ctx.strokeStyle = COL.mid[0]; ctx.lineWidth = 2; ctx.setLineDash([3, 4]);
+        ctx.strokeStyle = COL.mid[me]; ctx.lineWidth = 2; ctx.setLineDash([3, 4]);
         ctx.beginPath(); ctx.arc(t.x, t.y, R + 8, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
       }
     }
   }
 
-  const lockColor = t => t.owner === 0 ? COL.team[0] : t.owner === 1 ? COL.team[1] : '#5c6460';
+  const lockColor = t => t.owner >= 0 ? COL.team[t.owner] : '#5c6460';
   const INK = 'rgba(232,236,228,.9)', LIGHTC = ['#9fc0ff', '#ff9a88'];   // light text on the dark board
   function label(text, x, y, size, weight, fill, halo = 3) {
     ctx.font = `${weight} ${size}px Lexend, "Avenir Next", system-ui, sans-serif`;
@@ -3840,7 +3853,7 @@ import * as THREE from 'three';
     for (const a of alerts) {
       const p = toScreen(a.x, a.y, 10), k = pxPerUnit(a.x, a.y);
       ctx.globalAlpha = (1 - a.t / 6) * (a.loud ? 1 : 0.7);
-      label('!', p.x, p.y, Math.round(24 * k), 700, LIGHTC[1], 4);
+      label('!', p.x, p.y, Math.round(24 * k), 700, LIGHTC[1 - me], 4);
     }
     ctx.globalAlpha = 1;
     const zs = view.z ** -0.55;   // labels grow more slowly than the map when zoomed in
@@ -3874,7 +3887,7 @@ import * as THREE from 'three';
     }
     if (drawing && drawing.lock) {
       const L = drawing.lock, p = toScreen(L.x, L.y, groundAt(L.x, L.y) + keepH(L) + 16);
-      const text = L.owner === 0 ? 'Reinforce' : L.owner === 1 ? 'Attack' : 'Capture';
+      const text = L.owner === me ? 'Reinforce' : L.owner >= 0 ? 'Attack' : 'Capture';
       ctx.font = '700 13px Lexend, "Avenir Next", system-ui, sans-serif';
       const w = ctx.measureText(text).width + 20;
       ctx.fillStyle = lockColor(L); rr(ctx, p.x - w / 2, p.y - 13, w, 24, 12); ctx.fill();
@@ -3883,11 +3896,11 @@ import * as THREE from 'three';
     if (armed && ghost && state === 'play' && (armed === 'tower' || armed === 'fort')) {
       const R = armed === 'tower' ? 130 : 80, p = toScreen(ghost.x, ghost.y + R + 9, 0), ok = !placeCheck(me, armed, ghost);
       label(!ok ? placeCheck(me, armed, ghost) : armed === 'tower' ? 'Shoots enemies inside this circle' : 'Your soldiers inside take 55% less damage',
-        p.x, p.y, 12, 700, ok ? LIGHTC[0] : LIGHTC[1], 4);
+        p.x, p.y, 12, 700, ok ? LIGHTC[me] : LIGHTC[1 - me], 4);
     }
     for (const m of mines) {
       const p = toScreen(m.x, m.y + 38, 0), k = pxPerUnit(m.x, m.y) * zs;
-      label(m.owner === 0 ? `Your mine · +${Math.round(MINE_RATE * WEEK)}/week` : m.owner === 1 ? 'Enemy mine' : 'Unclaimed mine', p.x, p.y, Math.round(10 * k), m.owner >= 0 ? 700 : 600,
+      label(m.owner === me ? `Your mine · +${Math.round(MINE_RATE * WEEK)}/week` : m.owner >= 0 ? 'Enemy mine' : 'Unclaimed mine', p.x, p.y, Math.round(10 * k), m.owner >= 0 ? 700 : 600,
         m.owner >= 0 ? LIGHTC[m.owner] : 'rgba(226,230,222,.6)');
     }
   }
@@ -3936,7 +3949,7 @@ import * as THREE from 'three';
         ctx.globalAlpha = 0.16; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(m.x, m.y, 28, 0, Math.PI * 2); ctx.fill();
         ctx.globalAlpha = 1; ctx.strokeStyle = col; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.arc(m.x, m.y, 28, 0, Math.PI * 2); ctx.stroke();
-        if (m.owner === 0) {   // slow pulse while it pays out
+        if (m.owner === me) {   // slow pulse while it pays out
           const k = (nowS * 0.6) % 1;
           ctx.globalAlpha = (1 - k) * 0.5; ctx.lineWidth = 2;
           ctx.beginPath(); ctx.arc(m.x, m.y, 28 + k * 16, 0, Math.PI * 2); ctx.stroke();
@@ -3956,12 +3969,12 @@ import * as THREE from 'three';
   function drawStructs() {
     for (const s of structs) (s.type === 'fort' ? drawFort : drawTower)(s.x, s.y, COL.team[s.team], 1);
     if (!armed || !ghost || state !== 'play') return;
-    const ok = !placeCheck(me, armed, ghost), col = ok ? COL.team[0] : COL.team[1];
+    const ok = !placeCheck(me, armed, ghost), col = ok ? COL.team[me] : COL.team[1 - me];
     if (armed === 'fort' || armed === 'tower') {
       const R = armed === 'tower' ? 130 : 80, nowS = performance.now() / 1000;
       if (armed === 'tower') {   // enemies it would shoot at right now
-        ctx.strokeStyle = COL.team[1]; ctx.lineWidth = 1.8; ctx.globalAlpha = 0.9;
-        for (const u of units) if (u.team === 1 && !u.dead && (u.x - ghost.x) ** 2 + (u.y - ghost.y) ** 2 < R * R) { ctx.beginPath(); ctx.arc(u.x, u.y, 6.5, 0, Math.PI * 2); ctx.stroke(); }
+        ctx.strokeStyle = COL.team[1 - me]; ctx.lineWidth = 1.8; ctx.globalAlpha = 0.9;
+        for (const u of units) if (u.team !== me && !u.dead && (u.x - ghost.x) ** 2 + (u.y - ghost.y) ** 2 < R * R) { ctx.beginPath(); ctx.arc(u.x, u.y, 6.5, 0, Math.PI * 2); ctx.stroke(); }
       }
       ctx.globalAlpha = 0.14; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(ghost.x, ghost.y, R, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 0.95; ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.stroke();
@@ -3971,18 +3984,18 @@ import * as THREE from 'three';
       (armed === 'fort' ? drawFort : drawTower)(ghost.x, ghost.y, col, 0.6);
     }
     else if (armed === 'farm') {
-      ctx.globalAlpha = 0.6; rr(ctx, ghost.x - 20, ghost.y - 13, 40, 26, 3); ctx.fillStyle = ok ? '#4d4a3c' : COL.light[1]; ctx.fill();
+      ctx.globalAlpha = 0.6; rr(ctx, ghost.x - 20, ghost.y - 13, 40, 26, 3); ctx.fillStyle = ok ? '#4d4a3c' : COL.light[1 - me]; ctx.fill();
       ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke(); ctx.globalAlpha = 1;
     }
     else if (armed === 'charge') {
-      ctx.globalAlpha = 0.12; ctx.fillStyle = COL.team[0]; ctx.beginPath(); ctx.arc(ghost.x, ghost.y, 140, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 0.8; ctx.strokeStyle = COL.team[0]; ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
+      ctx.globalAlpha = 0.12; ctx.fillStyle = COL.team[me]; ctx.beginPath(); ctx.arc(ghost.x, ghost.y, 140, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.8; ctx.strokeStyle = COL.team[me]; ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
       ctx.beginPath(); ctx.arc(ghost.x, ghost.y, 140, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
     }
     else if (armed === 'bridge') {
       const b = B(ghost.x, ghost.y), L = bandAt(ghost.x, ghost.y), ca = L ? lineA(L, b) : A(ghost.x, ghost.y);
       const hw = L ? hwAt(L, b) : 30, p0 = XY(ca - hw - 10, b - 20), p1 = XY(ca + hw + 10, b + 20);
-      ctx.globalAlpha = 0.6; ctx.fillStyle = ok ? COL.bridge : COL.light[1]; ctx.strokeStyle = col; ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.6; ctx.fillStyle = ok ? COL.bridge : COL.light[1 - me]; ctx.strokeStyle = col; ctx.lineWidth = 2;
       rr(ctx, Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.abs(p1.x - p0.x), Math.abs(p1.y - p0.y), 6); ctx.fill(); ctx.stroke();
       ctx.globalAlpha = 1;
     } else {
@@ -3999,7 +4012,7 @@ import * as THREE from 'three';
     $('day').textContent = DAYS[Math.min(6, Math.floor(weekT / WEEK * 7))];
     $('wkbar').style.width = (weekT / WEEK * 100) + '%';
     let b = 0, r = 0;
-    for (const u of units) if (!u.dead) u.team === 0 ? b++ : r++;
+    for (const u of units) if (!u.dead) u.team === me ? b++ : r++;
     const tot = Math.max(1, b + r);
     $('balB').style.width = (b / tot * 100) + '%'; $('balR').style.width = (r / tot * 100) + '%';
     $('cntB').textContent = b; $('cntR').textContent = r;
@@ -4082,7 +4095,7 @@ import * as THREE from 'three';
       capture: (n, team) => { capture(town(n), team); return town(n).owner; },
       hitCapital: () => { const c = towns.find(t => t.capital && t.owner === 0), h = c.hold; enterTown(c, { team: 1, dead: false }); return { hold: c.hold, before: h, shake: FX.shakeAmount }; },
       shake: () => FX.shakeAmount,
-      buildings: () => structs.filter(st => st.team === 0).length,
+      buildings: () => structs.filter(st => st.team === me).length,
       audio: () => Sound.state,
       // a blue army of n gathered just outside a town (as if a route had brought it there); returns its screen point
       army: (name, n, dist) => {
@@ -4118,6 +4131,7 @@ import * as THREE from 'three';
       onCrag: () => units.filter(u => !u.dead && crags.some(c => Math.hypot(c.x - u.x, c.y - u.y) < c.r - 1)).length,
       terrain: () => ({ land: landKey, crags: crags.length, marshes: marshes.length, crossings: bridges.length, lines: lines.map(L => L.kind) }),
       state: () => state,
+      me: () => me,
       // for tests/drift.mjs (docs/multiplayer.md, phase 0): stop the real-time loop, so only run() moves the battle
       freeze: () => { paused = true; },
       board: b => { board = b; },
