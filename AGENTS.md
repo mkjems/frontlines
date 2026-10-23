@@ -12,6 +12,7 @@ Ideas:
 
 - **The whole game is [frontlines.html](frontlines.html)**: one file, no framework. [build.sh](build.sh)
   wraps it into `site/index.html` and copies [art/](art/) (paintings, icons, share image) into `site/`.
+  [docs/art.md](docs/art.md) describes the art style, where each picture is used, and prompts for more.
   Don't edit `site/`; it's rebuilt every time.
 - **Tests:** `cd tests && npm test` builds the page and runs the browser tests in headless Chrome. Run them
   after every change, and check the exit code before committing.

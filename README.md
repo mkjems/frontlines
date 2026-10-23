@@ -52,7 +52,8 @@ The whole game is a single file, [frontlines.html](frontlines.html), with no bui
 
 `frontlines.html` is written without the `<html>`/`<head>` wrapper. [build.sh](build.sh) wraps it into
 a complete page with sharing metadata at `site/index.html`, and copies [art/](art/) into `site/`: the
-start, victory and defeat paintings, the icons and the link-preview image.
+start, victory and defeat paintings, the icons and the link-preview image. [docs/art.md](docs/art.md)
+describes their style and how to make more.
 
 Ideas that have been discussed but not built yet are collected in [docs/ideas.md](docs/ideas.md).
 
