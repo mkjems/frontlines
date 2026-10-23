@@ -24,8 +24,7 @@ mkdir -p site
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Two soldiers, one in blue and one in red, face each other across a river with their castles behind them">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="icon" type="image/png" sizes="32x32" href="art/icon-32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="art/icon-16.png">
+<link rel="icon" href="art/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="art/icon-180.png">
 HEAD
   # everything up to and including </style> belongs in <head>
@@ -38,4 +37,5 @@ HEAD
 } > "$OUT"
 # pictures the page uses: the paintings, the icons and the link preview
 rm -rf site/art && cp -R art site/art
+cp art/favicon.ico site/favicon.ico   # browsers also ask for /favicon.ico on their own
 echo "Built $OUT ($(wc -c < "$OUT" | tr -d ' ') bytes)"
