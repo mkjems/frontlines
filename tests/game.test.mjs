@@ -307,6 +307,45 @@ test('two copies of a battle stay identical, as two players\' browsers must (doc
   }
 });
 
+test('a battle replays exactly from its orders: everything the player does goes through them', async () => {
+  // a real game played with the mouse, in real time and while frozen, then its orders played back in a fresh copy.
+  // Both copies start with the tutorial done: an unfinished one changes the battle (docs/multiplayer.md, phase 3).
+  const prep = await openGame();
+  await prep.evaluate(() => localStorage.setItem('frontlines-tutorial', 'done'));
+  await prep.close();
+  const page = await openGame();
+  await t(page, 'start');
+  await dragTo(page, await t(page, 'pos', 'Brindle'), await t(page, 'pos', 'Millbrook'));   // a route
+  await page.mouse.up();
+  const cold = await t(page, 'pos', 'Coldwater');   // the town menu: train cavalry
+  await page.mouse.click(cold.x, cold.y);
+  await sleep(100);
+  await page.click('#tmK2');
+  await page.click('#tray-tower');   // a watchtower
+  const spot = await t(page, 'pos', 'Ashford', 70, 40);
+  await page.mouse.move(spot.x, spot.y);
+  await page.mouse.click(spot.x, spot.y);
+  await sleep(1500);
+  await page.click('#chargeBtn');   // Charge, on Brindle's soldiers
+  const brin = await t(page, 'pos', 'Brindle');
+  await page.mouse.click(brin.x + 30, brin.y);
+  await sleep(500);
+  await t(page, 'freeze');
+  await t(page, 'run', 50);   // to the end of the week, where a reward is chosen
+  assert.equal(await t(page, 'state'), 'upgrade');
+  await page.evaluate(() => document.getElementById('choice0').click());
+  await t(page, 'run', 5);
+  const rec = await t(page, 'record');
+  const types = new Set(rec.orders.map(o => o.type));
+  for (const k of ['route', 'train', 'build', 'charge', 'reward']) assert.ok(types.has(k), `the record holds a ${k} order`);
+
+  const copy = await openGame();
+  await copy.evaluate(rec => { __t.freeze(); __t.newMap(rec.land, rec.map); __t.start(); }, rec);
+  assert.deepEqual(await t(copy, 'replay', rec), rec.sum, 'the replay ends exactly where the game did');
+  assert.deepEqual([...page.errors, ...copy.errors], []);
+  await page.close(); await copy.close();
+});
+
 test('armies find their way over two rivers and through a mountain pass', async () => {
   const page = await openGame();
   for (const [k, regions] of [['tworivers', 2], ['mountains', 1]]) {

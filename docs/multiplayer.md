@@ -3,7 +3,7 @@
 The plan for playing Frontlines against another person, agreed on 23 October 2026. Work through the phases
 in order. Single player against the computer must keep working, and feel the same, after every phase.
 
-**Current phase:** 2, not started. Phase 1 was done on 23 October.
+**Current phase:** 3, not started. Phase 2 was done on 23 October.
 
 How to keep this plan up to date:
 - Tick a step (`- [ ]` → `- [x]`) in the same commit as the work, once its tests pass.
@@ -142,11 +142,25 @@ Exit: we know how far today's game is from deterministic, and the size of phase 
 Exit: the determinism test passes reliably; single player plays as before.
 
 ### Phase 2: everything is an order
-- [ ] One function, `order(team, o)`, for every action: route, troop type, purchase, placing a building,
+- [x] One function, `order(team, o)`, for every action: route, troop type, purchase, placing a building,
       Charge, weekly reward, reinforcement. Orders are queued for a tick and applied inside `step()`.
-- [ ] The mouse and the computer opponent both go through it. In single player orders run on the next tick,
+      The section "orders" in `frontlines.html`. Order types: `route` (a drawn route, a target town or point,
+      or none to clear it, with `recall` to send marching soldiers home), `group`, `train`, `charge`, `build`
+      (bridge, barracks, farm, watchtower, fort) and `reward` (the weekly reinforcement). Orders are plain
+      data: towns by name, soldiers by id, bridges by index, points as x/y. While the battle stands still
+      (paused, or the weekly choice) the player's orders are carried out at once, which gives the same result,
+      since no step comes between. `build` checks the player's order again when it's carried out.
+- [x] The mouse and the computer opponent both go through it. In single player orders run on the next tick,
       with no delay.
-- [ ] Optional along the way: record the orders of a game and play it back (replays).
+      The computer runs inside `step()` alike on every copy, so it calls `carryOut(1, o)` and its orders take
+      effect at once, with the same rules as the player's. Its behaviour is unchanged.
+- [x] Optional along the way: record the orders of a game and play it back (replays).
+      `orderLog` holds the player's orders as carried out, each with the step it came before; the test hooks
+      `__t.record()` and `__t.replay()` use it. The test "a battle replays exactly from its orders" plays a
+      game with the mouse in real time (route, troop type, watchtower, Charge, weekly reward), replays the
+      record in a fresh copy and compares checksums. It found a last `rand` in the birdsong, which drew from
+      the battle's stream every frame; the twins test can't see that, as frozen copies play no birdsong.
+      A record needs the map: `land` and `map` are part of it (and in a match, the board and settings).
 
 Exit: no input handler or AI routine changes the game state directly.
 
@@ -173,6 +187,8 @@ Exit: a test can play team 1 by hand while the computer plays team 0.
 - [ ] The deploy workflow builds and starts both containers.
 - [ ] Network code in the game: connect, send and receive turns, wait for the other player, adapt the delay,
       checksum comparison and resync.
+- [ ] Orders waiting in the queue are drawn: a route faintly until it takes effect. In single player the wait
+      is one step (25 ms) and invisible; with the network delay it's 100–150 ms.
 
 Exit: two browsers on different machines play a whole battle through the VPS.
 
