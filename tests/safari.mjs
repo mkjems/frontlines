@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { MAP, BOARD, MATCH, ORDERS, setupInPage, secondInPage, differ, chromeCopy, chromeSecond } from './twins.mjs';
 
-const LANDS = ['valley', 'lake', 'tworivers', 'mountains', 'open', 'steppe', 'greenwood', 'highlands', 'marsh', 'broken'];
+const LANDS = ['valley', 'lake', 'tworivers', 'mountains', 'open', 'steppe', 'greenwood', 'highlands', 'plateau', 'broken'];
 const [onlyLand, secsArg] = process.argv.slice(2);
 const SECS = +secsArg || 600;
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';

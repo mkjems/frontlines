@@ -54,7 +54,7 @@ Two kinds of art, kept apart on purpose:
 ## Ideas for more art
 
 - **A picture for each landscape** in the map step of the start screen (River Valley, The Great Lake, Two
-  Rivers, Mountain Pass, Open Border, The Steppe, The Greenwood, Highlands, Marshes, Broken Bridges): small
+  Rivers, Mountain Pass, Open Border, The Steppe, The Greenwood, Highlands, The Plateau, Broken Bridges): small
   wide paintings of the place itself, with tiny armies, in the same light and sky.
 - **A header for the Rules sheet:** a quieter scene, for example a war table with a map and tokens.
 - **Formation art** for the planned archer volleys, shield walls and cavalry raids (see

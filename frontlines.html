@@ -808,7 +808,7 @@ import * as THREE from 'three';
   // ---------- world ----------
   let W, H, P, LA, LB, dpr = 1, bg = null;
   let lines = [], bridges, towns, units, companies = [], volleys = [], deaths, puffs, trees, patches;
-  let scars = [], waves = [], ripples = [], fields = [], hills = [], roads = [], rocks = [], crags = [], marshes = [], compass = { x: 0, y: 0 };
+  let scars = [], waves = [], ripples = [], fields = [], hills = [], roads = [], rocks = [], crags = [], compass = { x: 0, y: 0 };
   // me: the team this browser plays. Gold, purchases, tray items, extra route ink and Charge are kept per team.
   let me = 0, state = 'intro', paused = false, speed = 1, time = 0, week = 1, weekT = 0, aiT = 6, ink = [0, 0];
   let uid = 0, routeSeq = 0, frameNo = 0, routesDrawn = 0;
@@ -944,6 +944,7 @@ import * as THREE from 'three';
   // hills and woods: [how many, smallest radius, largest radius]. fields: a multiple of the usual farms per town.
   // middle: where neutral towns may stand, as [nearest, furthest] from blue's edge (0..0.5).
   // roads: how many neighbours each town has a road to (2 if not given); bushes and rocks: how many (90, 22).
+  // towns: [own towns besides the capital, pairs of neutral towns] (if not given, 1 to 3 and 2 or 3, drawn at random).
   // thick: how densely each wood is planted (1 if not given). scatter: lone trees and copses on top of the woods.
   // ruins: where broken bridges stand in the river (just scenery). freeBridge: each side starts with a bridge to build.
   // Each map is point-symmetric about the board's centre, so a pair of barriers or crossings must mirror
@@ -972,9 +973,8 @@ import * as THREE from 'three';
     highlands: { name: 'Highlands', desc: 'Big hills and rocky crags no army can climb. Hold the passes between them.',
       lines: [RIVER({ amp: 0.035, freq: 1.6, wide: 0.8 }, [[0.2, 0], [0.5, 1], [0.8, 0]])],
       hills: [8, 60, 105], woods: [2, 40, 60], trees: 110, fields: 0.7, crags: 7 },
-    marsh: { name: 'Marshes', desc: 'A wide, winding river with two fords, and bogs that slow everyone down.',
-      lines: [RIVER({ amp: 0.05, freq: 1.9, wide: 1.15 }, [[0.2, 1], [0.5, 0], [0.8, 1]])],
-      hills: [1, 50, 75], woods: [2, 40, 60], trees: 120, fields: 1, marsh: 9 },
+    plateau: { name: 'The Plateau', desc: 'A vast, bare plain of grass: a few towns far apart, no woods, hardly a tree or a road. Battles are won in the open field.',
+      lines: [], hills: [0, 0, 0], woods: [0, 0, 0], trees: 8, fields: 0.6, roads: 1, bushes: 14, rocks: 5, towns: [1, 1] },
     broken: { name: 'Broken Bridges', desc: 'The old bridges are gone. Each side has one bridge to build: where you put it decides the war.',
       lines: [RIVER({}, [])], ruins: [0.27, 0.5, 0.73], freeBridge: true,
       hills: [5, 55, 95], woods: [4, 45, 70], trees: 175, fields: 1 },
@@ -1037,6 +1037,7 @@ import * as THREE from 'three';
     const mid = land.middle || [0.32, 0.46];
     // how many towns: decided once, then only the positions are redrawn, so big layouts aren't crowded out
     let own = [1, 2, 2, 3][rng() * 4 | 0], freePairs = 2 + (rng() * 2 | 0);
+    if (land.towns) [own, freePairs] = land.towns;
     for (let attempt = 0; attempt < 400; attempt++) {
       if (attempt && attempt % 100 === 0) { if (freePairs > 1) freePairs--; else if (own > 1) own--; }   // a cramped board: fewer towns
       const out = [], names = { blue: shuffle(TOWN_NAMES.blue.slice()), red: shuffle(TOWN_NAMES.red.slice()), free: shuffle(TOWN_NAMES.free.slice()) };
@@ -1176,28 +1177,17 @@ import * as THREE from 'three';
       if (roadPts.some(q => hypot(q.x - x, q.y - y) < r + 18) || nearCompass(x, y, r + 60)) continue;
       crags.push({ x, y, r }, { ...mirror({ x, y }), r });
     }
-    // marshes: boggy ground that slows everyone (a road across one is a causeway, and stays quick)
-    marshes = [];
-    for (let tries = 0; tries < 400 && marshes.length < pairs(land.marsh || 0) * 2; tries++) {
-      const r = rand(42, 72), { x, y } = blueSpot(60);
-      if (nearRiver(x, y, -8) || towns.some(t => hypot(t.x - x, t.y - y) < r + 80) || nearMine(x, y, r + 40) || !twinGap(x, y, 2 * r + 20)) continue;
-      if (fields.some(f => hypot(f.x - x, f.y - y) < r + 26) || marshes.some(m => hypot(m.x - x, m.y - y) < m.r + r + 20)) continue;
-      if (hills.some(h => hypot(h.x - x, h.y - y) < h.r + r) || nearCompass(x, y, r + 50)) continue;
-      if (bridges.some(br => { const q = XY(lineA(br.line, br.b), br.b); return hypot(q.x - x, q.y - y) < r + 70; })) continue;
-      const pts = Array.from({ length: 18 }, (_, i) => 1 + 0.18 * sin(i * 1.3 + x) + rand(-0.08, 0.08));
-      marshes.push({ x, y, r, pts }, { ...mirror({ x, y }), r, pts: turn(pts) });
-    }
     rocks = [];
     for (let tries = 0; tries < 200 && rocks.length < (land.rocks ?? 22); tries++) {
       const { x, y } = blueSpot(20);
-      if (nearRiver(x, y, 20) || towns.some(t => hypot(t.x - x, t.y - y) < 80) || fields.some(f => hypot(f.x - x, f.y - y) < 36) || nearMine(x, y, 40) || nearCrag(x, y, 8) || inMarsh(x, y)) continue;
+      if (nearRiver(x, y, 20) || towns.some(t => hypot(t.x - x, t.y - y) < 80) || fields.some(f => hypot(f.x - x, f.y - y) < 36) || nearMine(x, y, 40) || nearCrag(x, y, 8)) continue;
       const r = rand(2.5, 5);
       rocks.push({ x, y, r }, { ...mirror({ x, y }), r });
     }
     const tree = (x, y, r, pine) => { const t = { x, y, r, c: rng() < .5 ? COL.tree : COL.tree2, pine }; trees.push(t, { ...t, ...mirror(t) }); };
     for (let w = 0, tries = 0; w < pairs(land.woods[0]) && tries < 600; tries++) {   // proper woods, big enough to matter
       const R = rand(land.woods[1], land.woods[2]), { x, y } = blueSpot(80);
-      if (nearRiver(x, y, R + 20) || nearCrag(x, y, R + 20) || marshes.some(m => hypot(m.x - x, m.y - y) < m.r + R) || !twinGap(x, y, 2 * R)) continue;
+      if (nearRiver(x, y, R + 20) || nearCrag(x, y, R + 20) || !twinGap(x, y, 2 * R)) continue;
       if (towns.some(t => hypot(t.x - x, t.y - y) < R + 70) || fields.some(f => hypot(f.x - x, f.y - y) < R + 30)) continue;
       if (nearCompass(x, y, R + 40) || nearMine(x, y, R + 40) || hills.some(h => hypot(h.x - x, h.y - y) < h.r + R)) continue;
       for (let k = 0, n = Math.round(26 * (land.thick ?? 1) * (R / 60) ** (land.thick ? 2 : 0)); k < n; k++) { const a = rand(0, Math.PI * 2), d = Math.sqrt(rng()) * R; tree(x + cos(a) * d, y + sin(a) * d * 0.85, rand(7, 12), rng() < 0.45); }
@@ -1205,7 +1195,7 @@ import * as THREE from 'three';
     }
     for (let tries = 0, want = Math.max(land.trees, trees.length + (land.scatter ?? 0)); tries < 3000 && trees.length < want; tries++) {
       const { x, y } = blueSpot(20);
-      if (nearRiver(x, y, 26) || nearCrag(x, y, 14) || inMarsh(x, y) || !twinGap(x, y, 30)) continue;
+      if (nearRiver(x, y, 26) || nearCrag(x, y, 14) || !twinGap(x, y, 30)) continue;
       if (towns.some(t => hypot(t.x - x, t.y - y) < 80)) continue;
       if (fields.some(f => hypot(f.x - x, f.y - y) < 44) || nearCompass(x, y, 70) || nearMine(x, y, 45)) continue;
       if (bridges.some(br => { const p = XY(lineA(br.line, br.b), br.b); return hypot(p.x - x, p.y - y) < 120; })) continue;
@@ -1356,11 +1346,6 @@ import * as THREE from 'three';
   }
 
   const inForest = (x, y) => forestGrid[(x / FC | 0) + (y / FC | 0) * fgw] === 1;
-  function inMarsh(x, y) {
-    for (const m of marshes) if (hypot(x - m.x, (y - m.y) / 0.8) < m.r * 0.92) return true;
-    return false;
-  }
-  const MARSH_SPEED = 0.55;
   const nearCrag = (x, y, m) => crags.some(c => hypot(c.x - x, c.y - y) < c.r + m);
   function hillLevel(x, y) {   // 0 = flat ground, 3 = hilltop
     for (const h of hills) {
@@ -1418,17 +1403,6 @@ import * as THREE from 'three';
       c.strokeStyle = 'rgba(55,45,25,.3)'; c.lineWidth = 1.4;
       for (let o = -f.h / 2 + 5; o < f.h / 2 - 2; o += 5) { c.beginPath(); c.moveTo(-f.w / 2 + 3, o); c.lineTo(f.w / 2 - 3, o); c.stroke(); }
       c.restore();
-    }
-    // marshes: dark wet ground with standing pools
-    for (const m of marshes) {
-      const blob = (k, jit) => { c.beginPath(); m.pts.forEach((q, i) => { const a = i / m.pts.length * Math.PI * 2, r = m.r * k * q * (1 + jit * sin(i * 2.1 + m.x)); const x = m.x + cos(a) * r, y = m.y + sin(a) * r * 0.8; i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.closePath(); };
-      blob(1, 0); c.fillStyle = '#2a3330'; c.fill(); c.strokeStyle = 'rgba(120,130,90,.3)'; c.lineWidth = 1.5; c.stroke();
-      blob(0.82, 0.05); c.fillStyle = '#26302d'; c.fill();
-      for (let i = 0; i < 12; i++) {
-        const a = rand(0, Math.PI * 2), d = rand(0, m.r * 0.65), x = m.x + cos(a) * d, y = m.y + sin(a) * d * 0.8;
-        c.beginPath(); c.ellipse(x, y, rand(6, 15), rand(3.5, 8), rand(0, 3), 0, Math.PI * 2); c.fillStyle = '#31525f'; c.fill();
-        c.strokeStyle = 'rgba(20,26,24,.5)'; c.lineWidth = 1; c.stroke();
-      }
     }
     // crags stand on a skirt of broken, stony ground
     for (const k of crags) {
@@ -2057,7 +2031,6 @@ import * as THREE from 'three';
       let tx, ty, spd = SPEED * K_SPEED[u.kind] * (u.boost > 0 ? 1.5 : 1);
       if (onRoad(u.x, u.y)) spd *= ROAD_SPEED;
       else if (inForest(u.x, u.y)) spd *= 0.65;
-      else if (inMarsh(u.x, u.y)) spd *= MARSH_SPEED;
       else if (onFord(u.x, u.y)) spd *= 0.45;
       if (u.wheel > 0) u.wheel -= dt;
       if (u.enemy && u.wheel > 0) {   // wheeling away after a charge, peeling off to one side, to come again
@@ -3254,7 +3227,6 @@ import * as THREE from 'three';
     let title = 'Open ground';
     if (onRoad(x, y)) { title = 'Road'; lines.push('Troops march 40% faster here.'); }
     else if (inForest(x, y)) { title = 'Woods'; lines.push('Troops move 35% slower, but arrows do half damage.'); }
-    else if (inMarsh(x, y)) { title = 'Marsh'; lines.push(`Boggy ground: troops move ${Math.round((1 - MARSH_SPEED) * 100)}% slower.`); }
     const h = hillLevel(x, y);
     if (h) {
       if (title === 'Open ground') title = 'Hill';
@@ -4002,7 +3974,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     const bushes = [];
     for (let tries = 0; tries < 900 && bushes.length < (land.bushes ?? 90); tries++) {
       const x = rand(15, W - 15), y = rand(15, H - 15);
-      if (riverGap(x, y) < 16 || onRoad(x, y) || nearCrag(x, y, 10) || inMarsh(x, y)) continue;
+      if (riverGap(x, y) < 16 || onRoad(x, y) || nearCrag(x, y, 10)) continue;
       if (towns.some(t => Math.hypot(t.x - x, t.y - y) < (t.capital ? 80 : 60)) || fields.some(f => Math.hypot(f.x - x, f.y - y) < 32) || mines.some(m => Math.hypot(m.x - x, m.y - y) < 40)) continue;
       if (Math.hypot(compass.x - x, compass.y - y) < 40) continue;
       bushes.push({ x, y, r: rand(1.8, 3.4) });
@@ -4038,16 +4010,6 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     world.add(instanced(GEO.rock, mat('#ffffff'), boulders, (r, d, c) => {
       d.position.set(r.x, groundAt(r.x, r.y) + r.h * 0.35, r.y); d.scale.set(r.s, r.h, r.s * 0.9); d.rotation.set(rand(-0.2, 0.2), r.rot, rand(-0.2, 0.2));
       tint(c, '#5f605a', 0.06);
-    }));
-    // marsh reeds: thin tufts dotted over the bog
-    const reeds = [];
-    for (const m of marshes) for (let i = 0; i < 40; i++) {
-      const a = rand(0, Math.PI * 2), d = Math.sqrt(rng()) * m.r * 0.85, x = m.x + Math.cos(a) * d, y = m.y + Math.sin(a) * d * 0.8;
-      for (let j = 0; j < 3; j++) reeds.push({ x: x + rand(-2.5, 2.5), y: y + rand(-2.5, 2.5), h: rand(4, 8) });
-    }
-    world.add(instanced(GEO.pine, mat('#ffffff'), reeds, (r, d, c) => {
-      d.position.set(r.x, groundAt(r.x, r.y), r.y); d.scale.set(0.55, r.h, 0.55); d.rotation.set(rand(-0.25, 0.25), 0, rand(-0.25, 0.25));
-      tint(c, '#76804f', 0.07);
     }));
     world.add(instanced(GEO.rock, mat('#ffffff'), rocks, (r, d, c) => { d.position.set(r.x, groundAt(r.x, r.y) + r.r * 0.2, r.y); d.scale.set(r.r, r.r * 0.6, r.r * 0.8); d.rotation.set(0, rand(0, 6), 0); tint(c, '#6b6c66', 0.04); }));
 
@@ -5040,7 +5002,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     const stage = () => {
       for (const t of towns) t.owner = -1;
       units = []; structs = []; companies = []; volleys = [];
-      const open = (x, y) => !blockedAt(x, y) && !inForest(x, y) && !hillLevel(x, y) && !inMarsh(x, y) && riverGap(x, y) > 100;
+      const open = (x, y) => !blockedAt(x, y) && !inForest(x, y) && !hillLevel(x, y) && riverGap(x, y) > 100;
       for (let i = 0; i < 4000; i++) {
         const x = rand(150, W - 150), y = rand(150, H - 150);
         if ([-200, -120, -60, 0, 60, 120, 200].every(dx => open(x + dx, y)) && towns.every(t => Math.hypot(t.x - x, t.y - y) > 250)) return { x, y };
@@ -5141,7 +5103,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       mirrored: () => {   // is the land the same, turned about the centre, for both sides?
         const near = (p, list, d = 2) => list.some(q => Math.hypot(W - p.x - q.x, H - p.y - q.y) < d);
         return towns.every(t => near(t, towns.filter(o => o.owner === (t.owner < 0 ? -1 : 1 - t.owner) && o.kind === t.kind)))
-          && [mines, hills, crags, marshes, fields, trees].every(list => list.every(p => near(p, list)))
+          && [mines, hills, crags, fields, trees].every(list => list.every(p => near(p, list)))
           && bridges.every(br => bridges.some(o => o.ford === br.ford && o.pass === br.pass && Math.abs(LB - br.b - o.b) < 1 && (o.line === br.line || lines.length === 2)));
       },
       dry: () => towns.every(t => riverGap(t.x, t.y) > 60) && units.every(u => u.dead || !blockedAt(u.x, u.y)),
@@ -5151,7 +5113,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       },
       furthest: () => Math.max(0, ...units.filter(u => !u.dead && u.team === 0).map(u => regionOf(u.x, u.y))),
       onCrag: () => units.filter(u => !u.dead && crags.some(c => Math.hypot(c.x - u.x, c.y - u.y) < c.r - 1)).length,
-      terrain: () => ({ land: landKey, crags: crags.length, marshes: marshes.length, crossings: bridges.length, lines: lines.map(L => L.kind) }),
+      terrain: () => ({ land: landKey, crags: crags.length, towns: towns.length, roads: roads.length, trees: trees.length, crossings: bridges.length, lines: lines.map(L => L.kind) }),
       state: () => state,
       me: () => me,
       // two-player matches (docs/multiplayer.md): host, join, start, drop the connection and rejoin

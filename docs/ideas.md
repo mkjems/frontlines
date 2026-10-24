@@ -138,7 +138,6 @@ There are ten landscapes, random but mirrored layouts with map numbers, and a Cl
   map number plus special rules, for example: start outnumbered; hold out for 6 weeks; the enemy has two
   capitals; no bridges (build your own). The game would remember which levels are beaten.
 - **A map of the day:** everyone gets the same map number on the same date.
-- **A completely bare Steppe:** no roads and no hills at all, if The Steppe should be even emptier.
 - **Borderlands:** an open map with a few patches of woods and bogs as soft cover instead of hard barriers.
 - **Sparser roads everywhere:** Open Border and The Steppe turned out fun partly because of fewer roads. Other
   maps could link each town to one neighbour instead of two (the `roads` setting per landscape).
@@ -150,7 +149,7 @@ There are ten landscapes, random but mirrored layouts with map numbers, and a Cl
 
 ## The enemy
 
-- **Smarter on open maps:** its planning was written around bridges. On Open Border and The Steppe it could
+- **Smarter on open maps:** its planning was written around bridges. On Open Border, The Steppe and The Plateau it could
   split into two armies and try to flank instead of striking at one target.
 - **Charge for the enemy:** the enemy has no Charge. It could charge when its army meets the player's.
 
@@ -205,6 +204,9 @@ module-level variables are reassigned across sections (`towns`, `units`, `W`, `H
   decision. The project keeps the one dark board.
 - **Peek on the start screen:** replaced by the three-step start, whose map step shows the board anyway.
 - **Old Forest and Open Plains landscapes:** removed. The Greenwood and The Steppe cover them better.
+- **Marshes:** removed on 24 October 2026 for The Plateau, to get more fighting in the open field and less town
+  against town. Its bogs (ground that slowed everyone) went with it; they are in the git history if Borderlands
+  wants them.
 - **The fort:** removed on 24 October 2026. Its only effect was 55% less damage for its side's soldiers inside
   its circle, and nothing brought soldiers there; giving it a real job (a healing post, a rally point that
   draws idle soldiers in) would have made it another town. Holding ground is now the companies' job: a gathered

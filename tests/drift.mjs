@@ -9,7 +9,7 @@ import { existsSync } from 'node:fs';
 import puppeteer from 'puppeteer-core';
 import { race } from './twins.mjs';
 
-const LANDS = ['valley', 'lake', 'tworivers', 'mountains', 'open', 'steppe', 'greenwood', 'highlands', 'marsh', 'broken'];
+const LANDS = ['valley', 'lake', 'tworivers', 'mountains', 'open', 'steppe', 'greenwood', 'highlands', 'plateau', 'broken'];
 const [onlyLand, secsArg] = process.argv.slice(2);
 const SECS = +secsArg || 600;
 const CHROME = process.env.CHROME_PATH || [

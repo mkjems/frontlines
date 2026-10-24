@@ -146,7 +146,7 @@ test('playing a friend through the screens: invite, join by link, battle, pause,
   assert.ok(await shown(guest, '#stepJoin'), 'a link opens the welcome card');
   await guest.type('#guestName', 'Bo');
   await guest.click('#joinBtn');
-  await until(guest, () => /River Valley|Valley|Lake|Rivers|Pass|Border|Steppe|Greenwood|Highlands|Marshes|Bridges/.test(document.getElementById('joinTitle').textContent), 'the host\'s map on the welcome card');
+  await until(guest, () => /River Valley|Valley|Lake|Rivers|Pass|Border|Steppe|Greenwood|Highlands|Plateau|Bridges/.test(document.getElementById('joinTitle').textContent), 'the host\'s map on the welcome card');
   await until(host, () => document.getElementById('waitTitle').textContent === 'Bo has joined', 'the host to see the guest');
   // the host picks another landscape; the guest's card follows
   await host.click('#waitBack');

@@ -16,7 +16,7 @@ export const ORDERS = { 5: 20, 60: 30, 150: 40, 300: 40, 450: 50 };
 // These two run inside the page (they're sent to the browser as source, so they may only use their arguments).
 export function setupInPage(land, map, board, match, history) {
   __t.freeze(); __t.board(board); __t.match(match);
-  if (history) { __t.newMap('marsh', 77); __t.start(); __t.march('Ashford', 'Redmarsh', 30); __t.run(40); }
+  if (history) { __t.newMap('plateau', 77); __t.start(); __t.march('Ashford', 'Redmarsh', 30); __t.run(40); }
   __t.newMap(land, map); __t.start();
 }
 export function secondInPage(n) {

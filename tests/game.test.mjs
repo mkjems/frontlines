@@ -436,7 +436,7 @@ test('battles, captures and attacks on your capital', async () => {
 
 test('every landscape builds and plays: towns stay dry and nobody walks through crags', async () => {
   const page = await openGame();
-  for (const k of ['valley', 'lake', 'tworivers', 'mountains', 'open', 'steppe', 'greenwood', 'highlands', 'marsh', 'broken']) {
+  for (const k of ['valley', 'lake', 'tworivers', 'mountains', 'open', 'steppe', 'greenwood', 'highlands', 'plateau', 'broken']) {
     assert.equal(await t(page, 'newMap', k), k);
     assert.equal(await page.$eval('#landName', e => e.textContent.length > 0), true, 'the intro names the landscape');
     await t(page, 'start'); await t(page, 'run', 40);
@@ -446,14 +446,13 @@ test('every landscape builds and plays: towns stay dry and nobody walks through 
   }
   const terrain = await t(page, 'newMap', 'highlands') && await t(page, 'terrain');
   assert.ok(terrain.crags > 0, 'the highlands have crags');
-  assert.ok((await t(page, 'newMap', 'marsh'), await t(page, 'terrain')).marshes > 0, 'the marshes have bogs');
   // the arrows step through every landscape once, in order, then starts over
   const seen = [];
   for (let i = 0; i < 10; i++) { await page.evaluate(() => document.getElementById('landNext').click()); seen.push(await t(page, 'land')); }
   assert.equal(new Set(seen).size, 10, 'ten presses visit all ten landscapes');
-  assert.equal(seen[9], 'marsh', 'and the tenth comes back round to where it started');
+  assert.equal(seen[9], 'highlands', 'and the tenth comes back round to where it started');
   await page.evaluate(() => document.getElementById('landPrev').click());
-  assert.equal(await t(page, 'land'), 'highlands', 'the back arrow goes the other way');
+  assert.equal(await t(page, 'land'), 'greenwood', 'the back arrow goes the other way');
   await page.evaluate(() => document.querySelectorAll('#landDots button')[3].click());
   assert.equal(await t(page, 'land'), 'mountains', 'a dot jumps straight to its landscape');
   assert.equal(await page.$eval('#landDots button.on', b => b.getAttribute('aria-label')), 'Mountain Pass', 'and lights up');
@@ -486,7 +485,7 @@ test('maps without a river sell no bridges: none in the tray or among the weekly
 
 test('two copies of a battle stay identical, as two players\' browsers must (docs/multiplayer.md)', async () => {
   // different windows, drawing, Math.random and history; same map number, board and orders. npm run drift runs it longer.
-  for (const land of ['valley', 'lake', 'tworivers', 'mountains', 'open', 'steppe', 'greenwood', 'highlands', 'marsh', 'broken']) {
+  for (const land of ['valley', 'lake', 'tworivers', 'mountains', 'open', 'steppe', 'greenwood', 'highlands', 'plateau', 'broken']) {
     const r = await race(browser, land, 45);
     assert.equal(r.first, null, `${land}: the copies differ from second ${r.first?.s} (${r.first?.parts})`);
     assert.deepEqual(r.errors, []);
@@ -579,13 +578,16 @@ test('armies find their way over two rivers and through a mountain pass', async 
 
 test('random layouts: the same for both sides, the same for the same map number, and playable', async () => {
   const page = await openGame(undefined, RANDOM);
-  const lands = ['valley', 'lake', 'tworivers', 'mountains', 'open', 'steppe', 'greenwood', 'highlands', 'marsh', 'broken'];
+  const lands = ['valley', 'lake', 'tworivers', 'mountains', 'open', 'steppe', 'greenwood', 'highlands', 'plateau', 'broken'];
   for (let i = 0; i < lands.length * 3; i++) {
     const k = lands[i % lands.length];
     await t(page, 'newMap', k, 100 + i);
     assert.ok(await t(page, 'mirrored'), `${k} map ${100 + i}: towns, mines, fields, hills, woods and crossings mirror each other`);
   }
   assert.equal(await t(page, 'fallbacks'), 0, 'every random layout fits without falling back to the classic one');
+  const steppe = (await t(page, 'newMap', 'steppe'), await t(page, 'terrain')), plateau = (await t(page, 'newMap', 'plateau'), await t(page, 'terrain'));
+  assert.equal(plateau.towns, 6, 'the plateau has six towns: a capital and one more each, and a neutral pair');
+  assert.ok(plateau.towns < steppe.towns && plateau.roads < steppe.roads && plateau.trees < steppe.trees, 'and fewer towns, roads and trees than the steppe');
   await t(page, 'newMap', 'highlands', 4821);
   const first = JSON.stringify(await t(page, 'layout'));
   await t(page, 'newMap', 'highlands', 4821);
