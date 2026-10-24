@@ -547,6 +547,7 @@
         <li><span class="k">Cavalry ■</span> fast, triple charge damage, train slowly. Beat archers.</li>
         <li><span class="k">Companies</span>: 6 or more gathered together form up under a banner, facing the enemy: spearmen in front, archers behind, cavalry on the wings. When any of them fights, they all join in.</li>
         <li><span class="k">Volleys</span>: a company with 8 or more archers shoots together every 4 s, a rain of arrows on the thickest crowd of enemies, far beyond one archer's reach. Close-packed blocks suffer most; charging cavalry mostly outrun it.</li>
+        <li><span class="k">Shield wall</span>: a company with 8 or more spearmen holds its ground. They fight two ranks deep, take 35% less in hand-to-hand fighting, and cavalry charging them get hurt. Arrows still break it.</li>
       </ul>
       <h3 style="margin-top:12px">Combat</h3><ul>
         <li>Each nearby ally adds 6% damage, up to +60%.</li>
@@ -622,7 +623,7 @@ import * as THREE from 'three';
   // ---------- sound: everything is synthesized, no audio files ----------
   const Sound = (() => {
     let ac = null, master = null, noiseBuf = null, rumbleGain = null, muted = false, lastArrow = 0, lastHit = 0, lastClick = 0;
-    let bedGain = null, nextBeat = 0, beat = 0, nextBird = 0, lastHorn = -99, lastVolley = -99;
+    let bedGain = null, nextBeat = 0, beat = 0, nextBird = 0, lastHorn = -99, lastVolley = -99, lastClang = 0;
     try { muted = localStorage.getItem('frontlines-muted') === '1'; } catch (e) {}
     function init() {
       if (ac) { if (!muted && ac.state === 'suspended') ac.resume(); return; }
@@ -717,6 +718,15 @@ import * as THREE from 'three';
         src.connect(f); f.connect(g); g.connect(master); src.start(t0, Math.random()); src.stop(t0 + dur + 0.05);
         tone(2300, dur * 0.8, { vol: 0.02, glide: 1100, delay: dur * 0.2 + 0.08, attack: 0.2 });
         for (let i = 0; i < 10; i++) noise(0.04, { freq: fxRand(700, 1600), q: 3, vol: 0.09, delay: dur + 0.05 + fxRand(0, 0.3) });
+      },
+      // steel on a shield wall: a short, soft ring; a charge crashing into it adds a thud
+      clang(big) {
+        if (now() - lastClang < (big ? 120 : 160)) return;
+        lastClang = now();
+        const f = fxRand(1900, 2500);
+        tone(f, big ? 0.3 : 0.12, { type: 'triangle', vol: big ? 0.035 : 0.018 }); tone(f * 1.48, big ? 0.22 : 0.08, { vol: big ? 0.02 : 0.01 });
+        noise(0.04, { freq: 3800, q: 5, vol: big ? 0.1 : 0.05 });
+        if (big) noise(0.18, { filter: 'lowpass', freq: 320, vol: 0.3 });
       },
       hit() { if (now() - lastHit > 70) { lastHit = now(); noise(0.05, { freq: 600 + Math.random() * 500, q: 4, vol: 0.12 }); } },
       alarm() { tone(784, 0.14, { type: 'square', vol: 0.035 }); tone(784, 0.14, { type: 'square', vol: 0.035, delay: 0.22 }); },
@@ -1835,11 +1845,18 @@ import * as THREE from 'three';
     dmg *= 1 + Math.min(allies, 10) * 0.06;   // group strength: up to +60%
     let kb = ranged ? 0 : 2.2;
     // a charge: cavalry's first blow after a pause, unless it meets spears; spearmen charge only on a Charge order
+    const wall = !ranged && inWall(e);
     if (!ranged && u.calm > 1.2 && u.kind !== 1) {
       const cm = u.kind === 2 ? (e.kind === 0 ? 1 : 3) : u.charge ? 2.2 : 1;
       if (cm > 1) { dmg *= cm; kb = 5; puff(e.x, e.y, COL.mid[u.team], 12); FX.dust(e.x, e.y, 3); }
+      if (wall && u.kind === 2) {   // a charge onto the spears: the rider is hurt and thrown back
+        u.hp -= WALL_SPIKE; u.flash = 0.12; u.x -= nx * 6; u.y -= ny * 6; constrain(u);
+        FX.clash(e.x, e.y, true);
+        if (u.hp <= 0) kill(u);
+      }
     }
     u.calm = 0;
+    if (wall) { dmg *= WALL_GUARD; kb *= 0.25; FX.clash(e.x, e.y, false); }
     if (ranged) { if (inForest(e.x, e.y)) dmg *= 0.5; }
     else { const hu = hillLevel(u.x, u.y), he = hillLevel(e.x, e.y); if (hu > he) dmg *= 1.25; else if (hu < he) dmg *= 0.8; }
     if (ranged && tracers.length < 300) tracers.push({ x0: u.x, y0: u.y, x1: e.x, y1: e.y, t: 0.06, team: u.team });
@@ -1886,6 +1903,15 @@ import * as THREE from 'three';
   // enemy it lands on, so close-packed blocks suffer most and stragglers are rarely hit. Woods halve the damage,
   // as for any arrow.
   const VOLLEY_MIN = 8, VOLLEY_T = 4, VOLLEY_R = 170, VOLLEY_SPREAD = 18, VOLLEY_HIT = 4.5;
+  // A shield wall: a company with WALL_MIN or more spearmen. Its spearmen hold their ground: they wait in their
+  // places for spearmen and cavalry to come to them, and step back into place when pushed out, but go out after
+  // archers, who would otherwise shoot them to pieces. Those in their places reach WALL_REACH with their spears
+  // against spearmen and cavalry, so the second rank fights over the first, take WALL_GUARD of the damage in
+  // hand-to-hand fighting and are hardly pushed back, and a rider whose charge hits them is hurt and thrown back.
+  // Arrows hurt a wall as much as anyone.
+  const WALL_MIN = 8, WALL_GUARD = 0.65, WALL_SPIKE = 1.5, WALL_REACH = 17;
+  const ofWall = u => u.kind === 0 && !u.dead && u.co && u.co.n[0] >= WALL_MIN && u.slot && u.route && u.arrived && u.slot.rid === u.route.id;
+  const inWall = u => ofWall(u) && (u.x - u.slot.x) ** 2 + (u.y - u.slot.y) ** 2 < 144;
   let volleyCount = 0;
   // the thickest crowd of enemies within R of (x, y): the middle of the enemies close round the one with most
   // others near it, and how fast they're going. Enemies already at close quarters with the company's side are
@@ -1999,15 +2025,18 @@ import * as THREE from 'three';
       else if (inMarsh(u.x, u.y)) spd *= MARSH_SPEED;
       else if (onFord(u.x, u.y)) spd *= 0.45;
       if (u.enemy) {
-        const e = u.enemy, dx = e.x - u.x, dy = e.y - u.y, d = hypot(dx, dy) || 1;
+        const e = u.enemy, dx = e.x - u.x, dy = e.y - u.y, d = hypot(dx, dy) || 1, wall = inWall(u);
         if (u.kind === 1 && d >= 8.5 && d < 44 + 10 * hillLevel(u.x, u.y)) {   // archers stop and shoot
           spd *= 0.08;
           if (u.cd <= 0) { u.cd = rand(0.9, 1.25); strike(u, e, dx / d, dy / d, allies, true); }
-        } else if (d < 8.5) {
+        } else if (d < (wall && e.kind !== 1 ? WALL_REACH : 8.5)) {
           spd = SPEED * 0.12;
           if (u.cd <= 0) { u.cd = rand(0.55, 0.95); strike(u, e, dx / d, dy / d, allies); }
         }
-        [tx, ty] = nav(u.x, u.y, e.x, e.y);
+        if (d >= 8.5 && e.kind !== 1 && !u.charge && ofWall(u)) {   // a shield wall waits for them in its place
+          [tx, ty] = [u.slot.x, u.slot.y];
+          const ds = hypot(tx - u.x, ty - u.y); if (ds < 10) spd *= ds / 10;
+        } else [tx, ty] = nav(u.x, u.y, e.x, e.y);
       } else if (u.charge) {   // nobody at the spot (yet): run to it
         [tx, ty] = nav(u.x, u.y, u.charge.x, u.charge.y);
       } else {
@@ -2031,6 +2060,7 @@ import * as THREE from 'three';
       u.x += u.vx * dt; u.y += u.vy * dt;
       constrain(u);
 
+      if (u.dead) continue;   // a rider that died charging a shield wall
       for (const t of towns) {
         if (t.owner === u.team) continue;
         const ex = t.x - u.x, ey = t.y - u.y;
@@ -3151,6 +3181,7 @@ import * as THREE from 'three';
       const where = [['in front', 'in close ranks'], ['behind', 'in loose lines'], ['on the wings', 'in a wedge']];
       const parts = [0, 1, 2].filter(k => n[k]).map(k => `${n[k]} ${KIND[k].toLowerCase()} ${where[k][one >= 0 ? 1 : 0]}`);
       const lines = [`${total} soldiers in formation: ${parts.join(', ')}.`, 'It faces the nearest enemy, or else the way it marched.'];
+      if (n[0] >= WALL_MIN) lines.push('Its spearmen hold a shield wall: they wait for the enemy in their places, take 35% less in hand-to-hand fighting, and hurt cavalry that charge them. Arrows still break it.');
       if (n[1] >= VOLLEY_MIN) lines.push(`Its archers shoot a volley every ${VOLLEY_T} s at the thickest crowd of enemies up to ${VOLLEY_R} away.`);
       if (co.team === me) lines.push('Drag from it to send it on as one army.');
       return { title: one >= 0 ? `${['Spear', 'Archer', 'Cavalry'][one]} company` : 'Company', own: OWN(co.team), lines };
@@ -4071,6 +4102,14 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       init,
       dust(x, y, n = 1) { emit('dust', x, y, surfaceAt(x, y), n); },
       kick(x, y) { emit('kick', x, y, surfaceAt(x, y), 1); },
+      // a blow on a shield wall: a few sparks and a clang; a charge crashing into it: a burst, dust and a crash
+      clash(x, y, big) {
+        if (Math.random() > (big ? 1 : 0.35)) return;
+        emit('spark', x, y, surfaceAt(x, y) + 5, big ? 12 : 2, '#e6edf5');
+        if (big) emit('dust', x, y, surfaceAt(x, y), 3);
+        const p = toScreen(x, y, 0);
+        if (p.x > 0 && p.y > 0 && p.x < innerWidth && p.y < innerHeight) Sound.clang(big);
+      },
       capture(t, team) {
         const g = groundAt(t.x, t.y);
         emit('spark', t.x, t.y, g + keepH(t) + 4, 70, COL.team[team]);
@@ -4416,11 +4455,14 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       }
       const bob = sp > 8 ? Math.abs(Math.sin(nowS * 13 + u.id)) * 1.3 : 0;
       dummy.position.set(u.x, surfaceAt(u.x, u.y) + bob, u.y);
-      dummy.rotation.set(0, u.hd || 0, 0); dummy.scale.setScalar(UNIT_SCALE);
+      // spearmen in a shield wall brace, easing into it: spears lowered towards the enemy, a little crouched
+      u.brace = (u.brace || 0) + ((k === 0 && inWall(u) ? 1 : 0) - (u.brace || 0)) * 0.1;
+      const bw = 1 + 0.1 * u.brace, bh = 1 - 0.18 * u.brace;
+      dummy.rotation.set(0.5 * u.brace, u.hd || 0, 0, 'YXZ'); dummy.scale.set(UNIT_SCALE * bw, UNIT_SCALE * bh, UNIT_SCALE * bw);
       dummy.updateMatrix();
       unitMeshes[k].setMatrixAt(i, dummy.matrix);
       unitMeshes[k].setColorAt(i, u.flash > 0 ? WHITE : TEAMC[u.team]);
-      dummy.scale.set(UNIT_SCALE * OUTLINE, UNIT_SCALE * (OUTLINE - 0.08), UNIT_SCALE * OUTLINE); dummy.position.y -= 0.4;
+      dummy.scale.set(UNIT_SCALE * OUTLINE * bw, UNIT_SCALE * (OUTLINE - 0.08) * bh, UNIT_SCALE * OUTLINE * bw); dummy.position.y -= 0.4;
       dummy.updateMatrix();
       unitOutlines[k].setMatrixAt(i, dummy.matrix);
     }
@@ -5003,16 +5045,18 @@ vec3 noised(vec2 p) {   // value noise, and its slope
         return [left(0), left(1)];
       },
       // two armies standing gap apart on open flat ground, each gathered as if a route had brought it there; their
-      // kinds are dealt round in turn (so [0, 1] is half spearmen, half archers). Returns the screen point between them.
-      standoff: (ka, na, kb, nb, gap) => {
+      // kinds are dealt round in turn (so [0, 1] is half spearmen, half archers). With attack, blue marches on red
+      // instead. Returns the screen point between them.
+      standoff: (ka, na, kb, nb, gap, attack) => {
         const c = stage();
         if (!c) return null;
         const L = { x: c.x - gap / 2, y: c.y }, R = { x: c.x + gap / 2, y: c.y };
-        side(0, ka, na, L, L); side(1, kb, nb, R, R);
+        side(0, ka, na, L, attack ? R : L); side(1, kb, nb, R, R);
         return toScreen(c.x, c.y, 0);
       },
       left: () => [left(0), left(1)],
       volleys: () => volleyCount,
+      walls: () => units.filter(inWall).length,   // spearmen standing in a shield wall
       capture: (n, team) => { capture(town(n), team); return town(n).owner; },
       hitCapital: () => { const c = towns.find(t => t.capital && t.owner === 0), h = c.hold; enterTown(c, { team: 1, dead: false }); return { hold: c.hold, before: h, shake: FX.shakeAmount }; },
       shake: () => FX.shakeAmount,

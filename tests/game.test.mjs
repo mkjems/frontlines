@@ -345,6 +345,34 @@ test('archer companies shoot volleys at an army standing beyond a single archer\
   await page.close();
 });
 
+test('8 or more spearmen in a company hold a shield wall: it beats an equal attack and breaks a cavalry charge', async () => {
+  const OPEN = new URL('../site/index.html?test&land=open&map=100', import.meta.url).href, page = await openGame(undefined, OPEN);
+  // each fight on a fresh battle (a week ends after a minute and waits for a choice): blue marches on red's
+  // spearmen, who stand on open ground. Returns how many of red's stand in the wall after 2 s, and the survivors.
+  const fight = async (kind, n, red) => {
+    await page.goto(OPEN);
+    await page.waitForFunction(() => window.__t);
+    return page.evaluate((kind, n, red) => {
+      __t.start(); __t.freeze();
+      if (!__t.standoff([kind], n, [0], red, 240, true)) return null;
+      __t.run(2);
+      const walls = __t.walls();
+      __t.run(45);
+      return [walls, ...__t.left()];
+    }, kind, n, red);
+  };
+  let [walls] = await fight(0, 7, 7);
+  assert.equal(walls, 0, 'seven spearmen are too few for a wall');
+  let blue, red;
+  [walls, blue, red] = await fight(0, 33, 33);
+  assert.equal(walls, 33, 'all of red\'s 33 spearmen stand in the wall');
+  assert.ok(blue === 0 && red >= 6, `the wall beats an equal attack (${red} of 33 left)`);
+  [walls, blue, red] = await fight(2, 20, 33);
+  assert.ok(blue === 0 && red >= 28, `cavalry break on the wall (${red} of 33 spearmen left)`);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
 test('volleys play out the same in two copies, as two players\' browsers must', async () => {
   const pages = await Promise.all([{ width: 1200, height: 800 }, { width: 390, height: 844, isMobile: true, hasTouch: true }].map(v => openGame(v, RANDOM)));
   const [a, b] = await Promise.all(pages.map(page => page.evaluate((board, match) => {

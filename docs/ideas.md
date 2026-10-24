@@ -52,6 +52,23 @@ side aren't aimed at. Arrows that land stay stuck in the ground for a few second
   170 of the player's armies. Worth watching in real games: whether players can use river banks to shell the
   computer's armies gathering at bridges.
 
+**Done (24 October 2026): the shield wall** (`ofWall`, `inWall`). A company with 8 or more spearmen
+(`WALL_MIN`) holds its ground: its spearmen wait in their places for spearmen and cavalry and step back into
+place when pushed out, but go out after archers. Those in their places fight two ranks deep against spearmen
+and cavalry (reach 17 instead of 8.5), take 65% of the damage in hand-to-hand fighting (`WALL_GUARD`), are hardly
+pushed back, and a rider whose charge hits them takes 1.5 damage and is thrown back. Arrows hurt a wall as much
+as anyone. Braced spearmen lower their spears and crouch; blows on the wall throw sparks and clang. "A formed
+block moves slowly" wasn't needed: a company breaks up as soon as it's sent on. `__t.walls()` counts spearmen in
+walls; `__t.standoff(…, attack)` marches blue on red.
+- Learned: holding ground alone made the wall weaker, not stronger. Only the front rank fought while attackers
+  wrapped round the block, and spearmen pushed out of place broke off to fight on their own. Stepping back into
+  place and the second rank's reach fixed it. Against 33 standing spearmen: 33 attackers now lose every time (by
+  8 to 20; before, the defenders won 5 in 6 by 1 to 13), 40 attackers are even (they used to win by 15 to 20),
+  50 win; 20 riders leave 30–31 of the spearmen standing (25–28 before).
+- Learned: with reach against everyone, archers and spearmen marching to meet each other (both stand at the
+  same spot) gave the spearmen one map in 6. Reach now applies only against spearmen and cavalry, and archers
+  win every such meeting again.
+
 1. **Archers: volleys.** About 8 or more archers standing together stop shooting one by one and fire
    volleys: every few seconds the whole group looses a swarm of arrows in a high arc at the densest enemy
    cluster in range.
