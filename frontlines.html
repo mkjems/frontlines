@@ -613,7 +613,7 @@ import * as THREE from 'three';
   const WEEK = new URLSearchParams(location.search).has('test') && +new URLSearchParams(location.search).get('week') || 45;
   const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const COL = {
-    outside: '#1c201f', land: '#e8ebe2', land2: '#e2e7da', river: '#a9cfe2', riverDeep: '#9dc6dc', shore: '#403f37', shadow: 'rgba(36,48,38,.15)', bridge: '#fbfaf6', bridgeEdge: '#c6ccbf',
+    outside: '#1c201f', land: '#e8ebe2', land2: '#e2e7da', river: '#a9cfe2', riverDeep: '#9dc6dc', shore: '#3a3a33', shadow: 'rgba(36,48,38,.15)', bridge: '#fbfaf6', bridgeEdge: '#c6ccbf',
     tree: '#cddbc1', tree2: '#c1d3b3', text: '#2e3735',
     team: ['#4a84f2', '#df5448'], light: ['#c2d6fb', '#f3c3bd'], mid: ['#8fb2f5', '#ec958b'],
     neutral: '#a8a497', neutralLight: '#d8d5cc', track: 'rgba(230,236,226,.14)'
@@ -1424,6 +1424,7 @@ import * as THREE from 'three';
     c.lineJoin = 'round';
     for (const L of waterLines()) {
       riverBand(c, L, 1, 8); c.fillStyle = COL.shore; c.fill();
+      riverBand(c, L, 1, 5); c.fillStyle = '#2b2d29'; c.fill();   // wet earth at the water's edge
       riverBand(c, L, 1, -1); c.fillStyle = '#384039'; c.fill();
       riverBand(c, L, 0.6); c.fillStyle = '#2d3a3b'; c.fill();
       riverBand(c, L, 0.25); c.fillStyle = '#243238'; c.fill();
@@ -3395,27 +3396,82 @@ import * as THREE from 'three';
     });
 
     dcv = document.createElement('canvas'); dctx = dcv.getContext('2d');
-    const water = waterNormals();
-    // physical only for specularIntensity: the sun's glints on the river, toned well down
-    waterMat = new THREE.MeshPhysicalMaterial({ color: '#365f74', roughness: 0.12, specularIntensity: 0.1, metalness: 0.1, transparent: true, opacity: 0.8, side: THREE.DoubleSide, normalMap: water, normalScale: new THREE.Vector2(0.22, 0.22) });
+    waterMat = riverMaterial();
   }
   const MAXU = 3000, WHITE = new THREE.Color('#ffffff'), TEAMC = [new THREE.Color('#6cb0ff'), new THREE.Color('#ff5d47')];   // soldiers: light so they read on the dark board
   let unitMeshes = [], unitOutlines = [];
   const UNIT_SCALE = 1.15, OUTLINE = 1.22;
 
-  function waterNormals() {   // a small tileable ripple normal map
-    const N = 128, cv = document.createElement('canvas'); cv.width = cv.height = N;
-    const c = cv.getContext('2d'), img = c.createImageData(N, N), TAU = Math.PI * 2;
-    const waves = [[3, 1, 0.9, 0.3], [-2, 3, 0.7, 1.7], [5, -2, 0.4, 2.9], [1, 6, 0.35, 0.8], [7, 4, 0.2, 4.1]];
-    const ht = (x, y) => waves.reduce((s, [fx, fy, a, p]) => s + a * Math.sin(TAU * (fx * x + fy * y) / N + p), 0);
-    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-      const dx = ht(x + 1, y) - ht(x - 1, y), dy = ht(x, y + 1) - ht(x, y - 1), l = Math.hypot(dx, dy, 2), o = (x + y * N) * 4;
-      img.data[o] = (-dx / l * 0.5 + 0.5) * 255; img.data[o + 1] = (-dy / l * 0.5 + 0.5) * 255; img.data[o + 2] = (2 / l * 0.5 + 0.5) * 255; img.data[o + 3] = 255;
-    }
-    c.putImageData(img, 0, 0);
-    const t = new THREE.CanvasTexture(cv);
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    return t;
+  // The river: dark, cold water coloured by its depth, with ripples drifting downstream, a broken line of foam
+  // where it meets the bank, small waves lapping in towards it, and white water over the fords. It catches a
+  // little of the grey sky, and a few cold glints of the sun where no bridge or tree shades it.
+  // riverGeometry gives each point its depth, its distance from the waterline and its place in the flow.
+  const WATER_U = {
+    uTime: { value: 0 }, uSun: { value: new THREE.Vector3(0, 1, 0) },
+    uDeep: { value: new THREE.Color('#111a1f') }, uShallow: { value: new THREE.Color('#26353a') }, uFoam: { value: new THREE.Color('#8e9ca2') },
+    uZenith: { value: new THREE.Color('#1a232c') }, uHorizon: { value: new THREE.Color('#3e4a52') }, uGlint: { value: new THREE.Color('#dfe8ef') },
+  };
+  function riverMaterial() {
+    const m = new THREE.MeshLambertMaterial({ transparent: true, side: THREE.DoubleSide });
+    m.onBeforeCompile = sh => {
+      Object.assign(sh.uniforms, WATER_U);
+      sh.vertexShader = 'attribute float depth, shore, rough;\nattribute vec2 flow, gu, gv;\nvarying float vDepth, vShore, vRough;\nvarying vec2 vFlow, vGu, vGv;\nvarying vec3 vWPos;\n'
+        + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+  vDepth = depth; vShore = shore; vRough = rough; vFlow = flow; vGu = gu; vGv = gv;
+  vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
+      sh.fragmentShader = `uniform float uTime;
+uniform vec3 uSun, uDeep, uShallow, uFoam, uZenith, uHorizon, uGlint;
+varying float vDepth, vShore, vRough;
+varying vec2 vFlow, vGu, vGv;
+varying vec3 vWPos;
+float hash2(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+vec3 noised(vec2 p) {   // value noise, and its slope
+  vec2 i = floor(p), f = fract(p), u = f * f * (3.0 - 2.0 * f), du = 6.0 * f * (1.0 - f);
+  float a = hash2(i), b = hash2(i + vec2(1, 0)), c = hash2(i + vec2(0, 1)), d = hash2(i + vec2(1, 1));
+  return vec3(a + (b - a) * u.x + (c - a) * u.y + (a - b - c + d) * u.x * u.y, du * (vec2(b - a, c - a) + (a - b - c + d) * u.yx));
+}
+` + sh.fragmentShader
+        .replace('#include <color_fragment>', `#include <color_fragment>
+  // ripples: three layers of noise in flow coordinates (across, along), sliding downstream at different speeds;
+  // the current draws long streaks, and the finer layers fade out as the camera pulls back so they never flicker
+  vec2 q = vFlow;
+  float px = fwidth(q.y), k2 = 1.0 - smoothstep(0.5, 1.4, px), k3 = 1.0 - smoothstep(0.25, 0.7, px);
+  vec3 r1 = noised(vec2(q.x / 5.0, (q.y - uTime * 7.0) / 24.0));
+  vec3 r2 = noised(vec2(q.x / 3.0 + 7.3, (q.y - uTime * 10.0) / 6.0));
+  vec3 r3 = noised(vec2(q.x + q.y, q.y - q.x - uTime * 14.0) / 2.2);
+  float wild = 1.0 + vRough * 1.5;
+  vec2 hm = r1.yz / vec2(5.0, 24.0) + 0.5 * k2 * r2.yz / vec2(3.0, 6.0);
+  vec2 hs = hm + 0.25 * k3 * wild * vec2(r3.y - r3.z, r3.y + r3.z) / 2.2;
+  vec2 g = hs.x * vGu + hs.y * vGv, gm = hm.x * vGu + hm.y * vGv;
+  vec3 wn = normalize(vec3(-g.x * 2.6, 1.0, -g.y * 2.6)), wm = normalize(vec3(-gm.x * 3.0, 1.0, -gm.y * 3.0));
+  // foam: the waterline, waves lapping in towards it, and white water over the fords and just below them
+  float br = noised(vec2(q.x / 2.2, (q.y - uTime * 3.0) / 3.2)).x;
+  float edge = 1.0 - smoothstep(0.3, 1.9, vShore + br * 1.3);
+  float lap = smoothstep(0.78, 0.96, 0.5 + 0.5 * sin(vShore * 1.2 + uTime * 2.0 + br * 3.0)) * smoothstep(7.5, 2.0, vShore) * smoothstep(0.3, 0.55, br);
+  float churn = noised(vec2(q.x / 2.0, (q.y - uTime * 16.0) / 7.0)).x * 0.6 + br * 0.5;
+  float rapid = vRough * smoothstep(0.85 - 0.35 * vRough, 1.0 - 0.2 * vRough, churn);
+  float foam = clamp(edge * 0.9 + lap * 0.7 + rapid * 0.75, 0.0, 1.0);
+  float deep = smoothstep(0.5, 6.5, vDepth);
+  // the current's streaks: a shade lighter where the water rises, darker in the troughs
+  diffuseColor.rgb = mix(mix(uShallow, uDeep, deep) * (0.85 + 0.35 * r1.x), uFoam, foam);
+  diffuseColor.a = mix(mix(0.62, 0.94, deep), 0.9, foam) * smoothstep(-0.3, 0.4, vShore);`)
+        .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n  normal = normalize((viewMatrix * vec4(wn, 0.0)).xyz);')
+        // keep the sun's shadow on the water, so bridges and trees put out the glints
+        .replace('#include <lights_fragment_begin>', 'float sunLit = 1.0;\n' + THREE.ShaderChunk.lights_fragment_begin
+          .replace('directLight.color *= ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap', 'sunLit = ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap')
+          .replace('vDirectionalShadowCoord[ i ] ) : 1.0;', 'vDirectionalShadowCoord[ i ] ) : 1.0;\n\t\tdirectLight.color *= sunLit;'))
+        .replace('#include <opaque_fragment>', `vec3 V = normalize(cameraPosition - vWPos), R = reflect(-V, wn);
+  float fres = 0.03 + 0.97 * pow(1.0 - max(dot(wn, V), 0.0), 5.0);
+  // a grey overcast sky, its clouds drifting slowly over the water
+  float cloud = noised(vWPos.xz / 160.0 + R.xz * 1.5 + vec2(uTime * 0.012, uTime * 0.005)).x;
+  vec3 sky = mix(uZenith, uHorizon, clamp(1.0 - smoothstep(0.3, 1.0, R.y) + cloud * 0.55, 0.0, 1.0));
+  outgoingLight = mix(outgoingLight, sky, (0.22 + fres) * (1.0 - foam));
+  // and a few cold glints of the sun on the larger ripples
+  float sd = max(dot(reflect(-V, wm), uSun), 0.0);
+  outgoingLight += uGlint * (pow(sd, 900.0) * 0.28 * k2 + pow(sd, 40.0) * 0.04) * sunLit * (1.0 - foam);
+#include <opaque_fragment>`);
+    };
+    return m;
   }
 
   // ---- terrain height: terraced hills that match the painted contour rings, and a river channel ----
@@ -3498,7 +3554,7 @@ import * as THREE from 'three';
   // the board's sides: earth below the grass, water where the river runs off the edge
   function skirtGeometry() {
     const pos = [], col = [], idx = [], C = h => new THREE.Color(h);
-    const grass = C('#353b36'), soil = C('#2f2b26'), clay = C('#29251f'), rock = C('#1f1c18'), wet = C('#3f6f86'), deep = C('#2f5466');
+    const grass = C('#353b36'), soil = C('#2f2b26'), clay = C('#29251f'), rock = C('#1f1c18'), wet = C('#1d282e'), deep = C('#151d22');
     const edge = (x0, y0, x1, y1) => {
       const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / GS), s = pos.length / 3;
       for (let i = 0; i <= n; i++) {
@@ -3517,16 +3573,39 @@ import * as THREE from 'three';
     g.setIndex(idx); g.computeVertexNormals();
     return g;
   }
+  // the river's surface, carrying what riverMaterial needs: how deep the water is, how far it is from the waterline,
+  // where it lies in the flow (across, along), and how a slope in flow coordinates turns into one on the board
   function riverGeometry(L) {
-    const pos = [], uv = [], idx = [];
-    for (let b = -10, i = 0; b <= LB + 10; b += 6, i++) {
-      const bb = Math.min(b, LB), a = lineA(L, bb), hw = hwAt(L, clamp(bb, 0, LB)) + 4;
-      for (const s of [-1, 1]) { const p = XY(clamp(a + s * hw, 0, LA), clamp(bb, 0, LB)); pos.push(p.x, WATER_Y, p.y); uv.push(p.x / 70, p.y / 70); }
-      if (i) { const k = i * 2; idx.push(k - 2, k - 1, k, k, k - 1, k + 1); }
+    const pos = [], depth = [], shore = [], rough = [], flow = [], gu = [], gv = [], idx = [], n = 12;
+    const ua = P ? [0, 1] : [1, 0], ub = P ? [1, 0] : [0, 1];
+    const wet = (a, b) => { const p = XY(a, b); return groundAt(p.x, p.y) < WATER_Y; };
+    // how deep, softened along the river so the ford's shallows don't end in a hard line
+    const deepAt = (a, b) => [-8, -4, 0, 4, 8].reduce((t, o) => { const p = XY(a, clamp(b + o, 0, LB)); return t + (WATER_Y - groundAt(p.x, p.y)) / 5; }, 0);
+    // white water: over a ford, trailing off downstream
+    const roughAt = b => Math.max(0, ...bridges.filter(br => br.line === L && br.ford).map(br => {
+      const d = b - br.b;
+      return Math.abs(d) < br.span ? 1 : d > 0 ? Math.exp(-(d - br.span) / 30) : smooth(br.span + 16, br.span - 4, -d);
+    }));
+    for (let b = -10, i = 0; b <= LB + 10; b += 4, i++) {
+      const bb = clamp(b, 0, LB), a0 = lineA(L, bb), hw = hwAt(L, bb) + 6, s = (lineA(L, bb + 1) - lineA(L, bb - 1)) / 2;
+      let e0 = 0, e1 = 0, r = roughAt(bb);   // the waterline on each side
+      while (e0 < hw && wet(a0 - e0 - 0.5, bb)) e0 += 0.5;
+      while (e1 < hw && wet(a0 + e1 + 0.5, bb)) e1 += 0.5;
+      for (let j = 0; j <= n; j++) {
+        const u = -hw + 2 * hw * j / n, p = XY(clamp(a0 + u, 0, LA), bb);
+        pos.push(p.x, WATER_Y, p.y); depth.push(deepAt(clamp(a0 + u, 0, LA), bb)); shore.push(Math.min(u + e0, e1 - u)); rough.push(r);
+        flow.push(u, b); gu.push(ua[0] - s * ub[0], ua[1] - s * ub[1]); gv.push(ub[0], ub[1]);
+        if (i && j < n) { const k = i * (n + 1) + j, q = k - n - 1; idx.push(q, k, q + 1, q + 1, k, k + 1); }
+      }
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setAttribute('depth', new THREE.Float32BufferAttribute(depth, 1));
+    g.setAttribute('shore', new THREE.Float32BufferAttribute(shore, 1));
+    g.setAttribute('rough', new THREE.Float32BufferAttribute(rough, 1));
+    g.setAttribute('flow', new THREE.Float32BufferAttribute(flow, 2));
+    g.setAttribute('gu', new THREE.Float32BufferAttribute(gu, 2));
+    g.setAttribute('gv', new THREE.Float32BufferAttribute(gv, 2));
     g.setIndex(idx); g.computeVertexNormals();
     return g;
   }
@@ -4011,7 +4090,7 @@ import * as THREE from 'three';
     }
     unitMeshes.forEach((im, k) => { im.count = cnt[k]; im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true; });
     unitOutlines.forEach((im, k) => { im.count = cnt[k]; im.instanceMatrix.needsUpdate = true; });
-    waterMat.normalMap.offset.set(P ? nowS * 0.03 : nowS * 0.008, P ? nowS * 0.008 : -nowS * 0.03);
+    WATER_U.uTime.value = nowS;
   }
 
   // ---- camera: tilted towards the north, framed to fit between the top bar and the tray ----
@@ -4077,6 +4156,7 @@ import * as THREE from 'three';
     // light on any board shape; it turns with the camera for the red player
     sun.target.position.set(W / 2, 0, H / 2);
     sun.position.set(W / 2 + 80 * VIEWDIR(), 640, H / 2 - 290 * VIEWDIR());   // low in the north-west: long evening shadows sun.target.position.set(W / 2, 0, H / 2);
+    WATER_U.uSun.value.copy(sun.position).sub(sun.target.position).normalize();
     Object.assign(sun.shadow.camera, { left: -R, right: R, top: R, bottom: -R, near: 300, far: 2600 });
     sun.shadow.camera.updateProjectionMatrix();
   }
