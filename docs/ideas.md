@@ -69,8 +69,7 @@ walls; `__t.standoff(…, attack)` marches blue on red.
   same spot) gave the spearmen one map in 6. Reach now applies only against spearmen and cavalry, and archers
   win every such meeting again.
 
-**Done (24 October 2026): cavalry ride out, and hit and run** (`rideOut`, `u.wheel`). Raids are still to do,
-after the catapult team (see below).
+**Done (24 October 2026): cavalry ride out, and hit and run** (`rideOut`, `u.wheel`). Raids are still to do.
 - Riding out: a company with 6 or more riders (`RIDERS_MIN`) rides out at enemy archers and cavalry attacking
   its side within 200 (`SALLY_R`), hand to hand or shooting, and comes back to its place when they're dead or
   gone. It leaves spearmen alone. 28 archers attacking a wall of 24 spearmen with 12 riders standing 150 to the
@@ -112,97 +111,6 @@ Around all three:
 - Rules sheet, tips and browser tests need updating, and fights will need balance tuning.
 
 Each formation is roughly one focused session.
-
-## Next up: the catapult team
-
-Agreed on 24 October 2026, before cavalry raids (which wait until after it). A fourth kind of force: a heavy
-catapult pushed along by a team of men. It moves very slowly and can't defend itself, but its stones fly high
-and far and break what nothing else in the game can damage: town defences, city walls and bridges. It reloads
-slowly.
-
-How it fits the game:
-- **Bought, not trained.** It's bought in the tray (around 120 gold, 50% more for each repeat like the other
-  items) and placed in one of your towns. From there you draw its route like an army's, and its team pushes it
-  slowly along, the last stretch towards the target included. At most one or two alive per side.
-- **Aimed by its route.** A route ending on an enemy town makes it stop at its range and bombard the town; a
-  route ending on a bridge bombards the bridge. No new command: the player still never commands individual
-  soldiers. It has a minimum range, so it needs an escort (a shield wall in front is the natural one).
-- **Towns are not destroyed** (decided: not to begin with). A hit knocks a big piece off the town's defence
-  (its strength) and kills part of its garrison; about three hits leave it open for infantry to walk in. On a
-  capital the stones breach the city wall first. Taking towns stays the core of the game.
-- **Bridges are.** A broken bridge leaves ruined piers (as on Broken Bridges), soldiers on the deck fall into
-  the river, routes find another crossing, and the tray's bridge is the way to rebuild. Bridges are used by
-  both sides, so this is a choice, not a free win.
-- **Capture:** enemies that reach a catapult whose team is dead or gone take it over, and it turns their colour.
-  "Vulnerable" has a real price for one side and a prize for the other.
-- **"Time freezes" as a short slow motion,** not a full stop: about a second, the camera following the stone,
-  only for hits on a town, bridge or wall that are on screen. Ordinary shots fly normally. A full freeze on every
-  shot would interrupt route drawing, get old with several catapults, and can't work in two-player lockstep
-  unless both screens freeze together (so it stays visual only, or happens on both at once).
-- Counters: cavalry riding out at it, any attack on its team. The computer should both use catapults and hunt
-  the player's.
-
-**Done (24 October 2026): step 1, the catapult team** (`stepEngines`, `engines`, `stones`). Bought in the tray
-(120 gold, `CAT_MAX` 2 alive per side) and built beside one of your towns, facing the nearest enemy town, with a
-team of 4 (`CREW`) who walk out of the town to it. Its team are real soldiers (spearmen, `u.crew`) with places
-round it (`SEATS`): two push at the back, two at the wheels; they fight only enemies within 24 and never enter
-towns. Dragging from it draws its route (free, like a gathered army). It moves at 35% of a spearman's speed
-(`CAT_SPEED`), slower with men missing or out of place, and stops once the town its route ends on is within
-215. Standing, it sets up for 2.5 s, then throws every 10 s (`CAT_RELOAD`; slower with men missing, and it needs
-2 men) up to 230 (`CAT_RANGE`) but not under 60: at its target town, else an enemy catapult, else the nearest
-enemy town, else the thickest crowd of 4 or more. A stone flies 2–3 s in a high arc with a dust trail, a shadow
-and a ring where it will land; it crushes enemies within 14 (6 damage at the centre) and wrecks a catapult it
-lands on. A hit on a town takes 30% of its strength (15% off a capital) but never below 1, and stops it
-recovering for 12 s (`t.stun`), so three hits leave a town at 10%. Places left empty fill from idle soldiers of
-its side within 50 (at home or gathered, not cavalry); a catapult with no team is taken by enemies within 30
-when none of its side is within 60, and they become its team. The computer sends the nearest town's soldiers at
-an enemy catapult that comes within 290 of one of its towns. `__t.siege`, `__t.engines`, `__t.shots`,
-`__t.stones` and `__t.crewless` help test it.
-- Learned: the computer's answer is strong. A lone catapult sent at a town is overrun and taken within about
-  15 s, before its first stone, so it needs an army with it. Worth watching in real games whether that's
-  too harsh.
-- Not done yet: wrecking by soldiers (only stones wreck a catapult), a 3D ghost when placing it, and team
-  members that look different from spearmen.
-
-**Done (24 October 2026): step 2, breaking bridges** (`breakBridge`, `aimedAt`, `broken`). Dragging a catapult's
-route onto a bridge (not a ford or a pass) aims it there: the bridge is ringed, "Smash bridge" shows, and the
-catapult's reach is drawn round the bridge, where it will stop. Three stones (`BRIDGE_HP`) break it; each leaves a
-splintered hole in the deck, and Shift over the bridge says how many more it takes. When it breaks, everyone on
-the deck falls in (a catapult on it is wrecked), its timbers splash into the river, the stumps of its piers stay
-(drawn like the ruins on Broken Bridges), and the world is rebuilt without it. The tray's bridge can be built on
-the same spot again. The computer drops a plan that went over it. Route points left in the water are passed over,
-so armies on a route drawn over the old bridge go round by the nearest other crossing. Breaking your own side's
-bridge is a toast; the enemy breaking one (stage 5) raises an alert. `__t.bridgeSiege`, `__t.crossing`,
-`__t.across` and `__t.bridgeCount` help test it.
-- Changed on the way: a soldier on any crossing now heads straight over to the end on its target's side. Before,
-  one going to a point up- or downstream waded the wide ford slantwise, pressed against its edge, and was
-  slow to get over; a broken bridge sends more armies by the ford, so it showed.
-
-**Changed (24 October 2026): the catapult follows its town's route.** Playing showed what wins games: gold,
-troops and a steady chain of routes to the front, and watchtowers in the right places. A catapult that needed its
-own drags and its own guard lost to one more route. Now it takes its town's route whenever the town gets a new one
-(`e.home`, `e.townRoute`), guarded by the soldiers marching it, and a route ending on another of your towns hands
-it on to that town, so it relays along a chain. Dragging from it still sends it its own way (onto a bridge, say)
-until its town's route changes. Soldiers marching its route refill its team. It also halts while 4 or more enemies
-(`HALT_N`) are within 140 and shells them, waits for 5 of its own soldiers within 150 (`ESCORT`) while any enemy is
-within 300, and its team take half damage in their places (`CREW_GUARD`). Its reach went from 230 to 300, so it
-can shell a town across a river from its own bank. The computer hunts a catapult only once it stands in reach of
-one of its towns.
-- Learned, from scripted games on Easy (three blue towns streaming at one enemy town, six maps): the catapult
-  is lost when the computer's first big attack breaks the front, about 40–50 s in, whatever protects it.
-  Waiting for an escort everywhere, even at home, kept it alive longer (62–81 s, 19 hits on towns against 5),
-  but only because it reached the front after that attack, and it stalled at home behind a single town's thin
-  stream. The scripted blue side loses its front in every game, so these games say little about a real
-  player's; worth judging in real play.
-
-Order of work, each step worth having on its own:
-1. The catapult team: buying and placing it in a town, the team pushing it along its route, the high stone arc,
-   hits on towns (defence and garrison), a wreck when it's destroyed, capture, Shift-hover text, rules sheet,
-   tests.
-2. Bridges: breaking them, ruins, soldiers falling in, routes and the computer's plans finding another way.
-3. Breaching capital walls.
-4. The slow-motion camera and the sound of the shot and the hit.
-5. The computer buying catapults and hunting the player's.
 
 ## Sound
 
@@ -310,3 +218,14 @@ module-level variables are reassigned across sections (`towns`, `units`, `W`, `H
   form (23 October 2026).
 - **Removing the bridges from River Valley:** kept as the classic, beginner-friendly map; Broken Bridges
   does the no-bridge game instead.
+- **The catapult team** (built and removed on 24 October 2026; in the git history from 3c60a41 to 0b7b219, and
+  the walls were never committed). A catapult bought in the tray and pushed slowly by a team of 4, throwing
+  stones that knocked strength off towns, smashed bridges and could be captured. Games are won by gold, troops,
+  a steady chain of routes to the front and watchtowers in the right places; the catapult never found a place in
+  that. Steered on its own, it took attention away from the routes and was captured. Following its town's route,
+  halting before armies and waiting for an escort, it arrived after faster troops had settled the fight. Capital
+  walls that only it could breach gave it a role, but made it a chore when winning and turned a lost game into a
+  slow defeat to watch. A bombard ability in the tray (a stone from off the board) was weighed and dropped too.
+  The lesson: a new feature has to change a decision about gold, routes or watchtowers, or it's extra work.
+  Kept from it: soldiers on a crossing head straight over to the end on their target's side, rather than wading
+  a wide ford slantwise along its edge.
