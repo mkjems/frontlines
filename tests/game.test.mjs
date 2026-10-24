@@ -274,6 +274,28 @@ test('each troop type beats the one it counters, at equal cost (docs/designrevie
   await page.close();
 });
 
+test('a gathered army stands in formation: spearmen in front, archers behind, cavalry on the wings', async () => {
+  const page = await openGame();
+  await t(page, 'start');
+  await page.keyboard.press('Space');
+  await t(page, 'army', 'Larkspur', 30, 160);   // by the river: the formation steps aside to keep out of it
+  await t(page, 'army', 'Millbrook', 5, 150);   // too few to form up
+  await t(page, 'run', 8);
+  const cos = await t(page, 'companies');
+  assert.equal(cos.length, 1, 'one company: five soldiers are too few');
+  const [co] = cos;
+  assert.deepEqual([co.team, co.n], [0, [10, 10, 10]]);
+  assert.ok(co.placed >= 27, `nearly everyone stands in their place (${co.placed} of 30)`);
+  assert.ok(co.depth[0] > co.depth[1] + 15, `spearmen stand in front of the archers (${co.depth.map(Math.round)})`);
+  await page.mouse.move(co.member.x, co.member.y);
+  await page.keyboard.down('Shift');
+  assert.match(await page.$eval('#inspect', e => e.hidden ? '' : e.textContent),
+    /Yours.*Company.*30 soldiers in formation: 10 spearmen in front, 10 archers behind, 10 cavalry on the wings/, 'Shift over it names the formation');
+  await page.keyboard.up('Shift');
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
 test('battles, captures and attacks on your capital', async () => {
   const page = await openGame();
   await t(page, 'start');

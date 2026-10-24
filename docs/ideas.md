@@ -14,6 +14,22 @@ soldiers of one type gather together (at the end of a route on open ground, or a
 Agreed order: archers first (the most visible), then spearmen (so archers have something to stand behind),
 then cavalry.
 
+**Done first (24 October 2026): companies, the shared formation layer.** Every half second (`formCompanies`)
+the soldiers gathered at a route's end (both sides) are counted up by route; routes ending within 50 make one
+company, and 6 or more (`FORM_MIN`) form up. A company faces the nearest enemy within 320, else along its
+route's last stretch, and only turns for a change of more than 30°. Each soldier gets a place (`u.slot`):
+spearmen in close ranks at the front, archers in staggered lines behind, cavalry in a wedge on each wing. A mixed
+group sorts itself that way. If places land in a river or on a crag, the whole formation steps aside (up to
+60) to where fewest are blocked, staying on its bank. Standing soldiers turn the way the company faces, and a
+banner stands over its middle. Shift over it describes it. `__t.companies()` reports companies for tests.
+- Decided: garrisons don't form up (for now), since towns already give 40% protection; mixed groups sort themselves.
+- Learned: deep formations got picked apart. Archers attacking a standing cavalry wedge stopped at the tip,
+  out of the rear riders' sight, and won where they used to lose. So a company fights as one: while any member
+  fights, the rest search for enemies across the company's radius too (`co.fight`). The duels came back to their
+  old results, except that archers attacking cavalry is close either way (riders win with 2 to 9 left).
+- For tuning the next steps: `__t.duel(kindA, nA, kindB, nB, meet)` stages fights on open ground, and the
+  defending side forms a company, so formation against formation can be measured.
+
 1. **Archers: volleys.** About 8 or more archers standing together stop shooting one by one and fire
    volleys: every few seconds the whole group looses a swarm of arrows in a high arc at the densest enemy
    cluster in range.
