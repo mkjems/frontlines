@@ -703,7 +703,8 @@ import * as THREE from 'three';
         for (const [f, d, v] of [[420, 1.1, 0.16], [780, 0.9, 0.1], [1300, 0.7, 0.05]]) noise(d, { freq: f, q: 0.9, vol: v, delay: 0.08 });
         for (let i = 0; i < 8; i++) noise(0.06, { freq: 160, q: 1.2, vol: 0.12, delay: 0.15 + i * 0.11 });
       },
-      arrow() { if (now() - lastArrow > 90) { lastArrow = now(); noise(0.09, { freq: 2400, q: 2, vol: 0.18 }); tone(420, 0.1, { type: 'triangle', vol: 0.12, glide: 180 }); } },
+      // a watchtower's arrow: a soft, airy fwip with a faint whistle, no thump, since towers shoot often
+      arrow() { if (now() - lastArrow > 90) { lastArrow = now(); noise(0.07, { freq: 3200, q: 1.5, vol: 0.08 }); tone(1500, 0.08, { vol: 0.012, glide: 950 }); } },
       // a volley: the bows thrum together, the arrows whistle up and over, then patter down as they land
       volley(dur) {
         if (!ac || muted || ac.currentTime - lastVolley < 0.5) return;
