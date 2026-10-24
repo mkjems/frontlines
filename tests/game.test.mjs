@@ -296,6 +296,28 @@ test('a gathered army stands in formation: spearmen in front, archers behind, ca
   await page.close();
 });
 
+test('each company keeps its own banner, even when another marches off', async () => {
+  const page = await openGame();
+  await t(page, 'start');
+  await page.keyboard.press('Space');
+  await t(page, 'army', 'Millbrook', 20, 150);   // the first company: it marches home to Ashford, on the same bank
+  await t(page, 'army', 'Larkspur', 20, 160);
+  await t(page, 'run', 6);
+  await sleep(600);   // banners move when the board is drawn
+  const before = await t(page, 'banners');
+  assert.equal(before.length, 2, 'two companies, two banners');
+  const [a] = await t(page, 'companies');
+  await dragTo(page, a.member, await t(page, 'pos', 'Ashford'));
+  await page.mouse.up();
+  await t(page, 'run', 2);
+  await sleep(600);
+  const after = await t(page, 'banners');
+  assert.equal(after.length, 1, 'the company that left takes its banner down');
+  assert.ok(before.some(p => Math.hypot(p.x - after[0].x, p.y - after[0].y) < 5), 'the other banner stays with its own company');
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
 test('battles, captures and attacks on your capital', async () => {
   const page = await openGame();
   await t(page, 'start');

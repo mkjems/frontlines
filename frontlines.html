@@ -1779,7 +1779,7 @@ import * as THREE from 'three';
       g.x = g.cx; g.y = g.cy;
       let r = 0;
       for (const rs of rows) for (const row of rs) for (const s of row) r = Math.max(r, Math.sqrt(s.a * s.a + (s.d - mid) ** 2));
-      const co = { team: g.team, x: g.x, y: g.y, fx: f.x, fy: f.y, r, fight: -99, n, units: g.units };
+      const co = { team: g.team, route: g.route, x: g.x, y: g.y, fx: f.x, fy: f.y, r, fight: -99, n, units: g.units };
       companies.push(co);
       // places by rows: the soldiers furthest forward take the front row, then left to right along each row
       const dep = new Map(), lat = new Map();
@@ -4264,26 +4264,32 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     h.t = nowS;
   }
   // a banner over the middle of each company, in its team's paler colour (lit, not glowing like the soldiers), drifting with it
-  const banners = [[], []];
+  // Each company keeps its own banner, found by the company's lead route, so a banner never flies over to another
+  // company when one forms or breaks up; a company's first banner appears where it stands.
+  const banners = new Map(), spareBanners = [[], []];
+  let bannerSeq = 0;
   function syncBanners(nowS) {
-    const used = [0, 0];
+    const seen = new Set();
     for (const co of companies) {
       let x = 0, y = 0, n = 0;
       for (const u of co.units) if (!u.dead && !u.enemy) { x += u.x; y += u.y; n++; }
       if (n < FORM_MIN) continue;
       x /= n; y /= n;
-      const list = banners[co.team], i = used[co.team]++;
-      let b = list[i];
-      if (!b) { b = new THREE.Group(); addFlag(b, 0, 0, 0, 30, COL.mid[co.team], 1.5); b.userData.fresh = true; dyn.add(b); list.push(b); }
-      if (!b.visible || b.userData.fresh) { b.position.set(x, surfaceAt(x, y), y); b.visible = true; b.userData.fresh = false; }
-      else { b.position.x += (x - b.position.x) * 0.06; b.position.z += (y - b.position.z) * 0.06; b.position.y = surfaceAt(b.position.x, b.position.z); }
+      let b = banners.get(co.route);
+      if (!b) {
+        b = spareBanners[co.team].pop();
+        if (!b) { b = new THREE.Group(); addFlag(b, 0, 0, 0, 30, COL.mid[co.team], 1.5); b.userData.team = co.team; b.userData.i = bannerSeq++; dyn.add(b); }
+        banners.set(co.route, b);
+        b.position.set(x, surfaceAt(x, y), y); b.visible = true;
+      } else { b.position.x += (x - b.position.x) * 0.06; b.position.z += (y - b.position.z) * 0.06; b.position.y = surfaceAt(b.position.x, b.position.z); }
+      seen.add(co.route);
       // the cloth streams back from the pole, away from where the company faces, lifted by the wind so it shows
       // from above, and stirs
       b.rotation.y = Math.atan2(co.fx, co.fy) + Math.PI / 2;
-      const f = b.userData.flags[0];
+      const f = b.userData.flags[0], i = b.userData.i;
       f.rotation.x = -1.1 + Math.sin(nowS * 3.1 + i) * 0.12; f.rotation.y = Math.sin(nowS * 2.6 + i * 1.7) * 0.25;
     }
-    for (let t = 0; t < 2; t++) for (let i = used[t]; i < banners[t].length; i++) banners[t][i].visible = false;
+    for (const [r, b] of banners) if (!seen.has(r)) { b.visible = false; banners.delete(r); spareBanners[b.userData.team].push(b); }
   }
   function sync3D(nowS) {
     syncPlaceGhost(nowS);
@@ -4933,6 +4939,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
         });
         return { team: co.team, n: co.n, placed: live.filter(u => u.slot && Math.hypot(u.slot.x - u.x, u.slot.y - u.y) < 4).length, depth, member: toScreen(live[0].x, live[0].y, 0) };
       }),
+      banners: () => [...banners.values()].filter(b => b.visible).map(b => ({ x: b.position.x, y: b.position.z })),   // where the company banners stand
       owner: n => town(n).owner,
       land: () => landKey,
       newMap: (k, seed) => { newGame(k, seed); return landKey; },
