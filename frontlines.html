@@ -3130,16 +3130,15 @@ import * as THREE from 'three';
   function describe(x, y) {
     const t = townAt(x, y, 30);
     if (t) {
-      const lines = [];
+      // its strength first: the soldiers at home and the defence ring an attack must empty
+      const defence = `defence ${Math.ceil(t.hold)} of ${Math.round(t.holdMax)}`, lines = [];
       if (t.owner >= 0) {
-        const secs = trainSeconds(t);
-        lines.push(`Trains ${KIND[t.kind].toLowerCase()} · 1 every ${secs.toFixed(1)}s`);
-        lines.push(`${t.n} of ${townCap(t)} soldiers at home`);
-      } else lines.push('Capture it by marching soldiers into it.');
+        lines.push(`Strength: ${t.n} of ${townCap(t)} soldiers at home, ${defence}`);
+        lines.push(`Trains ${KIND[t.kind].toLowerCase()} · 1 every ${trainSeconds(t).toFixed(1)}s`);
+      } else lines.push(`Strength: ${defence}`, 'Capture it by marching soldiers into it.');
       if (t.barracks) lines.push(`${t.barracks} barracks: trains faster, holds more`);
       const farms = fields.filter(f => f.town === t).length;
       if (farms) lines.push(`${farms} farms · ${t.owner === me ? `+${Math.round(farms * FARM_RATE * WEEK)} gold a week` : 'pay whoever holds the town'}`);
-      lines.push(`Defence ${Math.ceil(t.hold)} of ${Math.round(t.holdMax)}`);
       if (t.capital) lines.push(t.owner === me ? 'Your capital. Lose it and the war is over.' : 'Enemy capital. Take it to win.');
       return { title: t.name, own: OWN(t.owner), lines };
     }

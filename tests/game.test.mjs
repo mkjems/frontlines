@@ -225,7 +225,7 @@ test('Charge sends the soldiers in the circle running at the spot', async () => 
   await page.close();
 });
 
-test('paused, Shift over the panels and tray explains them; taking a town shows the route ink it brings', async () => {
+test('paused, Shift over the panels, tray and towns explains them; taking a town shows the route ink it brings', async () => {
   const page = await openGame();
   await t(page, 'start');
   await page.keyboard.press('Space');
@@ -244,6 +244,11 @@ test('paused, Shift over the panels and tray explains them; taking a town shows 
   assert.match(await box(), /Charge \(C\).*Ready/, 'Charge, and whether it is ready');
   await page.keyboard.up('Shift');
   assert.equal(await box(), null, 'letting go of Shift hides it');
+  p = await t(page, 'pos', 'Ashford');
+  await page.mouse.move(p.x, p.y);
+  await page.keyboard.down('Shift');
+  assert.match(await box(), /^Yours\s*Ashford\s*Strength: \d+ of \d+ soldiers at home, defence \d+ of \d+/, 'a town: its strength first');
+  await page.keyboard.up('Shift');
   await t(page, 'capture', 'Millbrook', 0);
   assert.match(await page.$eval('#toast', e => e.textContent), /Millbrook captured.*\+300 route ink/);
   assert.deepEqual(page.errors, []);
