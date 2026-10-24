@@ -2827,8 +2827,9 @@ import * as THREE from 'three';
       }
     }
     if (e.button === 1 || e.button === 2) { startPan(e); e.preventDefault(); return; }
-    const p = toWorld(e);
+    let p = toWorld(e);
     if (armed) {
+      if (armed === 'barracks' && barracksTown(p)) { const t = barracksTown(p); p = { x: t.x, y: t.y }; }
       const err = placeCheck(me, armed, p);
       if (err) toast(err, 'bad');
       else if (armed !== 'charge' && !(inventory[me][armed] > 0) && gold[me] < priceOf(me, armed)) toast(`Not enough gold: ${priceOf(me, armed)} needed`, 'bad');
@@ -3920,7 +3921,19 @@ vec3 noised(vec2 p) {   // value noise, and its slope
   // ---- buildings: rebuilt only when what they show changes ----
   const townG = new Map(), structG = new Map(), fieldG = new Map();
   function keepH(t) { return t.capital ? 22 : 14; }
-  function townSize(t) { return (t.capital ? 16 : 10) + Math.min(3, t.barracks) * 2; }   // half-width of the keep
+  function townSize(t, b = t.barracks) { return (t.capital ? 16 : 10) + Math.min(3, b) * 2; }   // half-width of the keep
+  // where a town's i-th barracks hall stands once it has b of them, facing the keep: the first two either side of
+  // it, where both players' cameras see them, then two further out behind it
+  const HALL_SLOTS = [Math.PI + 0.15, -0.15, -Math.PI / 2 - 0.55, -Math.PI / 2 + 0.55];
+  function hallSpot(t, i, b = t.barracks) {
+    const ang = HALL_SLOTS[i], hr = townSize(t, b) + (t.capital ? 26 : 38) + (i > 1 ? (t.capital ? 2 : 10) : 0);
+    return { x: t.x + Math.cos(ang) * hr, z: t.y + Math.sin(ang) * hr, ry: -(ang + Math.PI / 2) };
+  }
+  // houses give way to the barracks halls
+  function underHall(t, h) {
+    for (let i = 0; i < Math.min(4, t.barracks); i++) { const q = hallSpot(t, i); if (hypot(q.x - h.x, q.z - h.y) < 21) return true; }
+    return false;
+  }
   function townRing(t) { return townSize(t) * 1.42 + 6; }
   function houseCounts(t) {
     const cap = townCap(t), slots = t.owner < 0 ? 3 : Math.min(t.houses.length, Math.ceil(cap / 3));
@@ -3966,23 +3979,41 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       }
     } else addFlag(g, x + s - 2, y0 + KH + 3, z - s + 2, 9, col);
     for (let i = 0; i < slots && i < filled; i++) {
+      if (underHall(t, t.houses[i])) continue;
       const h = t.houses[i], hy = groundAt(h.x, h.y), ry = Math.atan2(h.x - x, h.y - z);
       put(g, GEO.box, mat(HOUSE), h.x, hy, h.y, h.s, 4.6, h.s * 0.85, ry);
       put(g, GEO.gable, mat(roof), h.x, hy + 4.6, h.y, h.s + 1.2, 3.8, h.s * 0.85 + 1, ry);
       for (const e of [-1, 1]) { const d = e * (h.s * 0.425 + 0.1); put(g, GEO.box, LIT(), h.x + Math.sin(ry) * d, hy + 1.4, h.y + Math.cos(ry) * d, 1.4, 1.8, 0.5, ry); }
     }
-    const hallSlots = [-Math.PI / 2 - 0.8, -Math.PI / 2 + 0.8, -Math.PI / 2 - 2, -Math.PI / 2 + 2];
     for (let i = 0; i < Math.min(4, t.barracks); i++) {
-      const ang = hallSlots[i], hr = s + 27, hall = new THREE.Group();
-      hall.position.set(x + Math.cos(ang) * hr, groundAt(x + Math.cos(ang) * hr, z + Math.sin(ang) * hr), z + Math.sin(ang) * hr);
-      hall.rotation.y = -(ang + Math.PI / 2);
-      put(hall, GEO.box, mat(HOUSE), 0, 0, 0, 26, 6, 12);
-      for (const wx of [-7, 0, 7]) for (const e of [-1, 1]) put(hall, GEO.box, LIT(), wx, 2.2, e * 6.1, 1.8, 2, 0.5);
-      put(hall, GEO.gable, mat(col), 0, 6, 0, 13, 4.5, 28, Math.PI / 2);
-      addFlag(hall, 11, 6, -5, 10, col);
+      const q = hallSpot(t, i), hall = buildHall(col);
+      hall.position.set(q.x, groundAt(q.x, q.z), q.z); hall.rotation.y = q.ry;
       g.add(hall);
       (g.userData.flags ||= []).push(...hall.userData.flags);
     }
+    return g;
+  }
+  // A barracks: a long stone-footed hall with a roof in the team's colour, a tall banner, torches by the door
+  // and training dummies in the yard in front. Built facing +z, where its town's keep is.
+  function buildHall(col) {
+    const g = new THREE.Group();
+    put(g, GEO.box, mat(STONE2), 0, -1, 0, 33, 2.2, 18);
+    put(g, GEO.box, mat(HOUSE), 0, 1, 0, 29, 8, 13);
+    put(g, GEO.gable, mat(col), 0, 9, 0, 15.5, 7, 31.5, Math.PI / 2);
+    put(g, GEO.box, mat(SEAM), 0, 15.6, 0, 31.5, 0.8, 1);   // ridge beam
+    put(g, GEO.box, mat(SEAM), 0, 1, 6.55, 5.2, 6, 0.5);    // the door, under a stone lintel
+    put(g, GEO.box, mat(STONE), 0, 7, 6.6, 7, 1.2, 0.8);
+    for (const e of [-1, 1]) {
+      put(g, GEO.box, mat(col), e * 10.5, 3, 6.65, 3.6, 5.5, 0.3);   // banners on the front wall
+      put(g, GEO.box, LIT(), e * 5.8, 3.6, 6.6, 1.8, 2.2, 0.5);
+      for (const wx of [-10, -4, 4, 10]) if (e < 0) put(g, GEO.box, LIT(), wx, 3.6, -6.6, 1.8, 2.2, 0.5);
+      put(g, GEO.cyl, mat(POLE), e * 4, 1, 8.6, 0.35, 5.5, 0.35);   // torches either side of the door
+      put(g, GEO.box, LIT(), e * 4, 6.5, 8.6, 1.3, 1.8, 1.3);
+      put(g, GEO.cyl, mat(WOOD), e * 9, 0, 14, 0.5, 5, 0.5);         // training dummies
+      put(g, GEO.box, mat(WOOD), e * 9, 3.4, 14, 4.2, 0.7, 0.7);
+      put(g, GEO.box, mat('#8c7a5c'), e * 9, 5, 14, 1.8, 1.8, 1.8);
+    }
+    addFlag(g, 12.5, 9, -4.5, 15, col, 1.3);
     return g;
   }
   function buildStruct(s) {
@@ -4049,7 +4080,45 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     }
   }
 
+  // The barracks being placed: a hall that follows the pointer, and drops into the place it will stand once the
+  // pointer comes near one of the player's towns. Clicking anywhere near that town builds it there.
+  let hallGhost = null;
+  const ghostMats = new Map();
+  function barracksTown(p) { return p ? townAt(p.x, p.y, 60, me) : null; }
+  function ghostHall(col) {
+    const g = buildHall(col);
+    g.traverse(o => {
+      if (!o.isMesh) return;
+      if (!ghostMats.has(o.material)) ghostMats.set(o.material, Object.assign(o.material.clone(), { transparent: true, opacity: 0.82 }));
+      o.material = ghostMats.get(o.material);
+    });
+    return g;
+  }
+  function syncHallGhost(nowS) {
+    const dt = hallGhost ? Math.min(0.1, nowS - hallGhost.t) : 0;
+    if (armed !== 'barracks' || !ghost || state !== 'play') { if (hallGhost) { dyn.remove(hallGhost.g); hallGhost = null; } return; }
+    const t = barracksTown(ghost), col = t ? COL.team[me] : COL.team[1 - me];
+    if (!hallGhost || hallGhost.col !== col) {
+      const g = ghostHall(col);
+      if (hallGhost) { g.position.copy(hallGhost.g.position); g.rotation.y = hallGhost.g.rotation.y; dyn.remove(hallGhost.g); }
+      else g.position.set(ghost.x, groundAt(ghost.x, ghost.y) + 12, ghost.y);
+      dyn.add(g); hallGhost = { g, col, town: undefined, pop: 0, t: nowS };
+    }
+    const h = hallGhost, g = h.g;
+    if (t !== h.town) { h.town = t; if (t) { Sound.lock(); h.pop = 1; } }
+    let x = ghost.x, z = ghost.y, y = groundAt(x, z) + 12 + Math.sin(nowS * 3) * 1.5, ry = me ? Math.PI : 0;
+    if (t && t.barracks < 4) { const q = hallSpot(t, t.barracks, t.barracks + 1); x = q.x; z = q.z; y = groundAt(x, z); ry = q.ry; }
+    else if (t) { x = t.x; z = t.y; y = groundAt(x, z) + keepH(t) + 10; }
+    const k = 1 - Math.exp(-dt * 18);
+    g.position.x += (x - g.position.x) * k; g.position.y += (y - g.position.y) * k; g.position.z += (z - g.position.z) * k;
+    let d = ry - g.rotation.y; d -= Math.round(d / (Math.PI * 2)) * Math.PI * 2; g.rotation.y += d * k;
+    h.pop = Math.max(0, h.pop - dt * 5); g.scale.setScalar(1 + 0.14 * Math.sin(h.pop * Math.PI));
+    const fl = g.userData.flags;
+    for (let i = 0; i < fl.length; i++) fl[i].rotation.y = Math.sin(nowS * 2.6 + i) * 0.35;
+    h.t = nowS;
+  }
   function sync3D(nowS) {
+    syncHallGhost(nowS);
     syncMap(townG, towns, t => { const [s, f] = houseCounts(t); return `${t.owner}|${t.barracks}#${s}|${f}`; }, t => buildTown(t, ...houseCounts(t)), nowS);
     syncMap(structG, structs, s => s.type + s.team, buildStruct, nowS);
     syncMap(fieldG, fields, f => f.town && f.town.owner >= 0 ? String(f.town.owner) : null, buildFieldFlag, nowS);
@@ -4340,7 +4409,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       // Empty house plots show room to grow: one per 3 soldiers of capacity not yet filled.
       const [slots, filled] = houseCounts(t), roof = t.owner < 0 ? COL.neutral : COL.mid[t.owner];
       ctx.strokeStyle = roof; ctx.globalAlpha = 0.55; ctx.lineWidth = 1.2;
-      for (let i = filled; i < slots; i++) { const h = t.houses[i]; rr(ctx, h.x - h.s / 2 + 0.6, h.y - h.s / 2 + 0.6, h.s - 1.2, h.s - 1.2, 1.5); ctx.stroke(); }
+      for (let i = filled; i < slots; i++) { const h = t.houses[i]; if (underHall(t, h)) continue; rr(ctx, h.x - h.s / 2 + 0.6, h.y - h.s / 2 + 0.6, h.s - 1.2, h.s - 1.2, 1.5); ctx.stroke(); }
       ctx.globalAlpha = 1;
       // Training ring: fills as the next soldier trains; solid and dim when the town is full.
       if (t.owner >= 0) {
@@ -4433,6 +4502,10 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       const R = armed === 'tower' ? 130 : 80, p = toScreen(ghost.x, ghost.y + R + 9, 0), ok = !placeCheck(me, armed, ghost);
       label(!ok ? placeCheck(me, armed, ghost) : armed === 'tower' ? 'Shoots enemies inside this circle' : 'Your soldiers inside take 55% less damage',
         p.x, p.y, 12, 700, ok ? LIGHTC[me] : LIGHTC[1 - me], 4);
+    }
+    if (armed === 'barracks' && ghost && state === 'play') {
+      const t = barracksTown(ghost), p = t ? toScreen(t.x, t.y + townRing(t) + 52, 0) : toScreen(ghost.x, ghost.y, groundAt(ghost.x, ghost.y) + 34);
+      label(t ? `${t.name}: trains 50% faster, holds 10 more` : 'Barracks go on one of your towns', p.x, p.y, 12, 700, t ? LIGHTC[me] : LIGHTC[1 - me], 4);
     }
     for (const m of mines) {
       const p = toScreen(m.x, m.y + 38, 0), k = pxPerUnit(m.x, m.y) * zs;
@@ -4527,6 +4600,23 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       ctx.globalAlpha = 0.12; ctx.fillStyle = COL.team[me]; ctx.beginPath(); ctx.arc(ghost.x, ghost.y, 140, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 0.8; ctx.strokeStyle = COL.team[me]; ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
       ctx.beginPath(); ctx.arc(ghost.x, ghost.y, 140, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+    }
+    else if (armed === 'barracks') {   // the towns that can take it, and the one it would join with its hall's plot
+      const pick = barracksTown(ghost), nowS = performance.now() / 1000;
+      ctx.strokeStyle = COL.team[me];
+      for (const t of towns) {
+        if (t.owner !== me) continue;
+        const on = t === pick;
+        ctx.globalAlpha = on ? 0.95 : 0.5; ctx.lineWidth = on ? 3 : 1.5; ctx.setLineDash(on ? [] : [5, 6]);
+        ctx.beginPath(); ctx.arc(t.x, t.y, townRing(t) + 10 + (on ? Math.sin(nowS * 6) * 1.5 : 0), 0, Math.PI * 2); ctx.stroke();
+        if (on && t.barracks < 4) {
+          const q = hallSpot(t, t.barracks, t.barracks + 1);
+          ctx.save(); ctx.translate(q.x, q.z); ctx.rotate(-q.ry);
+          ctx.globalAlpha = 0.28; ctx.fillStyle = COL.team[me]; ctx.setLineDash([]); rr(ctx, -18, -10, 36, 28, 3); ctx.fill();
+          ctx.restore();
+        }
+      }
+      ctx.setLineDash([]); ctx.globalAlpha = 1;
     }
     else if (armed === 'bridge') {
       const b = B(ghost.x, ghost.y), L = bandAt(ghost.x, ghost.y), ca = L ? lineA(L, b) : A(ghost.x, ghost.y);
