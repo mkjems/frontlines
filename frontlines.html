@@ -1627,12 +1627,11 @@ import * as THREE from 'three';
     return best;
   }
 
-  // Soldiers take their town's route when they leave and keep it, even if the town gets new orders later.
-  // The computer's armies follow their town's current orders, which is how it gathers troops and then strikes.
+  // Soldiers take their town's route when they leave and keep it, even if the town gets new orders later,
+  // on both sides: an army on the march is turned only as a gathered group, or called home by clearing the route.
   function goalOf(u) {
     const t = u.town;
-    if (u.team === match.ai) u.route = t && t.owner === u.team ? t.route : null;
-    else if (!u.route && t && t.owner === u.team && t.route) u.route = t.route;
+    if (!u.route && t && t.owner === u.team && t.route) u.route = t.route;
     const r = u.route;
     if (r) {
       if (u.rid !== r.id) { u.rid = r.id; u.arrived = false; u.ri = closestIdx(r.pts, u.x, u.y); }
@@ -1659,15 +1658,16 @@ import * as THREE from 'three';
   }
 
   // A gathered group: this player's soldiers waiting at the end of a route on open ground.
+  const gathered = u => !u.dead && u.route && u.arrived && !u.route.target;
   function groupAt(x, y) {
     let best = null, bd = 45 * 45;
     for (const u of units) {
-      if (u.team !== me || u.dead || !u.route || !u.arrived || u.route.target) continue;
+      if (u.team !== me || !gathered(u)) continue;
       const d = (u.x - x) ** 2 + (u.y - y) ** 2;
       if (d < bd) { bd = d; best = u; }
     }
     if (!best) return null;
-    return units.filter(u => u.team === me && !u.dead && u.arrived && u.route && !u.route.target &&
+    return units.filter(u => u.team === me && gathered(u) &&
       (u.route === best.route || (u.x - best.x) ** 2 + (u.y - best.y) ** 2 < 70 * 70));
   }
 
@@ -1912,7 +1912,8 @@ import * as THREE from 'three';
       if (d < bs) { bs = d; best = br; }
     }
     if (!best) return null;
-    return carryOut(aiTeam, { type: 'build', kind: 'bridge', line: lines.indexOf(L), b: best.b });
+    const c = XY(lineA(L, best.b), best.b);   // the middle of the river there, where a player would click
+    return carryOut(aiTeam, { type: 'build', kind: 'bridge', line: lines.indexOf(L), b: best.b, x: c.x, y: c.y }, true);
   }
   function newPlan() {
     const red = towns.filter(t => t.owner === aiTeam);
@@ -1936,19 +1937,21 @@ import * as THREE from 'three';
     }
     plan = { target, main, decoy, decoyTarget, phase: main ? 'mass' : 'strike', t: time, t2: time };
   }
-  // the computer's march orders: to a town (over a given crossing), to a point, or none
+  // the computer's march orders: to a town (over a given crossing), to a point, or none (with recall, its soldiers
+  // still on the march head home). A route returns whether the town got it.
   const aiRoute = (t, target, via) => carryOut(aiTeam, { type: 'route', town: t.name, target: target.name, via: bridges.indexOf(via) });
   const aiPoint = (t, p) => carryOut(aiTeam, { type: 'route', town: t.name, point: { x: p.x, y: p.y } });
-  const aiHold = t => carryOut(aiTeam, { type: 'route', town: t.name });
-  function setRoute(t, target, via) {
-    if (!target) { t.route = null; return; }
-    if (t.route && t.route.target === target && t.route.via === via) return;
-    t.route = makeRoute(t, target, null, via); t.route.via = via;
+  const aiHold = (t, recall) => carryOut(aiTeam, { type: 'route', town: t.name, recall });
+  // the route a town would get for the computer's orders: its current one if that already goes there
+  function routeTo(t, target, via) {
+    if (t.route && t.route.target === target && t.route.via === via) return t.route;
+    const r = makeRoute(t, target, null, via); r.via = via;
+    return r;
   }
-  function setPoint(t, p) {
+  function routeToPoint(t, p) {
     const r = t.route, end = r && r.pts[r.pts.length - 1];
-    if (r && !r.target && hypot(end.x - p.x, end.y - p.y) < 4) return;
-    t.route = makeRoute(t, null, p);
+    if (r && !r.target && hypot(end.x - p.x, end.y - p.y) < 4) return r;
+    return makeRoute(t, null, p);
   }
   function aiStep(dt) {
     if (match.ai < 0) return;
@@ -2006,21 +2009,69 @@ import * as THREE from 'three';
       let bd = Infinity; const st = stagingPoint(plan.decoy);
       for (const t of red) if (!t.capital) { const d = hypot(t.x - st.x, t.y - st.y); if (d < bd) { bd = d; decoyTown = t; } }
     }
+    // each town's orders: a town under threat calls home its soldiers on the march, as a player would
+    const wants = [];
     for (const t of red) {
-      if ((threat.get(t) || 0) > 4) { aiHold(t); continue; }
+      if ((threat.get(t) || 0) > 4) { aiHold(t, true); continue; }
       let helping = null;
       for (const [o, n] of threat) if (o !== t && n > 6) { helping = o; break; }
-      if (helping && rng() < 0.5) { aiRoute(t, helping); continue; }
+      if (helping && rng() < 0.5) { wants.push({ t, target: helping }); continue; }
       if (t.capital && red.length < 4 && week < 3) { aiHold(t); continue; }
       const onRedSide = sideOf(t.x, t.y) === redSide();
-      if (t === minerTown && t !== decoyTown && plan.phase === 'mass') { aiPoint(t, { x: minerSpot.x, y: minerSpot.y }); continue; }
+      if (t === minerTown && t !== decoyTown && plan.phase === 'mass') { wants.push({ t, point: minerSpot }); continue; }
       if (t === decoyTown && plan.decoyTarget) {
-        if (plan.phase === 'mass') aiPoint(t, stagingPoint(plan.decoy));
-        else aiRoute(t, plan.decoyTarget, plan.decoy);
+        wants.push(plan.phase === 'mass' ? { t, point: stagingPoint(plan.decoy) } : { t, target: plan.decoyTarget, via: plan.decoy });
         continue;
       }
-      if (!onRedSide || !plan.main || plan.phase === 'strike') aiRoute(t, plan.target, plan.main);
-      else aiPoint(t, stagingPoint(plan.main));
+      wants.push(!onRedSide || !plan.main || plan.phase === 'strike' ? { t, target: plan.target, via: plan.main } : { t, point: stagingPoint(plan.main) });
+    }
+    // the routes share the route ink: changed ones are cleared first, then the towns nearest where they're going
+    // get theirs first
+    for (const w of wants) if (!aiHas(w)) aiHold(w.t);
+    const goal = w => w.target || w.point;
+    wants.sort((a, b) => hypot(a.t.x - goal(a).x, a.t.y - goal(a).y) - hypot(b.t.x - goal(b).x, b.t.y - goal(b).y));
+    for (const w of wants) aiSend(w);
+    aiGroups(threat);
+  }
+  // whether a town already has the route it wants
+  function aiHas(w) {
+    const r = w.t.route;
+    if (!r) return false;
+    if (w.target) return r.target === w.target && (r.via || null) === (w.via || null);
+    const end = r.pts[r.pts.length - 1];
+    return !r.target && hypot(end.x - w.point.x, end.y - w.point.y) < 4;
+  }
+  // A route that doesn't fit in the ink goes to the nearest of its towns that is closer to where it's going
+  // instead: the soldiers join that town and follow its orders from there.
+  function aiSend(w) {
+    const { t } = w, to = w.target || w.point;
+    if (w.target ? aiRoute(t, w.target, w.via) : aiPoint(t, w.point)) return;
+    let relay = null, bd = Infinity;
+    for (const o of towns) {
+      if (o.owner !== aiTeam || o === t || hypot(o.x - to.x, o.y - to.y) >= hypot(t.x - to.x, t.y - to.y)) continue;
+      const d = hypot(o.x - t.x, o.y - t.y);
+      if (d < bd) { bd = d; relay = o; }
+    }
+    if (!relay || !aiRoute(t, relay)) aiHold(t);
+  }
+  // Its gathered armies wait where they gathered until the plan needs them, then march on as a group: to help a
+  // town under attack nearby, from the decoy's crossing to the decoy target, or to the main target in the strike.
+  // A group gathered somewhere the plan no longer uses moves to the main crossing.
+  function aiGroups(threat) {
+    const groups = new Map();
+    for (const u of units) if (u.team === aiTeam && gathered(u)) { const g = groups.get(u.route); if (g) g.push(u); else groups.set(u.route, [u]); }
+    for (const [r, g] of groups) {
+      const e = r.pts[r.pts.length - 1], near = (p, R = 80) => hypot(p.x - e.x, p.y - e.y) < R;
+      let to = null, via = null;
+      for (const [o, n] of threat) if (n > 6 && near(o, 300)) { to = o; break; }
+      if (to);
+      else if (plan.decoy && near(stagingPoint(plan.decoy))) { if (plan.phase === 'mass') continue; to = plan.decoyTarget; via = plan.decoy; }
+      else if (plan.phase === 'strike' || !plan.main) { to = plan.target; via = plan.main; }
+      else if (near(stagingPoint(plan.main)) || (plan.phase === 'mass' && mines.some(m => near(m)))) continue;   // massing, or holding a mine
+      else to = stagingPoint(plan.main);
+      if (!to) continue;
+      const pts = pathPts(e.x, e.y, to.x, to.y, via);
+      carryOut(aiTeam, { type: 'group', units: g.map(u => u.id), pts, target: to.name, len: routeLen(pts) });
     }
   }
 
@@ -2037,9 +2088,10 @@ import * as THREE from 'three';
     if (loud) Sound.alarm();
   }
 
-  // The enemy buys with gold from its own farms and mines, in a fixed rotation.
+  // The enemy buys with gold from its own farms and mines, in a fixed rotation, and places by the player's rules.
   const RED_ORDER = ['farm', 'tower', 'barracks', 'fort', 'farm', 'tower', 'fort', 'barracks'];
-  function aiSpotOk(p, side) {
+  function aiSpotOk(k, p, side) {
+    if (placeCheck(aiTeam, k, p)) return false;
     if (p.x < 30 || p.y < 30 || p.x > W - 30 || p.y > H - 30) return false;
     if (riverGap(p.x, p.y) < 14) return false;
     if (towns.some(t => hypot(t.x - p.x, t.y - p.y) < 55) || structs.some(st => hypot(st.x - p.x, st.y - p.y) < 40)) return false;
@@ -2051,13 +2103,13 @@ import * as THREE from 'three';
     if (!red.length) return null;
     if (k === 'barracks') {
       const t = red.filter(t => t.barracks < 2).sort((a, b) => (b.capital - a.capital) || (b.n - a.n))[0];
-      return t ? { town: t } : null;
+      return t ? { x: t.x, y: t.y, town: t } : null;
     }
     if (k === 'farm') {
       for (let tries = 0; tries < 40; tries++) {
         const t = red[rng() * red.length | 0], a = rand(0, Math.PI * 2), r = rand(80, 120);
         const p = { x: t.x + cos(a) * r, y: t.y + sin(a) * r };
-        if (aiSpotOk(p, sideOf(t.x, t.y))) return { ...p, town: t };
+        if (aiSpotOk(k, p, sideOf(t.x, t.y))) return { ...p, town: t };
       }
       return null;
     }
@@ -2067,7 +2119,7 @@ import * as THREE from 'three';
     for (let tries = 0; tries < 40; tries++) {
       const a = anchors[rng() * anchors.length | 0];
       const p = { x: a.x + rand(-60, 60), y: a.y + rand(-60, 60) };
-      if (aiSpotOk(p, redSide())) return p;
+      if (aiSpotOk(k, p, redSide())) return p;
     }
     return null;
   }
@@ -2077,7 +2129,7 @@ import * as THREE from 'three';
     const spot = aiSpot(k);
     redBuys++;
     if (!spot) return;
-    carryOut(aiTeam, { type: 'build', kind: k, x: spot.x, y: spot.y, town: spot.town && spot.town.name });
+    carryOut(aiTeam, { type: 'build', kind: k, x: spot.x, y: spot.y, town: spot.town && spot.town.name }, true);
   }
 
   // Each week the enemy also fortifies one of its bridgeheads.
@@ -2320,14 +2372,19 @@ import * as THREE from 'three';
   function carryOut(team, o, check) { return ORDERS[o.type](o, team, check); }
   const ORDERS = {
     // a town's march route: drawn points (the player), a target town or a point (the computer), or none, which
-    // clears it; with recall, soldiers still marching on the old route head home
+    // clears it; with recall, soldiers still marching on the old route head home. A route must fit in the side's
+    // route ink. Returns whether the town now has the route.
     route(o, team) {
       const t = townNamed(o.town);
-      if (!t || t.owner !== team) return;
-      if (o.pts) t.route = { id: ++routeSeq, pts: o.pts, target: o.target ? townNamed(o.target) : null, len: o.len };
-      else if (o.target) setRoute(t, townNamed(o.target), bridges[o.via]);
-      else if (o.point) setPoint(t, o.point);
-      else if (t.route) {
+      if (!t || t.owner !== team) return false;
+      const target = o.target ? townNamed(o.target) : null;
+      if (o.pts || target || o.point) {
+        const r = o.pts ? { id: ++routeSeq, pts: o.pts, target, len: o.len } : target ? routeTo(t, target, bridges[o.via]) : routeToPoint(t, o.point);
+        if (r !== t.route && r.len > inkCap(team) - inkUsed(team, t)) { if (team === me) toast('Not enough route ink', 'bad'); return false; }
+        t.route = r;
+        return true;
+      }
+      if (t.route) {
         const r = t.route;
         let recalled = 0;
         if (o.recall) for (const u of units) if (u.route === r && !u.arrived && !u.dead) { u.route = null; recalled++; }
@@ -2335,10 +2392,10 @@ import * as THREE from 'three';
         if (team === me) toast(recalled ? `${t.name} route cleared. ${recalled} soldiers head home` : `${t.name} route cleared`);
       }
     },
-    // a gathered group of soldiers sent on a drawn route
+    // a gathered group of soldiers sent on a drawn route; soldiers still on the march can't be turned
     group(o, team) {
       const ids = new Set(o.units), route = { id: ++routeSeq, pts: o.pts, target: o.target ? townNamed(o.target) : null, len: o.len };
-      for (const u of units) if (ids.has(u.id) && u.team === team && !u.dead) u.route = route;
+      for (const u of units) if (ids.has(u.id) && u.team === team && gathered(u)) u.route = route;
     },
     // what a town trains
     train(o, team) { const t = townNamed(o.town); if (t && t.owner === team) t.kind = o.kind; },
@@ -2356,12 +2413,13 @@ import * as THREE from 'three';
       chargeCd[team] = CHARGE_CD;
       if (team === me) toast(n ? `Charge! ${n} soldiers crash into the enemy` : 'No soldiers in range', n ? 'good' : '');
     },
-    // a bridge, barracks, farm, watchtower or fort, paid for from the tray (or free: the enemy's weekly one).
-    // A player's is checked again, since a step may have passed since it was placed. Returns what was built.
+    // a bridge, barracks, farm, watchtower or fort, paid for from the tray (or free: the computer's weekly one).
+    // Checked against the placing rules (a player's again, since a step may have passed since it was placed),
+    // except the computer's free one. Returns what was built.
     build(o, team, check) {
-      const k = o.kind, p = { x: o.x, y: o.y };
-      if (check && (placeCheck(team, k, p) || (!(inventory[team][k] > 0) && gold[team] < priceOf(team, k)))) return null;
-      if (o.free);
+      const k = o.kind, p = { x: o.x, y: o.y }, free = o.free && team === match.ai;
+      if (check && (placeCheck(team, k, p) || (!free && !(inventory[team][k] > 0) && gold[team] < priceOf(team, k)))) return null;
+      if (free);
       else if (inventory[team][k] > 0) inventory[team][k]--;
       else { gold[team] -= priceOf(team, k); bought[team][k] = (bought[team][k] || 0) + 1; }
       let made = null, at = p;

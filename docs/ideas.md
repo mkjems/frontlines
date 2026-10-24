@@ -105,6 +105,24 @@ Lighter options discussed, none chosen yet:
   split into two armies and try to flank instead of striking at one target.
 - **Charge for the enemy:** the enemy has no Charge. It could charge when its army meets the player's.
 
+## The computer against the computer
+
+Discussed on 24 October 2026, after the [design review](designreview.md). Both sides played by the computer,
+in three steps, each worth having on its own:
+1. **A balance runner:** both sides computer-run, played many times at full speed in headless Chrome (like
+   the tests), reporting win rates per side and landscape, game length in weeks, which troop type wins each
+   pairing, and gold per week. It turns the review's "to check" items into numbers and checks every balance
+   change afterwards. Needs the AI's single-side assumptions lifted: `match.ai` names one team, and `plan`,
+   `redBuys` and `aiT` are single values.
+2. **A battle behind the start screen:** a live computer-vs-computer game on the board while the start screen
+   is up, so visitors see armies clash before learning a rule.
+3. **A watch mode**, only if 1 and 2 show it's fun to watch. The scripted AI plays much the same way every
+   time, so it needs personalities (aggressive, economic, turtling), a camera that follows the biggest fight,
+   and a speed control. The personalities are the real work.
+
+The computer has to play by the player's rules first (done 24 October: no turning armies on the march, route
+ink, the same building checks), or the numbers from 1 won't describe the real game.
+
 ## Visitor analytics
 
 Options weighed for counting visitors (none set up yet):
