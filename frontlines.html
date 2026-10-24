@@ -793,7 +793,8 @@ import * as THREE from 'three';
   // Troop types: 0 spearmen, 1 archers, 2 cavalry
   const KIND = ['Spearmen', 'Archers', 'Cavalry'];
   const K_HP = [4, 2, 3], K_SPEED = [1, 1, 1.6], K_TRAIN = [0.85, 1, 1.4];
-  const K_MULT = [[1, 1, 1.4], [1.2, 1, 0.8], [0.75, 1.8, 1]];   // [attacker][defender]
+  // [attacker][defender]. Equal-cost fights must go spearmen > cavalry > archers > spearmen; a test checks it
+  const K_MULT = [[1, 1, 1.4], [1.6, 1, 0.6], [1, 1.8, 1]];
   const START_KIND = { Ashford: 0, Brindle: 1, Coldwater: 2, Redmarsh: 0, Thornby: 1, Vexley: 2, Millbrook: 2, Oakhollow: 1, Fennick: 1, Larkspur: 2 };
   const CHARGE_CD = 25;
   let chargeCd = [0, 0], menuTown = null, alerts = [], strikes = 0, clashLevel = 0;
@@ -1694,8 +1695,9 @@ import * as THREE from 'three';
     let dmg = (ranged || u.kind !== 1 ? 1 : 0.4) * K_MULT[u.kind][e.kind];
     dmg *= 1 + Math.min(allies, 10) * 0.06;   // group strength: up to +60%
     let kb = ranged ? 0 : 2.2;
-    if (!ranged && u.calm > 1.2 && u.kind !== 1) {   // charge; spears stop a cavalry charge cold
-      const cm = u.kind === 2 ? (e.kind === 0 ? 1 : 3) : 2.2;
+    // a charge: cavalry's first blow after a pause, unless it meets spears; spearmen charge only on a Charge order
+    if (!ranged && u.calm > 1.2 && u.kind !== 1) {
+      const cm = u.kind === 2 ? (e.kind === 0 ? 1 : 3) : u.charge ? 2.2 : 1;
       if (cm > 1) { dmg *= cm; kb = 5; puff(e.x, e.y, COL.mid[u.team], 12); FX.dust(e.x, e.y, 3); }
     }
     u.calm = 0;
@@ -4470,6 +4472,29 @@ import * as THREE from 'three';
           Object.assign(u, { x: cx + side * 40 + rand(-15, 15), y: cy + rand(-25, 25), kind: i % 3, town: null });
         }
         return toScreen(cx, cy, 0);
+      },
+      // na blue soldiers of kind ka against nb red of kind kb, alone on open flat ground: blue attacks red where it
+      // stands, or (meet) both march to the middle. Fought to the end; returns the survivors of each side.
+      duel: (ka, na, kb, nb, meet) => {
+        for (const t of towns) t.owner = -1;
+        units = []; structs = [];
+        const open = (x, y) => !blockedAt(x, y) && !inForest(x, y) && !hillLevel(x, y) && !inMarsh(x, y) && riverGap(x, y) > 100;
+        let c = null;
+        for (let i = 0; i < 4000 && !c; i++) {
+          const x = rand(150, W - 150), y = rand(150, H - 150);
+          if ([-200, -120, -60, 0, 60, 120, 200].every(dx => open(x + dx, y)) && towns.every(t => Math.hypot(t.x - x, t.y - y) > 250)) c = { x, y };
+        }
+        if (!c) return null;
+        const side = (team, kind, n, at, goal) => {
+          const route = { id: ++routeSeq, pts: [goal], target: null, len: 0 };
+          for (let i = 0; i < n; i++) units.push({ x: at.x + rand(-16, 16), y: at.y + rand(-24, 24), vx: 0, vy: 0, team, kind, hp: K_HP[kind], boost: 0,
+            town: null, route, rid: route.id, ri: 0, arrived: at === goal, cd: 0, flash: 0, enemy: null, calm: 0, ox: rand(-16, 16), oy: rand(-24, 24), id: uid++, dead: false });
+        };
+        const L = { x: c.x - 120, y: c.y }, R = { x: c.x + 120, y: c.y };
+        side(0, ka, na, L, meet ? c : R); side(1, kb, nb, R, meet ? c : R);
+        const left = team => units.filter(u => !u.dead && u.team === team).length;
+        for (let i = 0; i < 60 * 40 && left(0) && left(1); i++) step(STEP);
+        return [left(0), left(1)];
       },
       capture: (n, team) => { capture(town(n), team); return town(n).owner; },
       hitCapital: () => { const c = towns.find(t => t.capital && t.owner === 0), h = c.hold; enterTown(c, { team: 1, dead: false }); return { hold: c.hold, before: h, shake: FX.shakeAmount }; },

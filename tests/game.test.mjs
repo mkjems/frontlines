@@ -224,6 +224,30 @@ test('Charge sends the soldiers in the circle running at the spot', async () => 
   await page.close();
 });
 
+test('each troop type beats the one it counters, at equal cost (docs/designreview.md)', async () => {
+  // as many of each as the same training time buys: spearmen train in 0.85, archers 1, cavalry 1.4
+  const KIND = ['spearmen', 'archers', 'cavalry'], N = [33, 28, 20];
+  const page = await openGame(undefined, new URL('../site/index.html?test&land=open', import.meta.url).href);
+  for (const [win, lose] of [[0, 2], [2, 1], [1, 0]]) {
+    // blue attacks red where it stands, either way round, or both march to meet
+    for (const [blue, red, meet] of [[win, lose, false], [lose, win, false], [win, lose, true]]) {
+      let left = null;
+      for (let map = 100; !left && map < 110; map++) {   // a map with open flat ground for the fight
+        await page.goto(new URL(`../site/index.html?test&land=open&map=${map}`, import.meta.url).href);
+        await page.waitForFunction(() => window.__t);
+        await t(page, 'start');
+        left = await t(page, 'duel', blue, N[blue], red, N[red], meet);
+      }
+      assert.ok(left, 'found open ground for the fight');
+      const w = blue === win ? 0 : 1;
+      assert.ok(left[w] > 0 && left[1 - w] === 0,
+        `${N[blue]} ${KIND[blue]} ${meet ? 'meeting' : 'attacking'} ${N[red]} ${KIND[red]}: ${KIND[win]} should win (survivors ${left[0]} against ${left[1]})`);
+    }
+  }
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
 test('battles, captures and attacks on your capital', async () => {
   const page = await openGame();
   await t(page, 'start');

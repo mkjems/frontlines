@@ -18,7 +18,7 @@ sometimes says what should come before it (fix the troop counters before adding 
 | Drawing routes, towns training soldiers | Keep | The heart of the game, and unusual. Protect it. |
 | Taking towns by marching into them | Keep | Simple and readable. |
 | Mirrored random maps, landscapes | Keep | Fair and varied. Measure balance per landscape. |
-| The three troop types and their counters | **Fix** | Spearmen look best at nearly everything; archers may not beat them. |
+| The three troop types and their counters | Done | Measured backwards in two of three pairings; fixed 24 October. |
 | The automatic charge vs the Charge button | Simplify | Every soldier but archers already charges by itself; the button mostly adds a sprint. |
 | Route ink | **Cut** | A third resource with little gain. (The computer obeys it since 24 October.) |
 | Weekly reinforcement cards | Simplify | Mostly the same five buildings the tray sells. Offer only things gold can't buy. |
@@ -41,7 +41,20 @@ Most of the suggestions below take things away so this core shows more clearly. 
 judged by whether it makes route drawing more interesting. Formations pass that test, because a formation is
 something your routes create.
 
-## Fix: the three troop types
+## Done: the three troop types
+
+**Done on 24 October 2026.** Staged equal-cost fights (33 spearmen, 28 archers, 20 cavalry, on open ground)
+showed the triangle backwards in two pairings: spearmen beat archers and archers beat cavalry, so spearmen
+beat everything and cavalry nothing. The fix: spearmen charge only on a Charge order, and `K_MULT` became
+archers ×1.6 against spearmen (was 1.2) and ×0.6 against cavalry (was 0.8), cavalry ×1 against spearmen (was
+0.75). Each counter now wins every staged fight, keeping about 65% (archers), 45% (cavalry) and 80%
+(spearmen) of its soldiers, and a browser test checks it. Fights turn on how many blows a kill takes, so small
+changes to these numbers often do nothing, and a slightly softer set gave the archers back the fight against
+cavalry. Still open: a mixed army loses to a single-type army of the same cost, partly because cavalry run
+ahead of the rest. That makes switching to the counter the best play, and the computer's habit of countering
+the player's most common type stronger.
+
+The review as first written:
 
 The rules sheet says spearmen beat cavalry, archers beat spearmen and cavalry beat archers. The code makes the
 first and last strongly true, and probably not the middle one.

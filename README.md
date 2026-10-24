@@ -73,6 +73,7 @@ open site/index.html
 - zoom and pan;
 - placing a watchtower, and Broken Bridges' free bridges for both sides;
 - Charge: in the tray, armed with C, and soldiers running at the spot;
+- each troop type beating the one it counters, in equal-cost fights;
 - battles, captures and attacks on your capital;
 - every landscape: towns stay dry, nobody walks through rivers, mountains or crags, both sides field armies;
 - armies crossing two rivers and a mountain pass;
