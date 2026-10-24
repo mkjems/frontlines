@@ -247,7 +247,7 @@ test('paused, Shift over the panels, tray and towns explains them; taking a town
   p = await t(page, 'pos', 'Ashford');
   await page.mouse.move(p.x, p.y);
   await page.keyboard.down('Shift');
-  assert.match(await box(), /^Yours\s*Ashford\s*Strength: \d+ of \d+ soldiers at home, defence \d+ of \d+/, 'a town: its strength first');
+  assert.match(await box(), /^Yours\s*Ashford\s*Strength 100% of \d+ · \d+ soldiers? here\s*Trains spearmen · 1 every [\d.]+s · \d+ of its \d+ alive/, 'a town: its strength first');
   await page.keyboard.up('Shift');
   await t(page, 'capture', 'Millbrook', 0);
   assert.match(await page.$eval('#toast', e => e.textContent), /Millbrook captured.*\+300 route ink/);
@@ -267,6 +267,7 @@ test('each troop type beats the one it counters, at equal cost (docs/designrevie
         await page.goto(new URL(`../site/index.html?test&land=open&map=${map}`, import.meta.url).href);
         await page.waitForFunction(() => window.__t);
         await t(page, 'start');
+        await t(page, 'freeze');   // only the duel moves the battle, so every run fights the same fight
         left = await t(page, 'duel', blue, N[blue], red, N[red], meet);
       }
       assert.ok(left, 'found open ground for the fight');

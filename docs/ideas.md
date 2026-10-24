@@ -27,6 +27,9 @@ banner stands over its middle. Shift over it describes it. `__t.companies()` rep
   out of the rear riders' sight, and won where they used to lose. So a company fights as one: while any member
   fights, the rest search for enemies across the company's radius too (`co.fight`). The duels came back to their
   old results, except that archers attacking cavalry is close either way (riders win with 2 to 9 left).
+- Learned (later the same day): that last pairing was flaky (lost 2 runs in 5), and lost every time once the
+  duel test was made repeatable. A wedge with riders 11 apart is about 55 deep, so it reached archers piecemeal.
+  Riders now stand 8.5 apart, knee to knee: cavalry win again on every test map, by 4 to 9, as before formations.
 - For tuning the next steps: `__t.duel(kindA, nA, kindB, nB, meet)` stages fights on open ground, and the
   defending side forms a company, so formation against formation can be measured.
 

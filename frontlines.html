@@ -1699,7 +1699,8 @@ import * as THREE from 'three';
   // in close ranks at the front, archers in loose staggered lines behind them, cavalry in wedges on the wings.
   // Soldiers walk to their places like to any other goal, and leave them to fight. A company fights as one: while
   // any of it is fighting, the rest look for enemies across the whole company's width, not just around themselves.
-  const FORM_MIN = 6, GAP = [9.5, 12, 11];   // spacing between neighbours, by kind
+  // spacing between neighbours, by kind; riders ride knee to knee, as a looser wedge reaches a fight piecemeal
+  const FORM_MIN = 6, GAP = [9.5, 12, 8.5];
   // the rows of a block of n soldiers, front row first, cols across; staggered rows sit half a gap over
   function block(n, cols, gap, d0, stagger) {
     const rows = [];
@@ -3130,12 +3131,14 @@ import * as THREE from 'three';
   function describe(x, y) {
     const t = townAt(x, y, 30);
     if (t) {
-      // its strength first: the soldiers at home and the defence ring an attack must empty
-      const defence = `defence ${Math.ceil(t.hold)} of ${Math.round(t.holdMax)}`, lines = [];
+      // its strength first: how full the defence ring an attack must empty is, and how many of its side's
+      // soldiers stand close enough to defend it (where they take less damage), whichever town trained them
+      const lines = [], strength = `Strength ${Math.ceil(t.hold / t.holdMax * 100)}% of ${Math.round(t.holdMax)}`;
       if (t.owner >= 0) {
-        lines.push(`Strength: ${t.n} of ${townCap(t)} soldiers at home, ${defence}`);
-        lines.push(`Trains ${KIND[t.kind].toLowerCase()} · 1 every ${trainSeconds(t).toFixed(1)}s`);
-      } else lines.push(`Strength: ${defence}`, 'Capture it by marching soldiers into it.');
+        const here = countNear(t.owner, t.x, t.y, 90);
+        lines.push(`${strength} · ${here} soldier${plural(here)} here`);
+        lines.push(`Trains ${KIND[t.kind].toLowerCase()} · 1 every ${trainSeconds(t).toFixed(1)}s · ${t.n} of its ${townCap(t)} alive`);
+      } else lines.push(strength, 'Capture it by marching soldiers into it.');
       if (t.barracks) lines.push(`${t.barracks} barracks: trains faster, holds more`);
       const farms = fields.filter(f => f.town === t).length;
       if (farms) lines.push(`${farms} farms · ${t.owner === me ? `+${Math.round(farms * FARM_RATE * WEEK)} gold a week` : 'pay whoever holds the town'}`);
