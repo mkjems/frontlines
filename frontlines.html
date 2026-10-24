@@ -553,7 +553,7 @@
         <li><span class="k">Volleys</span>: a company with 8 or more archers shoots together every 4 s, a rain of arrows on the thickest crowd of enemies, far beyond one archer's reach. Close-packed blocks suffer most; charging cavalry mostly outrun it.</li>
         <li><span class="k">Shield wall</span>: a company with 8 or more spearmen holds its ground. They fight two ranks deep, take 35% less in hand-to-hand fighting, and cavalry charging them get hurt. Arrows still break it.</li>
         <li><span class="k">Riding out</span>: a company with 6 or more riders rides out at enemy archers and cavalry attacking your troops nearby, wheels off to charge again, and comes back to its place.</li>
-        <li><span class="k">Catapult</span>: bought in the tray, built in a town with a team of 4 who push it, very slowly. Drag from it to send it; a route ending on an enemy town stops it in reach. Every 10 s it throws a stone up to 230 away: each hit knocks 30% off a town's strength (15% off a capital) and crushes soldiers, but only soldiers take towns. Enemies who reach it with its team gone capture it.</li>
+        <li><span class="k">Catapult</span>: bought in the tray, built in a town with a team of 4 who push it, very slowly. Drag from it to send it; a route ending on an enemy town stops it in reach. Every 10 s it throws a stone up to 230 away: each hit knocks 30% off a town's strength (15% off a capital) and crushes soldiers, but only soldiers take towns. End its route on a bridge and 3 stones smash it, dropping anyone on it into the river. Enemies who reach it with its team gone capture it.</li>
       </ul>
       <h3 style="margin-top:12px">Combat</h3><ul>
         <li>Each nearby ally adds 6% damage, up to +60%.</li>
@@ -920,7 +920,14 @@ import * as THREE from 'three';
 
   // Where should a unit at (x,y) head to reach (tx,ty)? Over each barrier in turn, by its best crossing.
   function nav(x, y, tx, ty) {
-    if (onBridge(x, y)) return [tx, ty];
+    // on a crossing: straight over to the end on the target's side (a wide ford would otherwise be waded slantwise,
+    // along its edge), or straight at a target on the crossing itself
+    const here = crossingHere(x, y);
+    if (here) {
+      if (lineGap(here.line, tx, ty) < 0) return [tx, ty];
+      const ex = bridgeEnd(here, sideOfLine(here.line, tx, ty));
+      return [ex.x, ex.y];
+    }
     const L = nextLine(x, y, tx, ty), br = L && bestBridge(x, y, tx, ty, L);
     if (!br) return [tx, ty];
     const s0 = sideOfLine(L, x, y), en = bridgeEnd(br, s0);
@@ -1242,7 +1249,7 @@ import * as THREE from 'three';
     time = 0; week = 1; weekT = 0; aiT = 6; ink = [0, 0]; chargeCd = [0, 0]; closeMenu(); routesDrawn = 0; drawing = null;
     uid = 0; routeSeq = 0; frameNo = 0; structT = 0; orderQueue = []; orderLog = []; offers = [null, null];   // counters the battle depends on start afresh, so a game never depends on the one before
     alerts = []; tally = { trained: 0, lost: 0, killed: 0, captured: 0, fallen: 0 };
-    engines = []; stones = []; wrecks = []; impacts = []; engSeq = 0; engT = 0; shots = 0; stoneHits = 0;
+    engines = []; stones = []; wrecks = []; impacts = []; broken = []; engSeq = 0; engT = 0; shots = 0; stoneHits = 0;
     structs = []; tracers = []; inventory = [0, 1].map(t => ({ ...(t === match.ai ? {} : { tower: 1 }), ...(land.freeBridge ? { bridge: 1 } : {}) })); armed = null; plan = null;
     gold = [0, 0]; bought = [{}, {}]; coins = []; redBuys = 0;
     setHint(land.freeBridge ? 'No bridge crosses the river. Your bridge is in the tray: build it where you want to cross.'
@@ -1662,9 +1669,10 @@ import * as THREE from 'three';
     if (r) {
       if (u.rid !== r.id) { u.rid = r.id; u.arrived = false; u.ri = closestIdx(r.pts, u.x, u.y); }
       if (!u.arrived) {
+        // points left in the river by a broken bridge are passed over: nav finds another way across
         let p = r.pts[u.ri];
-        while (u.ri < r.pts.length - 1 && (p.x - u.x) ** 2 + (p.y - u.y) ** 2 < 400) { u.ri++; p = r.pts[u.ri]; }
-        if (u.ri >= r.pts.length - 1 && (p.x - u.x) ** 2 + (p.y - u.y) ** 2 < 900) u.arrived = true;
+        while (u.ri < r.pts.length - 1 && ((p.x - u.x) ** 2 + (p.y - u.y) ** 2 < 400 || blockedAt(p.x, p.y))) { u.ri++; p = r.pts[u.ri]; }
+        if (u.ri >= r.pts.length - 1 && (p.x - u.x) ** 2 + (p.y - u.y) ** 2 < (blockedAt(p.x, p.y) ? 4900 : 900)) u.arrived = true;
         else return { x: p.x, y: p.y, hold: false };
       }
       if (r.target) {
@@ -2015,14 +2023,25 @@ import * as THREE from 'three';
   // at the thickest crowd of enemies. A stone that lands on a town knocks CAT_HOLD of its strength away (half that
   // off a capital, behind its walls) and stops it recovering for CAT_STUN seconds, but never takes it: soldiers
   // must still march in. It crushes enemies within STONE_R and wrecks a catapult it lands on.
+  // A route ending on a bridge aims it at the bridge instead: BRIDGE_HP stones break it. Its deck falls into the
+  // river with anyone on it, stumps of its piers are left standing, and armies find another way across.
   // Its team are soldiers of its side: they keep to their places round it and fight only enemies that come at
   // them. Idle soldiers of its side close by (at home in a town, or gathered) fill places left empty; a catapult
   // left with no team is taken by enemies that reach it with none of its side near, and they become its team.
   const CREW = 4, CAT_MAX = 2, CAT_SPEED = 0.35, CAT_RANGE = 230, CAT_MIN = 60, CAT_RELOAD = 10, CAT_SET = 2.5;
-  const CAT_HOLD = 0.3, CAT_STUN = 12, STONE_R = 14, STONE_DMG = 6;
+  const CAT_HOLD = 0.3, CAT_STUN = 12, STONE_R = 14, STONE_DMG = 6, BRIDGE_HP = 3;
   // the team's places, as [forward, across] from its middle: two pushing at the back, two at the wheels
   const SEATS = [[-17, -5], [-17, 5], [-2, -11.5], [-2, 11.5]];
-  let engines = [], stones = [], wrecks = [], impacts = [], engSeq = 0, engT = 0, shots = 0, stoneHits = 0;
+  let engines = [], stones = [], wrecks = [], impacts = [], broken = [], engSeq = 0, engT = 0, shots = 0, stoneHits = 0;
+  const bridgeMid = br => XY(lineA(br.line, br.b), br.b);
+  const breakable = br => !br.ford && !br.pass;
+  // what a catapult's route is aimed at, while it stands: an enemy town, or a bridge
+  function aimedAt(e) {
+    const r = e.route, tg = r && r.target;
+    if (tg && tg.owner !== e.team) return { x: tg.x, y: tg.y, town: tg };
+    if (r && r.bridge && bridges.includes(r.bridge)) return { ...bridgeMid(r.bridge), bridge: r.bridge };
+    return null;
+  }
   function seatOf(e, i) { const [d, a] = SEATS[i]; return { x: e.x + e.hx * d - e.hy * a, y: e.y + e.hy * d + e.hx * a }; }
   function enlist(e, u) {
     const used = new Set(e.crew.map(c => c.seat));
@@ -2055,8 +2074,8 @@ import * as THREE from 'three';
   }
   function inReach(e, x, y) { const d = (x - e.x) ** 2 + (y - e.y) ** 2; return d <= CAT_RANGE * CAT_RANGE && d >= CAT_MIN * CAT_MIN; }
   function aimOf(e) {
-    const tg = e.route && e.route.target;
-    if (tg && tg.owner !== e.team && inReach(e, tg.x, tg.y)) return { x: tg.x, y: tg.y, town: tg };
+    const tg = aimedAt(e);
+    if (tg && inReach(e, tg.x, tg.y)) return tg;
     let best = null, bd = Infinity;
     const nearest = (x, y, town) => { const d = (x - e.x) ** 2 + (y - e.y) ** 2; if (d < bd && inReach(e, x, y)) { bd = d; best = { x, y, town }; } };
     for (const o of engines) if (o.team !== e.team) nearest(o.x, o.y, null);
@@ -2072,7 +2091,7 @@ import * as THREE from 'three';
   function throwStone(e, aim) {
     const a = rand(0, Math.PI * 2), sc = 8 * Math.sqrt(rng()), x = aim.x + cos(a) * sc, y = aim.y + sin(a) * sc;
     const L = hypot(x - e.x, y - e.y) || 1, dur = 2 + L / 250;
-    stones.push({ team: e.team, x0: e.x, y0: e.y, x, y, t: dur, dur, town: aim.town });
+    stones.push({ team: e.team, x0: e.x, y0: e.y, x, y, t: dur, dur, town: aim.town || null, bridge: aim.bridge || null });
     e.hx = (x - e.x) / L; e.hy = (y - e.y) / L;   // it's turned to throw
     e.load = CAT_RELOAD; e.shot = time; shots++;
   }
@@ -2105,8 +2124,26 @@ import * as THREE from 'three';
       t.hold = Math.max(Math.min(t.hold, 1), t.hold - t.holdMax * CAT_HOLD * (t.capital ? 0.5 : 1));
       t.stun = CAT_STUN; t.hit = Math.max(t.hit, 0.6); stoneHits++; town = t;
     }
+    const br = s.bridge, mid = br && bridgeMid(br);
+    if (br && bridges.includes(br) && (mid.x - s.x) ** 2 + (mid.y - s.y) ** 2 < 24 * 24) {
+      br.hp = (br.hp ?? BRIDGE_HP) - 1; stoneHits++;
+      if (br.hp <= 0) breakBridge(br, s.team);
+    }
     impacts.push({ x: s.x, y: s.y, team: s.team, town, t: 0 });
-    scars.push({ x: s.x, y: s.y, born: time, team: s.team, r: 7 });
+    if (!br) scars.push({ x: s.x, y: s.y, born: time, team: s.team, r: 7 });
+  }
+  // The deck falls into the river with everyone on it, the stumps of its piers stay, and the world is rebuilt
+  // without it. The computer drops a plan that went over it.
+  function breakBridge(br, team) {
+    for (const u of units) if (!u.dead && crossingHere(u.x, u.y) === br) { if (u.crew) u.crew.crew = u.crew.crew.filter(c => c !== u); kill(u); }
+    for (const e of [...engines]) if (crossingHere(e.x, e.y) === br) wreck(e);
+    bridges = bridges.filter(o => o !== br);
+    broken.push({ line: br.line, b: br.b, at: time });
+    impacts.push({ ...bridgeMid(br), team: -1, town: null, fell: br, t: 0 });
+    buildStatic();
+    if (match.ai >= 0 && plan && (plan.main === br || plan.decoy === br)) newPlan();
+    const msg = `The ${bridgeName(br)} has been smashed`;
+    if (team === me) toast(msg, 'good'); else alertAt(bridgeEnd(br, sideOfTeam(me)), msg, false);
   }
   // Every half second: a catapult with no team is taken by enemies that reach it with none of its side near, and
   // empty places are filled by idle soldiers of its side close by.
@@ -2141,12 +2178,12 @@ import * as THREE from 'three';
       const r = e.route;
       let goal = null;
       if (r && !e.arrived) {
-        const tg = r.target;
-        if (tg && tg.owner !== e.team && (tg.x - e.x) ** 2 + (tg.y - e.y) ** 2 < (CAT_RANGE - 15) ** 2) e.arrived = true;
+        const tg = aimedAt(e);
+        if (tg && (tg.x - e.x) ** 2 + (tg.y - e.y) ** 2 < (CAT_RANGE - 15) ** 2) e.arrived = true;
         else {
           let p = r.pts[e.ri];
-          while (e.ri < r.pts.length - 1 && (p.x - e.x) ** 2 + (p.y - e.y) ** 2 < 100) p = r.pts[++e.ri];
-          if (e.ri >= r.pts.length - 1 && (p.x - e.x) ** 2 + (p.y - e.y) ** 2 < 36) e.arrived = true;
+          while (e.ri < r.pts.length - 1 && ((p.x - e.x) ** 2 + (p.y - e.y) ** 2 < 100 || blockedAt(p.x, p.y))) p = r.pts[++e.ri];
+          if (e.ri >= r.pts.length - 1 && (p.x - e.x) ** 2 + (p.y - e.y) ** 2 < (blockedAt(p.x, p.y) ? 3600 : 36)) e.arrived = true;
           else goal = p;
         }
       }
@@ -2670,7 +2707,7 @@ import * as THREE from 'three';
       towns: hash(towns.flatMap(t => [t.name, t.owner, t.hold, t.kind, t.barracks || 0, t.spawnT])),
       units: hash(units.flatMap(u => [u.team, u.kind, u.x, u.y, u.hp])),
       economy: hash([...gold, ...ink, ...chargeCd, redBuys, ...stats.train, ...stats.hp, ...inventory.flatMap(i => Object.entries(i).flat())]),
-      buildings: hash(structs.flatMap(s => [s.type, s.team, s.x, s.y]).concat(bridges.map(b => b.b))),
+      buildings: hash(structs.flatMap(s => [s.type, s.team, s.x, s.y]).concat(bridges.flatMap(b => [b.b, b.hp ?? BRIDGE_HP]))),
       catapults: hash(engines.flatMap(e => [e.team, e.x, e.y, e.load, e.crew.length]).concat(stones.flatMap(s => [s.x, s.y, s.t]))),
       enemyPlan: hash(plan ? [plan.phase, plan.target.name, plan.main ? plan.main.b : -1, plan.decoy ? plan.decoy.b : -1] : []),
     };
@@ -2867,11 +2904,13 @@ import * as THREE from 'three';
       const ids = new Set(o.units), route = { id: ++routeSeq, pts: o.pts, target: o.target ? townNamed(o.target) : null, len: o.len };
       for (const u of units) if (ids.has(u.id) && u.team === team && gathered(u)) u.route = route;
     },
-    // a catapult sent on a drawn route, free like a gathered army; it stops in reach of a town the route ends on
+    // a catapult sent on a drawn route, free like a gathered army; it stops in reach of a town or bridge the route
+    // ends on (the bridge by its river and place along it)
     engine(o, team) {
       const e = engines.find(x => x.id === o.id);
       if (!e || e.team !== team) return;
-      e.route = { id: ++routeSeq, pts: o.pts, target: o.target ? townNamed(o.target) : null, len: o.len };
+      const br = o.bridge ? bridges.find(x => x.line === lines[o.bridge.line] && x.b === o.bridge.b) : null;
+      e.route = { id: ++routeSeq, pts: o.pts, target: o.target ? townNamed(o.target) : null, bridge: br || null, len: o.len };
       e.ri = closestIdx(o.pts, e.x, e.y); e.arrived = false;
     },
     // what a town trains
@@ -3214,6 +3253,16 @@ import * as THREE from 'three';
     }
     return best;
   }
+  // The bridge a catapult's route will be aimed at: the pointer is over it and the line has reached it.
+  function bridgeAimed(p) {
+    const end = drawing.pts[drawing.pts.length - 1];
+    for (const br of bridges) {
+      if (!breakable(br)) continue;
+      const c = bridgeMid(br), R = hwAt(br.line, br.b) + 14;
+      if (Math.hypot(c.x - p.x, c.y - p.y) < R && Math.hypot(c.x - end.x, c.y - end.y) < R + 30) return br;
+    }
+    return null;
+  }
   function commit() {
     const d = drawing, t = d.town;
     if (t && t.owner !== me) return;
@@ -3223,9 +3272,11 @@ import * as THREE from 'three';
     if (target) pts.push({ x: target.x, y: target.y });
     const route = { pts, target: target && target.name, len: d.len };
     if (d.engine) {
-      order(me, { type: 'engine', id: d.engine.id, ...route });
+      const br = d.bridge;
+      order(me, { type: 'engine', id: d.engine.id, ...route, ...(br ? { bridge: { line: lines.indexOf(br.line), b: br.b } } : {}) });
       Sound.commit();
-      toast(target && target.owner !== me ? `Catapult on the move: it stops when ${target.name} is in reach` : 'Catapult on the move');
+      toast(target && target.owner !== me ? `Catapult on the move: it stops when ${target.name} is in reach`
+        : br ? `Catapult on the move: it stops when the ${bridgeName(br)} is in reach, and smashes it` : 'Catapult on the move');
       return;
     }
     if (!t) {
@@ -3322,9 +3373,9 @@ import * as THREE from 'three';
     const group = t || engine ? null : groupAt(p.x, p.y);
     if (!t && !group && !engine) { startPan(e); return; }
     drawing = t ? { town: t, pts: [{ x: t.x, y: t.y }], len: 0, blocked: null, tip: null }
-      : engine ? { town: null, engine, pts: [{ x: engine.x, y: engine.y }], len: 0, blocked: null, tip: null }
+      : engine ? { town: null, engine, bridge: null, pts: [{ x: engine.x, y: engine.y }], len: 0, blocked: null, tip: null }
       : { town: null, group, pts: [{ x: p.x, y: p.y }], len: 0, blocked: null, tip: null };
-    pointerId = e.pointerId;
+    pointerId = e.pointerId; hoverEngine = null;
     cvs.setPointerCapture(e.pointerId);
     e.preventDefault();
   });
@@ -3355,8 +3406,9 @@ import * as THREE from 'three';
     freehand = e.shiftKey;
     if (e.pointerId === pointerId) {
       extend(p);
-      const lock = lockTarget(p);
+      const lock = lockTarget(p), bridge = drawing.engine && !lock ? bridgeAimed(p) : null;
       if (lock !== drawing.lock) { drawing.lock = lock; drawing.lockT = performance.now(); if (lock) Sound.lock(); }
+      if (bridge !== drawing.bridge) { drawing.bridge = bridge; drawing.lockT = performance.now(); if (bridge) Sound.lock(); }
     }
   });
   const endTouch = e => { touches.delete(e.pointerId); if (touches.size < 2) pinch = null; if (pan && e.pointerId === pan.id) { pan = null; cvs.style.cursor = view.z > 1 ? 'grab' : 'default'; } };
@@ -3407,7 +3459,7 @@ import * as THREE from 'three';
       const n = e.crew.length, lines = [n ? `A team of ${n} of ${CREW} to push and load it.` : 'No team: idle soldiers of its side that come near take it up. Enemies that reach it first capture it.'];
       lines.push(e.moving ? 'On the move, slowly.' : e.route && !e.arrived ? 'Stopped: it needs its team to push it.' : e.set > 0 ? 'Setting up.' : e.load > 0 ? `Reloading: ready in ${Math.ceil(e.load * CREW / Math.max(1, n))}s.` : 'Loaded.');
       lines.push(`Throws a stone up to ${CAT_RANGE} away, no closer than ${CAT_MIN}, every ${CAT_RELOAD} s. A hit knocks ${Math.round(CAT_HOLD * 100)}% off a town's strength (half that off a capital, behind its walls) and stops it recovering for a while, but only soldiers can take it. The stone crushes soldiers under it.`);
-      if (e.team === me) lines.push('Drag from it to send it. End the route on an enemy town and it stops in reach and bombards it.');
+      if (e.team === me) lines.push(`Drag from it to send it. End the route on an enemy town and it stops in reach and bombards it; end it on a bridge and ${BRIDGE_HP} stones smash the bridge.`);
       return { title: 'Catapult', own: OWN(e.team), lines };
     }
     const t = townAt(x, y, 30);
@@ -3458,7 +3510,10 @@ import * as THREE from 'three';
     if (band) {
       const br = crossingAt(band, B(x, y));
       if (br && br.ford) return { title: 'Ford', lines: ['Shallow water: anyone can wade across at 45% speed.'] };
-      if (br) return { title: 'Bridge', lines: ['The quick way across the river.'] };
+      if (br) {
+        const hp = br.hp ?? BRIDGE_HP;
+        return { title: 'Bridge', lines: ['The quick way across the river.', hp < BRIDGE_HP ? `Damaged: ${hp} more catapult stone${plural(hp)} will break it.` : `${BRIDGE_HP} catapult stones break it.`] };
+      }
       return { title: 'River', lines: ['Only bridges and fords cross it.'] };
     }
     const lines = [];
@@ -3479,7 +3534,7 @@ import * as THREE from 'three';
     catapult: `Place it on one of your towns. At most ${CAT_MAX} at a time.`,
     tower: 'Place it on your side of the river or near your towns.' };
   // tray items that aren't among the weekly rewards
-  const ITEM_DESC = { catapult: `A siege engine pushed slowly by a team of ${CREW}. Every ${CAT_RELOAD} s it throws a stone up to ${CAT_RANGE} away that knocks ${Math.round(CAT_HOLD * 100)}% off a town's strength and crushes soldiers. Guard its team: enemies take a catapult left without one.` };
+  const ITEM_DESC = { catapult: `A siege engine pushed slowly by a team of ${CREW}. Every ${CAT_RELOAD} s it throws a stone up to ${CAT_RANGE} away that knocks ${Math.round(CAT_HOLD * 100)}% off a town's strength and crushes soldiers. End its route on a bridge and ${BRIDGE_HP} stones smash it. Guard its team: enemies take a catapult left without one.` };
   const HUD_INFO = {
     week: () => {
       const lines = [`A week lasts ${WEEK} seconds. This one ends in ${Math.ceil(WEEK - weekT)}s.`];
@@ -4259,8 +4314,9 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     world.add(instanced(GEO.rock, mat('#ffffff'), rocks, (r, d, c) => { d.position.set(r.x, groundAt(r.x, r.y) + r.r * 0.2, r.y); d.scale.set(r.r, r.r * 0.6, r.r * 0.8); d.rotation.set(0, rand(0, 6), 0); tint(c, '#6b6c66', 0.04); }));
 
     // broken bridges: the stumps of old stone piers, standing in the river
-    for (const L of waterLines()) for (const rb of land.ruins || []) {
-      const b = rb * LB, ca = lineA(L, b), hw = hwAt(L, b);
+    const ruins = [...waterLines().flatMap(L => (land.ruins || []).map(rb => ({ L, b: rb * LB }))), ...broken.map(o => ({ L: o.line, b: o.b }))];
+    for (const { L, b } of ruins) {
+      const ca = lineA(L, b), hw = hwAt(L, b);
       if (bridges.some(br => br.line === L && Math.abs(br.b - b) < 40)) continue;   // rebuilt here since
       const g = new THREE.Group(), c = XY(ca, b);
       g.position.set(c.x, 0, c.y); if (P) g.rotation.y = Math.PI / 2;
@@ -4409,8 +4465,16 @@ vec3 noised(vec2 p) {   // value noise, and its slope
           const near = onScreen(i.x, i.y), g = surfaceAt(i.x, i.y) + (i.town ? keepH(i.town) : 0);
           emit('dust', i.x, i.y, g, 28); emit('spark', i.x, i.y, g + 2, 22, '#8d7d64'); emit('smoke', i.x, i.y, g + 3, 6);
           if (i.town) { i.town.smokeUntil = Math.max(i.town.smokeUntil || 0, nowS + 8); emit('spark', i.x, i.y, g + 4, 18, '#b4b3ab'); }
+          if (i.fell) {   // a bridge going down: its timbers splash into the river along the whole deck
+            const br = i.fell, hw = hwAt(br.line, br.b);
+            for (let a = -hw - 10; a <= hw + 10; a += 6) {
+              const q = XY(lineA(br.line, br.b) + a, br.b + fxRand(-12, 12));
+              emit('spark', q.x, q.y, DECK_Y, 3, '#7d6a52'); emit('spark', q.x, q.y, WATER_Y, 3, '#cfe0ea'); emit('dust', q.x, q.y, DECK_Y, 1);
+            }
+            Sound.crumble();
+          }
           if (near || i.team === me) Sound.boom(!near);
-          if (near) this.shake(i.town ? 0.35 : 0.2);
+          if (near) this.shake(i.town || i.fell ? 0.35 : 0.2);
         }
         for (const w of wrecks) if (time - w.at < 15 && Math.random() < dt * 5) emit('smoke', w.x, w.y, surfaceAt(w.x, w.y) + 3, 1);
         // smouldering towns and cavalry dust
@@ -5098,9 +5162,24 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     }
     if (hoverEngine && !drawing) reach(hoverEngine.x, hoverEngine.y);
     if (drawing && drawing.engine && drawing.pts.length > 1) {
-      const L = drawing.lock, e = drawing.pts[drawing.pts.length - 1];
-      if (L && L.owner !== me) reach(L.x, L.y); else reach(e.x, e.y);   // round a target: where it will stop
+      const L = drawing.lock, br = drawing.bridge, e = drawing.pts[drawing.pts.length - 1];
+      if (L && L.owner !== me) reach(L.x, L.y);   // round a target: where it will stop
+      else if (br) {
+        const c = bridgeMid(br), R = hwAt(br.line, br.b) + 16;
+        reach(c.x, c.y);
+        ctx.strokeStyle = COL.team[1 - me]; ctx.lineWidth = 4; ctx.globalAlpha = 0.9;
+        ctx.beginPath(); ctx.arc(c.x, c.y, R, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
+      } else reach(e.x, e.y);
     }
+    // stones that hit a bridge leave splintered holes in its deck
+    for (const br of bridges) for (let k = 0; k < BRIDGE_HP - (br.hp ?? BRIDGE_HP); k++) {
+      const da = [[-0.35, -6], [0.3, 7], [0, 0]][k], hw = hwAt(br.line, br.b), c = XY(lineA(br.line, br.b) + da[0] * hw, br.b + da[1]);
+      ctx.globalAlpha = 0.85; ctx.fillStyle = '#16130f';
+      ctx.beginPath(); ctx.ellipse(c.x, c.y, 6.5, 5, k, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.6; ctx.strokeStyle = '#8a7558'; ctx.lineWidth = 1.2;
+      for (let j = 0; j < 5; j++) { const a = j * 1.3 + k; ctx.beginPath(); ctx.moveTo(c.x + Math.cos(a) * 5, c.y + Math.sin(a) * 4); ctx.lineTo(c.x + Math.cos(a) * 9, c.y + Math.sin(a) * 7); ctx.stroke(); }
+    }
+    ctx.globalAlpha = 1;
     for (const s of stones) {
       const q = 1 - s.t / s.dur, x = lerp(s.x0, s.x, q), y = lerp(s.y0, s.y, q);
       ctx.globalAlpha = 0.12 + 0.4 * q; ctx.fillStyle = '#0a0d10';
@@ -5166,10 +5245,17 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     }
     if (drawing && drawing.lock) {
       const L = drawing.lock, p = toScreen(L.x, L.y, groundAt(L.x, L.y) + keepH(L) + 16);
-      const text = L.owner === me ? 'Reinforce' : L.owner >= 0 ? 'Attack' : 'Capture';
+      const text = L.owner === me ? 'Reinforce' : drawing.engine ? 'Bombard' : L.owner >= 0 ? 'Attack' : 'Capture';
       ctx.font = '700 13px Lexend, "Avenir Next", system-ui, sans-serif';
       const w = ctx.measureText(text).width + 20;
       ctx.fillStyle = lockColor(L); rr(ctx, p.x - w / 2, p.y - 13, w, 24, 12); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillText(text, p.x, p.y);
+    }
+    if (drawing && drawing.bridge) {
+      const c = bridgeMid(drawing.bridge), p = toScreen(c.x, c.y, DECK_Y + 22), text = 'Smash bridge';
+      ctx.font = '700 13px Lexend, "Avenir Next", system-ui, sans-serif';
+      const w = ctx.measureText(text).width + 20;
+      ctx.fillStyle = COL.team[1 - me]; rr(ctx, p.x - w / 2, p.y - 13, w, 24, 12); ctx.fill();
       ctx.fillStyle = '#fff'; ctx.fillText(text, p.x, p.y);
     }
     if (armed === 'tower' && ghost && state === 'play') {
@@ -5432,7 +5518,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       walls: () => units.filter(inWall).length,   // spearmen standing in a shield wall
       gold: n => { gold[me] = n; refreshTray(true); },
       // the catapults: side, team, whether moving or arrived, the town their route ends on, where they stand
-      engines: () => engines.map(e => ({ team: e.team, crew: e.crew.length, moving: e.moving, arrived: e.arrived, target: e.route && e.route.target ? e.route.target.name : null,
+      engines: () => engines.map(e => ({ team: e.team, crew: e.crew.length, moving: e.moving, arrived: e.arrived, target: e.route && e.route.target ? e.route.target.name : null, bridge: !!(e.route && e.route.bridge),
         x: e.x, y: e.y, at: toScreen(e.x, e.y, 0), shot: e.shot })),
       shots: () => ({ thrown: shots, hits: stoneHits }),   // stones thrown, and those that hit a town
       stones: () => stones.map(st => { const q = 1 - st.t / st.dur; return { q, ground: toScreen(lerp(st.x0, st.x, q), lerp(st.y0, st.y, q), 0) }; }),   // in the air
@@ -5457,6 +5543,36 @@ vec3 noised(vec2 p) {   // value noise, and its slope
         }
         return null;
       },
+      // a blue catapult and its team on blue's bank, dist across from a bridge (not a ford), and n blue soldiers
+      // standing on its deck, with send already sent at it; the rest of the board cleared and the computer idle.
+      // Returns the screen points of the
+      // catapult and the bridge, and how many bridges there are.
+      bridgeSiege: (dist, n, send) => {
+        stage(); aiT = 1e9;
+        const br = bridges.find(breakable), L = br.line, s0 = sideOfTeam(0), c = bridgeMid(br), reg = regionOf(bridgeEnd(br, s0).x, bridgeEnd(br, s0).y);
+        for (const db of [0, 30, -30, 60, -60, 90, -90, 120, -120]) {
+          const q = XY(lineA(L, br.b + db) + s0 * dist, br.b + db);
+          if (!standable(q.x, q.y, reg)) continue;
+          const d = hypot(c.x - q.x, c.y - q.y), e = newEngine(0, q.x, q.y, (c.x - q.x) / d, (c.y - q.y) / d, q.x, q.y);
+          for (const u of e.crew) { const k = seatOf(e, u.seat); u.x = k.x; u.y = k.y; }
+          side(0, [0], n, c, c);
+          for (const u of units.slice(-n)) { const k = XY(lineA(L, br.b) + rand(-0.5, 0.5) * hwAt(L, br.b), br.b + rand(-8, 8)); Object.assign(u, { x: k.x, y: k.y, ox: k.x - c.x, oy: k.y - c.y }); }
+          staged = { line: L, b: br.b, s0 };
+          if (send) carryOut(0, { type: 'engine', id: e.id, pts: [q, bridgeEnd(br, s0)], len: dist, bridge: { line: lines.indexOf(L), b: br.b } });
+          return { at: toScreen(q.x, q.y, 0), bridge: toScreen(c.x, c.y, DECK_Y), bridges: bridges.length };
+        }
+        return null;
+      },
+      // n blue soldiers on blue's bank by that bridge, with a route drawn straight over the place where it stood
+      crossing: n => {
+        const { line: L, b, s0 } = staged, hw = hwAt(L, b), from = XY(lineA(L, b) + s0 * (hw + 40), b), to = XY(lineA(L, b) - s0 * (hw + 60), b);
+        const pts = resample([from, XY(lineA(L, b), b), to], 14), route = { id: ++routeSeq, pts, target: null, len: routeLen(pts) };
+        for (let i = 0; i < n; i++) units.push({ x: from.x + rand(-8, 8), y: from.y + rand(-8, 8), vx: 0, vy: 0, team: 0, kind: 0, hp: K_HP[0], boost: 0,
+          town: null, route, rid: -1, ri: 0, arrived: false, cd: 0, flash: 0, enemy: null, calm: 0, ox: rand(-10, 10), oy: rand(-10, 10), id: uid++, dead: false });
+      },
+      // of blue's soldiers not at a catapult, how many are on the far side of that bridge's river
+      across: () => units.filter(u => !u.dead && u.team === 0 && !u.crew && sideOfLine(staged.line, u.x, u.y) !== staged.s0).length,
+      bridgeCount: () => bridges.length,
       // the first catapult's team are all killed; company() then places armies relative to where it stands
       crewless: () => { const e = engines[0]; for (const u of e.crew) kill(u); staged = { x: e.x, y: e.y }; },
       wheeling: () => units.filter(u => !u.dead && u.wheel > 0).length,   // riders wheeling away after a charge

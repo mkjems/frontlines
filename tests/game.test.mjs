@@ -483,6 +483,44 @@ test('the computer sends troops at a catapult shelling its town and takes it, th
   for (const page of pages) { assert.deepEqual(page.errors, []); await page.close(); }
 });
 
+test('a catapult sent at a bridge smashes it in three stones: those on it fall in, and armies find another way across', async () => {
+  const page = await openGame(undefined, GAME + '&week=600');
+  await t(page, 'start');
+  await page.keyboard.press('Space');
+  const st = await t(page, 'bridgeSiege', 260, 4, false);
+  assert.ok(st, 'a catapult beside a bridge');
+  await dragTo(page, st.at, st.bridge);
+  await page.mouse.up();
+  await sleep(100);
+  assert.ok((await t(page, 'engines'))[0].bridge, 'a route dragged from it onto a bridge aims it at the bridge');
+  assert.match(await page.$eval('#toast', e => e.textContent), /stops when the .*bridge is in reach, and smashes it/);
+  await t(page, 'run', 45);
+  assert.equal((await t(page, 'shots')).hits, 3, 'three stones hit it');
+  assert.equal(await t(page, 'bridgeCount'), st.bridges - 1, 'and it is gone');
+  assert.equal((await t(page, 'left'))[0], 4, 'the four soldiers on its deck fell into the river; the catapult\'s team are left');
+  assert.match(await page.$eval('#toast', e => e.textContent), /bridge has been smashed/);
+  await t(page, 'crossing', 6);   // a route drawn straight over where the bridge stood
+  await t(page, 'run', 60);
+  assert.equal(await t(page, 'across'), 6, 'soldiers on it go round by another crossing');
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test('a smashed bridge plays out the same in two copies', async () => {
+  const pages = await Promise.all([{ width: 1200, height: 800 }, { width: 390, height: 844, isMobile: true, hasTouch: true }].map(v => openGame(v, RANDOM + '&week=600')));
+  const [a, b] = await Promise.all(pages.map(page => page.evaluate((board, match) => {
+    __t.freeze(); __t.board(board); __t.match(match); __t.newMap('valley', 100); __t.start();
+    const st = __t.bridgeSiege(260, 4, true);
+    __t.run(45);
+    __t.crossing(6);
+    __t.run(15);
+    return { staged: !!st, bridges: [st && st.bridges, __t.bridgeCount()], parts: __t.snapshot().parts };
+  }, BOARD, MATCH)));
+  assert.ok(a.staged && a.bridges[1] === a.bridges[0] - 1, `the bridge was smashed (${a.bridges})`);
+  assert.deepEqual(a, b);
+  for (const page of pages) { assert.deepEqual(page.errors, []); await page.close(); }
+});
+
 test('volleys play out the same in two copies, as two players\' browsers must', async () => {
   const pages = await Promise.all([{ width: 1200, height: 800 }, { width: 390, height: 844, isMobile: true, hasTouch: true }].map(v => openGame(v, RANDOM)));
   const [a, b] = await Promise.all(pages.map(page => page.evaluate((board, match) => {

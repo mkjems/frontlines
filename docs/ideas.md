@@ -164,6 +164,20 @@ an enemy catapult that comes within 290 of one of its towns. `__t.siege`, `__t.e
 - Not done yet: wrecking by soldiers (only stones wreck a catapult), a 3D ghost when placing it, and team
   members that look different from spearmen.
 
+**Done (24 October 2026): step 2, breaking bridges** (`breakBridge`, `aimedAt`, `broken`). Dragging a catapult's
+route onto a bridge (not a ford or a pass) aims it there: the bridge is ringed, "Smash bridge" shows, and the
+catapult's reach is drawn round the bridge, where it will stop. Three stones (`BRIDGE_HP`) break it; each leaves a
+splintered hole in the deck, and Shift over the bridge says how many more it takes. When it breaks, everyone on
+the deck falls in (a catapult on it is wrecked), its timbers splash into the river, the stumps of its piers stay
+(drawn like the ruins on Broken Bridges), and the world is rebuilt without it. The tray's bridge can be built on
+the same spot again. The computer drops a plan that went over it. Route points left in the water are passed over,
+so armies on a route drawn over the old bridge go round by the nearest other crossing. Breaking your own side's
+bridge is a toast; the enemy breaking one (stage 5) raises an alert. `__t.bridgeSiege`, `__t.crossing`,
+`__t.across` and `__t.bridgeCount` help test it.
+- Changed on the way: a soldier on any crossing now heads straight over to the end on its target's side. Before,
+  one going to a point up- or downstream waded the wide ford slantwise, pressed against its edge, and was
+  slow to get over; a broken bridge sends more armies by the ford, so it showed.
+
 Order of work, each step worth having on its own:
 1. The catapult team: buying and placing it in a town, the team pushing it along its route, the high stone arc,
    hits on towns (defence and garrison), a wreck when it's destroyed, capture, Shift-hover text, rules sheet,
