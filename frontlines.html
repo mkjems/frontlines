@@ -553,7 +553,7 @@
         <li><span class="k">Volleys</span>: a company with 8 or more archers shoots together every 4 s, a rain of arrows on the thickest crowd of enemies, far beyond one archer's reach. Close-packed blocks suffer most; charging cavalry mostly outrun it.</li>
         <li><span class="k">Shield wall</span>: a company with 8 or more spearmen holds its ground. They fight two ranks deep, take 35% less in hand-to-hand fighting, and cavalry charging them get hurt. Arrows still break it.</li>
         <li><span class="k">Riding out</span>: a company with 6 or more riders rides out at enemy archers and cavalry attacking your troops nearby, wheels off to charge again, and comes back to its place.</li>
-        <li><span class="k">Catapult</span>: bought in the tray, built in a town with a team of 4 who push it, very slowly. Drag from it to send it; a route ending on an enemy town stops it in reach. Every 10 s it throws a stone up to 230 away: each hit knocks 30% off a town's strength (15% off a capital) and crushes soldiers, but only soldiers take towns. End its route on a bridge and 3 stones smash it, dropping anyone on it into the river. Enemies who reach it with its team gone capture it.</li>
+        <li><span class="k">Catapult</span>: bought in the tray, built in a town with a team of 4 who push it, very slowly, along that town's route; a route ending on an enemy town stops it in reach, and one ending on your own town hands it on to that town. It halts to shell enemy armies, and near the enemy waits for soldiers to go with it. Drag from it to send it its own way. Every 10 s it throws a stone up to 300 away: each hit knocks 30% off a town's strength (15% off a capital) and crushes soldiers, but only soldiers take towns. Drag it onto a bridge and 3 stones smash the bridge, dropping anyone on it into the river. Enemies who reach it with its team gone capture it.</li>
       </ul>
       <h3 style="margin-top:12px">Combat</h3><ul>
         <li>Each nearby ally adds 6% damage, up to +60%.</li>
@@ -1887,7 +1887,7 @@ import * as THREE from 'three';
     if (ranged) { if (inForest(e.x, e.y)) dmg *= 0.5; }
     else { const hu = hillLevel(u.x, u.y), he = hillLevel(e.x, e.y); if (hu > he) dmg *= 1.25; else if (hu < he) dmg *= 0.8; }
     if (ranged && tracers.length < 300) tracers.push({ x0: u.x, y0: u.y, x1: e.x, y1: e.y, t: 0.06, team: u.team });
-    e.hp -= dmg * defense(e); e.flash = 0.12;
+    e.hp -= dmg * defense(e) * (atSeat(e) ? CREW_GUARD : 1); e.flash = 0.12;
     if (!ranged && Math.random() < 0.5) FX.kick(e.x, e.y);
     strikes++;
     e.x += nx * kb; e.y += ny * kb; constrain(e);   // knocked back, but never into a river or a mountainside
@@ -2008,7 +2008,7 @@ import * as THREE from 'three';
       for (const a of v.arrows) {
         const e = nearestEnemy(a.x, a.y, v.team, VOLLEY_HIT, false);
         if (!e) continue;
-        e.hp -= K_MULT[1][e.kind] * (inForest(e.x, e.y) ? 0.5 : 1) * defense(e); e.flash = 0.12;
+        e.hp -= K_MULT[1][e.kind] * (inForest(e.x, e.y) ? 0.5 : 1) * defense(e) * (atSeat(e) ? CREW_GUARD : 1); e.flash = 0.12;
         if (e.hp <= 0) kill(e);
       }
     }
@@ -2016,8 +2016,14 @@ import * as THREE from 'three';
   }
 
   // Catapults: bought in the tray and built beside one of the side's towns, with a team of CREW men trained there
-  // to push it. Dragged from like a gathered army, it is pushed along its route at a crawl, slower with men
-  // missing, and stops once the enemy town its route ends on is in reach. Standing, and once set up, it throws a
+  // to push it. It follows its town's route, taking it again whenever the town gets a new one, so the soldiers
+  // marching that way guard it; a route ending on another of the side's towns hands it on to that town. Dragged
+  // from like a gathered army, it takes that route instead, until its town's route changes. It is pushed along at a
+  // crawl, slower with men missing, and stops while the enemy town its route ends on is in reach, going on again
+  // once the town has fallen. It also halts while an army (HALT_N or more enemies) is within CAT_HALT, so it shells
+  // it from behind its own side's line rather than rolling into the fight; and with enemies within CAT_SAFE it
+  // never crawls on alone: it waits while fewer than ESCORT of its side's soldiers (besides its team) are within
+  // ESCORT_R. Standing, and once set up, it throws a
   // stone every CAT_RELOAD seconds (slower with men missing) in a high arc, up to CAT_RANGE away but no closer
   // than CAT_MIN: at the town its route ends on, else at an enemy catapult, else at the nearest enemy town, else
   // at the thickest crowd of enemies. A stone that lands on a town knocks CAT_HOLD of its strength away (half that
@@ -2026,10 +2032,11 @@ import * as THREE from 'three';
   // A route ending on a bridge aims it at the bridge instead: BRIDGE_HP stones break it. Its deck falls into the
   // river with anyone on it, stumps of its piers are left standing, and armies find another way across.
   // Its team are soldiers of its side: they keep to their places round it and fight only enemies that come at
-  // them. Idle soldiers of its side close by (at home in a town, or gathered) fill places left empty; a catapult
+  // them, and in their places, sheltered by its frame, take CREW_GUARD of the damage. Soldiers of its side close by
+  // (at home in a town, gathered, or marching its way) fill places left empty; a catapult
   // left with no team is taken by enemies that reach it with none of its side near, and they become its team.
-  const CREW = 4, CAT_MAX = 2, CAT_SPEED = 0.35, CAT_RANGE = 230, CAT_MIN = 60, CAT_RELOAD = 10, CAT_SET = 2.5;
-  const CAT_HOLD = 0.3, CAT_STUN = 12, STONE_R = 14, STONE_DMG = 6, BRIDGE_HP = 3;
+  const CREW = 4, CAT_MAX = 2, CAT_SPEED = 0.35, CAT_RANGE = 300, CAT_MIN = 60, CAT_RELOAD = 10, CAT_SET = 2.5;
+  const CAT_HOLD = 0.3, CAT_STUN = 12, STONE_R = 14, STONE_DMG = 6, BRIDGE_HP = 3, CAT_HALT = 140, HALT_N = 4, CREW_GUARD = 0.5, ESCORT = 5, ESCORT_R = 150, CAT_SAFE = 300;
   // the team's places, as [forward, across] from its middle: two pushing at the back, two at the wheels
   const SEATS = [[-17, -5], [-17, 5], [-2, -11.5], [-2, 11.5]];
   let engines = [], stones = [], wrecks = [], impacts = [], broken = [], engSeq = 0, engT = 0, shots = 0, stoneHits = 0;
@@ -2042,6 +2049,8 @@ import * as THREE from 'three';
     if (r && r.bridge && bridges.includes(r.bridge)) return { ...bridgeMid(r.bridge), bridge: r.bridge };
     return null;
   }
+  // a member of a catapult's team in its place, sheltered by the frame
+  const atSeat = u => { if (!u.crew) return false; const p = seatOf(u.crew, u.seat); return (u.x - p.x) ** 2 + (u.y - p.y) ** 2 < 100; };
   function seatOf(e, i) { const [d, a] = SEATS[i]; return { x: e.x + e.hx * d - e.hy * a, y: e.y + e.hy * d + e.hx * a }; }
   function enlist(e, u) {
     const used = new Set(e.crew.map(c => c.seat));
@@ -2050,7 +2059,8 @@ import * as THREE from 'three';
   }
   // a new catapult at (x, y) facing (hx, hy), its team coming out to it from (cx, cy)
   function newEngine(team, x, y, hx, hy, cx, cy) {
-    const e = { id: engSeq++, team, x, y, hx, hy, route: null, ri: 0, arrived: true, crew: [], load: CAT_SET, set: 0, moving: false, shot: -99 };
+    const e = { id: engSeq++, team, x, y, hx, hy, home: null, townRoute: null, route: null, ri: 0, arrived: true, halt: false,
+      crew: [], load: CAT_SET, set: 0, moving: false, shot: -99 };
     engines.push(e);
     for (let i = 0; i < CREW; i++) {
       enlist(e, { x: cx + rand(-6, 6), y: cy + rand(-6, 6), vx: 0, vy: 0, team, kind: 0, hp: K_HP[0] + stats.hp[team] - 3, boost: 0,
@@ -2070,7 +2080,9 @@ import * as THREE from 'three';
       const c = cos(k * 0.45), s = sin(k * 0.45), dx = (fx * c - fy * s) / L, dy = (fx * s + fy * c) / L;
       if (standable(t.x + dx * r, t.y + dy * r, reg)) { hx = dx; hy = dy; break; }
     }
-    return newEngine(team, t.x + hx * r, t.y + hy * r, hx, hy, t.x, t.y);
+    const e = newEngine(team, t.x + hx * r, t.y + hy * r, hx, hy, t.x, t.y);
+    e.home = t;
+    return e;
   }
   function inReach(e, x, y) { const d = (x - e.x) ** 2 + (y - e.y) ** 2; return d <= CAT_RANGE * CAT_RANGE && d >= CAT_MIN * CAT_MIN; }
   function aimOf(e) {
@@ -2153,7 +2165,7 @@ import * as THREE from 'three';
       const foes = units.filter(u => u.team !== e.team && !u.dead && !u.crew && (u.x - e.x) ** 2 + (u.y - e.y) ** 2 < 30 * 30);
       if (foes.length && !countNear(e.team, e.x, e.y, 60)) {
         const was = e.team;
-        Object.assign(e, { team: 1 - e.team, route: null, arrived: true, load: Math.max(e.load, CAT_SET) });
+        Object.assign(e, { team: 1 - e.team, home: null, townRoute: null, route: null, arrived: true, load: Math.max(e.load, CAT_SET) });
         for (const u of foes.sort(by).slice(0, CREW)) enlist(e, u);
         for (let i = 0; i < 6; i++) puff(e.x + fxRand(-10, 10), e.y + fxRand(-10, 10), COL.team[e.team], fxRand(14, 24));
         if (e.team === me) toast('You captured an enemy catapult. Drag from it to turn it on them', 'good');
@@ -2163,7 +2175,7 @@ import * as THREE from 'three';
     }
     if (e.crew.length >= CREW) return;
     const idle = units.filter(u => u.team === e.team && !u.dead && !u.crew && !u.enemy && u.kind !== 2 &&
-      (gathered(u) || (!u.route && u.town && u.town.owner === u.team)) && (u.x - e.x) ** 2 + (u.y - e.y) ** 2 < 50 * 50);
+      (gathered(u) || (!u.route && u.town && u.town.owner === u.team) || (e.route && u.route === e.route)) && (u.x - e.x) ** 2 + (u.y - e.y) ** 2 < 50 * 50);
     for (const u of idle.sort(by).slice(0, CREW - e.crew.length)) enlist(e, u);
   }
   function stepEngines(dt) {
@@ -2175,18 +2187,26 @@ import * as THREE from 'three';
       // the men in their places, pushing (or loading)
       let at = 0;
       for (const u of e.crew) { const p = seatOf(e, u.seat); if (!u.enemy && (u.x - p.x) ** 2 + (u.y - p.y) ** 2 < 100) at++; }
-      const r = e.route;
+      // its town's new route
+      const h = e.home && e.home.owner === e.team ? e.home : null;
+      if (h && h.route && h.route !== e.townRoute) Object.assign(e, { townRoute: h.route, route: h.route, ri: closestIdx(h.route.pts, e.x, e.y), arrived: false, halt: false });
+      const r = e.route, tg = aimedAt(e), inReach = tg && (tg.x - e.x) ** 2 + (tg.y - e.y) ** 2 < (CAT_RANGE - 15) ** 2;
+      if (e.halt && !inReach) Object.assign(e, { arrived: false, halt: false });   // its target has fallen: on it goes
       let goal = null;
       if (r && !e.arrived) {
-        const tg = aimedAt(e);
-        if (tg && (tg.x - e.x) ** 2 + (tg.y - e.y) ** 2 < (CAT_RANGE - 15) ** 2) e.arrived = true;
-        else {
+        if (inReach) Object.assign(e, { arrived: true, halt: true });
+        else if (r.target && r.target.owner === e.team && (r.target.x - e.x) ** 2 + (r.target.y - e.y) ** 2 < 45 * 45) {
+          Object.assign(e, { arrived: true, home: r.target });   // at one of its side's towns: it follows that town's route now
+        } else {
           let p = r.pts[e.ri];
           while (e.ri < r.pts.length - 1 && ((p.x - e.x) ** 2 + (p.y - e.y) ** 2 < 100 || blockedAt(p.x, p.y))) p = r.pts[++e.ri];
           if (e.ri >= r.pts.length - 1 && (p.x - e.x) ** 2 + (p.y - e.y) ** 2 < (blockedAt(p.x, p.y) ? 3600 : 36)) e.arrived = true;
           else goal = p;
         }
       }
+      e.front = !!goal && countNear(1 - e.team, e.x, e.y, CAT_HALT) >= HALT_N;
+      e.alone = !!goal && !e.front && !!nearestEnemy(e.x, e.y, e.team, CAT_SAFE, false) && countNear(e.team, e.x, e.y, ESCORT_R) - e.crew.length < ESCORT;
+      if (e.front || e.alone) goal = null;   // enemies ahead: it stands and shells them; no escort: it waits for one
       e.moving = !!goal && at > 0;
       if (goal) {
         e.set = CAT_SET;   // it must be set up again wherever it stops
@@ -2348,7 +2368,7 @@ import * as THREE from 'three';
       s.cd = 0.6;
       tracers.push({ x0: s.x, y0: s.y, x1: e.x, y1: e.y, t: 0, team: s.team });
       Sound.arrow();
-      e.hp -= inForest(e.x, e.y) ? 0.75 : 1.5; e.flash = 0.12;
+      e.hp -= (inForest(e.x, e.y) ? 0.75 : 1.5) * (atSeat(e) ? CREW_GUARD : 1); e.flash = 0.12;
       if (e.hp <= 0) kill(e);
     }
     // A building changes hands when enemies crowd it and no defenders are near.
@@ -2483,10 +2503,10 @@ import * as THREE from 'three';
       for (const t of red) if ((t.x - u.x) ** 2 + (t.y - u.y) ** 2 < 170 * 170) threat.set(t, (threat.get(t) || 0) + 1);
     }
     aiSpend();
-    // an enemy catapult within reach of one of its towns: the nearest of its towns sends its soldiers at it
+    // an enemy catapult standing in reach of one of its towns: the nearest of its towns sends its soldiers at it
     const hunt = new Map();
     for (const e of engines) {
-      if (e.team !== aiFoe || !red.some(t => (t.x - e.x) ** 2 + (t.y - e.y) ** 2 < (CAT_RANGE + 60) ** 2)) continue;
+      if (e.team !== aiFoe || e.moving || !red.some(t => (t.x - e.x) ** 2 + (t.y - e.y) ** 2 < CAT_RANGE ** 2)) continue;
       let near = null, bd = Infinity;
       for (const t of red) { const d = (t.x - e.x) ** 2 + (t.y - e.y) ** 2; if (d < bd && !hunt.has(t)) { bd = d; near = t; } }
       if (near) hunt.set(near, { x: e.x, y: e.y });
@@ -2895,6 +2915,7 @@ import * as THREE from 'three';
         const r = t.route;
         let recalled = 0;
         if (o.recall) for (const u of units) if (u.route === r && !u.arrived && !u.dead) { u.route = null; recalled++; }
+        if (o.recall) for (const e of engines) if (e.route === r && !e.arrived) Object.assign(e, { route: null, arrived: true });   // stops where it is
         t.route = null;
         if (team === me) toast(recalled ? `${t.name} route cleared. ${recalled} soldiers head home` : `${t.name} route cleared`);
       }
@@ -2950,7 +2971,7 @@ import * as THREE from 'three';
       } else if (k === 'catapult') {
         const t = o.town ? townNamed(o.town) : townAt(p.x, p.y, 30, team);
         made = at = buildEngine(t, team);
-        if (team === me) toast(`A catapult for ${t.name}: its team is coming out to push it. Drag from it to send it`, 'good');
+        if (team === me) toast(`A catapult for ${t.name}: it follows ${t.name}'s route, and stops to bombard the enemy town at its end`, 'good');
       } else if (k === 'farm') {
         let near = o.town ? townNamed(o.town) : null, bd = Infinity;
         if (!near) for (const t of towns) if (t.owner === team) { const d = hypot(t.x - p.x, t.y - p.y); if (d < bd) { bd = d; near = t; } }
@@ -3457,9 +3478,10 @@ import * as THREE from 'three';
     const e = engines.find(o => (o.x - x) ** 2 + (o.y - y) ** 2 < 16 * 16);
     if (e) {
       const n = e.crew.length, lines = [n ? `A team of ${n} of ${CREW} to push and load it.` : 'No team: idle soldiers of its side that come near take it up. Enemies that reach it first capture it.'];
-      lines.push(e.moving ? 'On the move, slowly.' : e.route && !e.arrived ? 'Stopped: it needs its team to push it.' : e.set > 0 ? 'Setting up.' : e.load > 0 ? `Reloading: ready in ${Math.ceil(e.load * CREW / Math.max(1, n))}s.` : 'Loaded.');
+      lines.push(e.moving ? 'On the move, slowly.' : e.front ? 'Halted: enemies ahead.' : e.alone ? 'Waiting for soldiers to go with it.' : e.route && !e.arrived ? 'Stopped: it needs its team to push it.' : e.set > 0 ? 'Setting up.' : e.load > 0 ? `Reloading: ready in ${Math.ceil(e.load * CREW / Math.max(1, n))}s.` : 'Loaded.');
       lines.push(`Throws a stone up to ${CAT_RANGE} away, no closer than ${CAT_MIN}, every ${CAT_RELOAD} s. A hit knocks ${Math.round(CAT_HOLD * 100)}% off a town's strength (half that off a capital, behind its walls) and stops it recovering for a while, but only soldiers can take it. The stone crushes soldiers under it.`);
-      if (e.team === me) lines.push(`Drag from it to send it. End the route on an enemy town and it stops in reach and bombards it; end it on a bridge and ${BRIDGE_HP} stones smash the bridge.`);
+      if (e.home && e.home.owner === e.team) lines.push(`Follows ${e.home.name}'s route, guarded by the soldiers marching it. It stops to bombard the enemy town the route ends on.`);
+      if (e.team === me) lines.push(`Drag from it to send it its own way, for instance onto a bridge: ${BRIDGE_HP} stones smash it.`);
       return { title: 'Catapult', own: OWN(e.team), lines };
     }
     const t = townAt(x, y, 30);
@@ -3534,7 +3556,7 @@ import * as THREE from 'three';
     catapult: `Place it on one of your towns. At most ${CAT_MAX} at a time.`,
     tower: 'Place it on your side of the river or near your towns.' };
   // tray items that aren't among the weekly rewards
-  const ITEM_DESC = { catapult: `A siege engine pushed slowly by a team of ${CREW}. Every ${CAT_RELOAD} s it throws a stone up to ${CAT_RANGE} away that knocks ${Math.round(CAT_HOLD * 100)}% off a town's strength and crushes soldiers. End its route on a bridge and ${BRIDGE_HP} stones smash it. Guard its team: enemies take a catapult left without one.` };
+  const ITEM_DESC = { catapult: `A siege engine pushed slowly by a team of ${CREW}, following its town's route. Every ${CAT_RELOAD} s it throws a stone up to ${CAT_RANGE} away that knocks ${Math.round(CAT_HOLD * 100)}% off a town's strength and crushes soldiers. Drag from it onto a bridge and ${BRIDGE_HP} stones smash the bridge. Guard its team: enemies take a catapult left without one.` };
   const HUD_INFO = {
     week: () => {
       const lines = [`A week lasts ${WEEK} seconds. This one ends in ${Math.ceil(WEEK - weekT)}s.`];
@@ -3627,7 +3649,7 @@ import * as THREE from 'three';
     { id: 'ford', when: () => units.some(u => onFord(u.x, u.y)), text: 'Troops are wading the ford. It is slow, but it gets around the bridges, so watch it.' },
     { id: 'clash', when: () => chargeCd[me] === 0 && clashLevel > 6, text: 'A big fight! Press Charge and click on it to send your soldiers in at a sprint.' },
     { id: 'lost', when: () => tally.fallen > 0, text: 'A lost town stops training for you and its farms pay the enemy. Take it back to restore your income.' },
-    { id: 'catapult', when: () => engines.some(e => e.team === me && !e.route), text: 'Drag from your catapult to an enemy town: it stops when the town is in reach and bombards it. Keep its team safe, or the enemy takes it.' },
+    { id: 'catapult', when: () => engines.some(e => e.team === me), text: 'Your catapult follows its town\'s route, behind the soldiers marching it, and stops to bombard the enemy town at the end. Drag from it to aim it at a bridge.' },
     { id: 'enemyBuild', when: () => structs.some(st => st.team !== me), text: 'The enemy has built defences. Hold Shift and hover over anything on the map to see what it does.' },
   ];
   let coachSeen = {}, coachT = 4, coachHide = 0, tipsOff = false;
@@ -5518,13 +5540,14 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       walls: () => units.filter(inWall).length,   // spearmen standing in a shield wall
       gold: n => { gold[me] = n; refreshTray(true); },
       // the catapults: side, team, whether moving or arrived, the town their route ends on, where they stand
-      engines: () => engines.map(e => ({ team: e.team, crew: e.crew.length, moving: e.moving, arrived: e.arrived, target: e.route && e.route.target ? e.route.target.name : null, bridge: !!(e.route && e.route.bridge),
+      engines: () => engines.map(e => ({ team: e.team, crew: e.crew.length, moving: e.moving, arrived: e.arrived, target: e.route && e.route.target ? e.route.target.name : null, bridge: !!(e.route && e.route.bridge), home: e.home && e.home.name,
         x: e.x, y: e.y, at: toScreen(e.x, e.y, 0), shot: e.shot })),
       shots: () => ({ thrown: shots, hits: stoneHits }),   // stones thrown, and those that hit a town
       stones: () => stones.map(st => { const q = 1 - st.t / st.dur; return { q, ground: toScreen(lerp(st.x0, st.x, q), lerp(st.y0, st.y, q), 0) }; }),   // in the air
       strength: n => { const t = town(n); return { owner: t.owner, frac: t.hold / t.holdMax }; },
       // a blue catapult and its team dist from a red town (the nearest to the middle of the map), on open ground,
-      // sent at it; the rest of the board cleared. Without ai the computer does nothing. Returns the town's name.
+      // sent at it, with an escort standing beside where it starts; the rest of the board cleared. Without ai the
+      // computer does nothing. Returns the town's name.
       siege: (dist, ai) => {
         stage();
         const T = towns.filter(t => !t.capital).sort((a, b) => hypot(a.x - W / 2, a.y - H / 2) - hypot(b.x - W / 2, b.y - H / 2))[0];
@@ -5533,9 +5556,11 @@ vec3 noised(vec2 p) {   // value noise, and its slope
           const a = k * 0.4, x = T.x + cos(a) * dist, y = T.y + sin(a) * dist, reg = regionOf(T.x, T.y);
           let ok = true;
           for (let f = 0; f <= 1.0001 && ok; f += 0.05) ok = standable(lerp(T.x, x, f), lerp(T.y, y, f), reg) || hypot(T.x - lerp(T.x, x, f), T.y - lerp(T.y, y, f)) < 40;
-          if (!ok || towns.some(o => o !== T && Math.hypot(o.x - x, o.y - y) < 120)) continue;
+          const esc = { x: x - (T.y - y) / dist * 30, y: y + (T.x - x) / dist * 30 };
+          if (!ok || !standable(esc.x, esc.y, reg) || towns.some(o => o !== T && Math.hypot(o.x - x, o.y - y) < 120)) continue;
           const e = newEngine(0, x, y, (T.x - x) / dist, (T.y - y) / dist, x, y);
           for (const u of e.crew) { const q = seatOf(e, u.seat); u.x = q.x; u.y = q.y; }
+          side(0, [0], ESCORT + 2, esc, esc);   // its escort, standing where it starts
           carryOut(0, { type: 'engine', id: e.id, pts: [{ x, y }, { x: T.x, y: T.y }], target: T.name, len: dist });
           if (!ai) aiT = 1e9;
           staged = { x, y };
@@ -5573,6 +5598,8 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       // of blue's soldiers not at a catapult, how many are on the far side of that bridge's river
       across: () => units.filter(u => !u.dead && u.team === 0 && !u.crew && sideOfLine(staged.line, u.x, u.y) !== staged.s0).length,
       bridgeCount: () => bridges.length,
+      send: (from, to) => carryOut(me, { type: 'route', town: from, target: to }),   // a town's route to another, as the computer draws them
+      buildAt: (kind, name) => { const T = town(name); return !!carryOut(me, { type: 'build', kind, x: T.x, y: T.y, town: name }, true); },
       // the first catapult's team are all killed; company() then places armies relative to where it stands
       crewless: () => { const e = engines[0]; for (const u of e.crew) kill(u); staged = { x: e.x, y: e.y }; },
       wheeling: () => units.filter(u => !u.dead && u.wheel > 0).length,   // riders wheeling away after a charge

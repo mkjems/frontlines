@@ -178,6 +178,23 @@ bridge is a toast; the enemy breaking one (stage 5) raises an alert. `__t.bridge
   one going to a point up- or downstream waded the wide ford slantwise, pressed against its edge, and was
   slow to get over; a broken bridge sends more armies by the ford, so it showed.
 
+**Changed (24 October 2026): the catapult follows its town's route.** Playing showed what wins games: gold,
+troops and a steady chain of routes to the front, and watchtowers in the right places. A catapult that needed its
+own drags and its own guard lost to one more route. Now it takes its town's route whenever the town gets a new one
+(`e.home`, `e.townRoute`), guarded by the soldiers marching it, and a route ending on another of your towns hands
+it on to that town, so it relays along a chain. Dragging from it still sends it its own way (onto a bridge, say)
+until its town's route changes. Soldiers marching its route refill its team. It also halts while 4 or more enemies
+(`HALT_N`) are within 140 and shells them, waits for 5 of its own soldiers within 150 (`ESCORT`) while any enemy is
+within 300, and its team take half damage in their places (`CREW_GUARD`). Its reach went from 230 to 300, so it
+can shell a town across a river from its own bank. The computer hunts a catapult only once it stands in reach of
+one of its towns.
+- Learned, from scripted games on Easy (three blue towns streaming at one enemy town, six maps): the catapult
+  is lost when the computer's first big attack breaks the front, about 40–50 s in, whatever protects it.
+  Waiting for an escort everywhere, even at home, kept it alive longer (62–81 s, 19 hits on towns against 5),
+  but only because it reached the front after that attack, and it stalled at home behind a single town's thin
+  stream. The scripted blue side loses its front in every game, so these games say little about a real
+  player's; worth judging in real play.
+
 Order of work, each step worth having on its own:
 1. The catapult team: buying and placing it in a town, the team pushing it along its route, the high stone arc,
    hits on towns (defence and garrison), a wreck when it's destroyed, capture, Shift-hover text, rules sheet,

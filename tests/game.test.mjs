@@ -397,7 +397,7 @@ test('6 or more riders in a company ride out at archers and cavalry attacking th
   await page.close();
 });
 
-test('a catapult: bought in the tray, built beside a town with its team, sent by dragging from it, pushed slowly', async () => {
+test('a catapult: bought in the tray, built beside a town with its team, pushed slowly along the town\'s route and handed on along a chain of towns', async () => {
   const page = await openGame();
   await t(page, 'start');
   await page.keyboard.press('Space');
@@ -413,18 +413,25 @@ test('a catapult: bought in the tray, built beside a town with its team, sent by
 
   await page.mouse.move(cat.at.x, cat.at.y);
   await page.keyboard.down('Shift');
-  assert.match(await page.$eval('#inspect', e => e.hidden ? '' : e.textContent), /Catapult.*team of 4 of 4.*230 away/, 'Shift over it tells what it does');
+  assert.match(await page.$eval('#inspect', e => e.hidden ? '' : e.textContent), /Catapult.*team of 4 of 4.*300 away/, 'Shift over it tells what it does');
   await page.keyboard.up('Shift');
 
-  await dragTo(page, cat.at, await t(page, 'pos', 'Oakhollow'));
-  await page.mouse.up();
-  await sleep(100);
-  assert.equal((await t(page, 'engines'))[0].target, 'Oakhollow', 'a route dragged from it onto a town aims it at the town');
+  await t(page, 'capture', 'Millbrook', 0);   // a chain: Brindle to Millbrook, Millbrook on to Oakhollow
+  for (const [a, b] of [['Brindle', 'Millbrook'], ['Millbrook', 'Oakhollow']]) {
+    await dragTo(page, await t(page, 'pos', a), await t(page, 'pos', b));
+    await page.mouse.up();
+    await sleep(100);
+  }
+  await t(page, 'run', 0.1);
+  assert.equal((await t(page, 'engines'))[0].target, 'Millbrook', 'it follows its town\'s route');
   await t(page, 'run', 5);   // the team walks out to it first
   const before = (await t(page, 'engines'))[0];
   await t(page, 'run', 3);
   const after = (await t(page, 'engines'))[0], moved = Math.hypot(after.x - before.x, after.y - before.y);
   assert.ok(moved > 10 && moved < 3 * 34 * 0.35 * 1.4 + 1, `its team pushes it, at a crawl (${moved.toFixed(1)} in 3 s)`);
+  await t(page, 'run', 25);
+  const relayed = (await t(page, 'engines'))[0];
+  assert.ok(relayed.home === 'Millbrook' && relayed.target === 'Oakhollow', `at Millbrook it is handed on, and follows Millbrook's route (${relayed.home}, ${relayed.target})`);
 
   for (const town of ['Coldwater', 'Ashford']) {   // two at a time at most
     await page.click('#tray-catapult');
@@ -443,11 +450,11 @@ test('a catapult stops in reach of the town it is sent at and throws it down in 
   const page = await openGame(undefined, new URL('../site/index.html?test&land=open&map=100', import.meta.url).href);
   await t(page, 'start');
   await page.keyboard.press('Space');
-  const name = await t(page, 'siege', 320, false);
+  const name = await t(page, 'siege', 380, false);
   assert.ok(name, 'open ground for the siege');
   await t(page, 'run', 4);
   assert.ok((await t(page, 'engines'))[0].moving, 'its team pushes it towards the town');
-  await t(page, 'run', 36);
+  await t(page, 'run', 40);
   const [cat] = await t(page, 'engines'), shots = await t(page, 'shots'), town = await t(page, 'strength', name);
   assert.ok(cat.arrived && !cat.moving, 'it stops once the town is in reach');
   assert.ok(shots.hits >= 3, `stones hit the town (${shots.hits} of ${shots.thrown})`);
@@ -467,18 +474,17 @@ test('a catapult stops in reach of the town it is sent at and throws it down in 
   await page.close();
 });
 
-test('the computer sends troops at a catapult shelling its town and takes it, the same in two copies', async () => {
+test('the computer sends troops at a catapult shelling its town, the same in two copies', async () => {
   const pages = await Promise.all([{ width: 1200, height: 800 }, { width: 390, height: 844, isMobile: true, hasTouch: true }].map(v => openGame(v, RANDOM)));
   const [a, b] = await Promise.all(pages.map(page => page.evaluate((board, match) => {
     __t.freeze(); __t.board(board); __t.match(match); __t.newMap('open', 100); __t.start();
-    const name = __t.siege(320, true);
+    const name = __t.siege(380, true);
     __t.run(10);
     const route = __t.route(name);
     __t.run(20);
-    return { name, route, team: __t.engines()[0].team, parts: __t.snapshot().parts };
+    return { name, route, parts: __t.snapshot().parts };
   }, BOARD, MATCH)));
-  assert.equal(a.route, 'point', 'the town it comes at sends its soldiers out at it');
-  assert.equal(a.team, 1, 'they kill its unguarded team and take it');
+  assert.equal(a.route, 'point', 'the town it stands in reach of sends its soldiers out at it');
   assert.deepEqual(a, b);
   for (const page of pages) { assert.deepEqual(page.errors, []); await page.close(); }
 });
