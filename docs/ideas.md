@@ -69,6 +69,21 @@ walls; `__t.standoff(…, attack)` marches blue on red.
   same spot) gave the spearmen one map in 6. Reach now applies only against spearmen and cavalry, and archers
   win every such meeting again.
 
+**Done (24 October 2026): cavalry ride out, and hit and run** (`rideOut`, `u.wheel`). Raids are still to do.
+- Riding out: a company with 6 or more riders (`RIDERS_MIN`) rides out at enemy archers and cavalry attacking
+  its side within 200 (`SALLY_R`), hand to hand or shooting, and comes back to its place when they're dead or
+  gone. It leaves spearmen alone. 28 archers attacking a wall of 24 spearmen with 12 riders standing 150 to the
+  side used to win every time with 18–23 left, the riders standing idle; now red wins 4 maps in 6.
+- Hit and run: riders of such a company, after charging other riders or anyone who stood the charge, wheel off
+  about 50° to one side for 1.4 s and charge again. `__t.riding()`, `__t.wheeling()` and `__t.company()` help test it.
+- Learned: hit and run as first described (wheel after every charge) did nothing you could see. A charge
+  kills outright almost always (triple damage beats a rider's 3 and an archer's 2 hit points), and cavalry
+  fights are over in about 1.5 s. Wheeling away from archers even lost riders the fight: it took them out of
+  the melee, where archers are weak, into arrow range. So riders wheel only after charging riders (a standing
+  cavalry company is then worth about 25% more against cavalry) or a target that survived, which will happen
+  more as the computer's soldiers gain hit points over the weeks. Riding out was added to give cavalry a role
+  you can see.
+
 1. **Archers: volleys.** About 8 or more archers standing together stop shooting one by one and fire
    volleys: every few seconds the whole group looses a swarm of arrows in a high arc at the densest enemy
    cluster in range.

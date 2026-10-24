@@ -373,6 +373,30 @@ test('8 or more spearmen in a company hold a shield wall: it beats an equal atta
   await page.close();
 });
 
+test('6 or more riders in a company ride out at archers and cavalry attacking their side, and wheel to charge again', async () => {
+  const OPEN = new URL('../site/index.html?test&land=open&map=100', import.meta.url).href, page = await openGame(undefined, OPEN);
+  // blue marches on red's spearmen; 12 red riders stand 150 to the side. Returns the most riders out at once,
+  // and the most wheeling at once, over 20 s.
+  const fight = async (kind, n, riders) => {
+    await page.goto(OPEN);
+    await page.waitForFunction(() => window.__t);
+    return page.evaluate((kind, n, riders) => {
+      __t.start(); __t.freeze();
+      if (kind === 2 && !riders) __t.standoff([2], n, [2], 20, 200, true);
+      else { __t.standoff([kind], n, [0], 24, 240, true); __t.company(1, [2], riders, 120, 150); }
+      let out = 0, wheel = 0;
+      for (let i = 0; i < 40; i++) { __t.run(0.5); out = Math.max(out, __t.riding()); wheel = Math.max(wheel, __t.wheeling()); }
+      return [out, wheel];
+    }, kind, n, riders);
+  };
+  assert.ok((await fight(1, 28, 12))[0] >= 8, 'the riders ride out at archers shooting the spearmen');
+  assert.equal((await fight(0, 33, 12))[0], 0, 'they leave attacking spearmen alone');
+  assert.equal((await fight(1, 28, 5))[0], 0, 'five riders are too few to ride out');
+  assert.ok((await fight(2, 20, 0))[1] > 0, 'riders fighting riders wheel off to charge again');
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
 test('volleys play out the same in two copies, as two players\' browsers must', async () => {
   const pages = await Promise.all([{ width: 1200, height: 800 }, { width: 390, height: 844, isMobile: true, hasTouch: true }].map(v => openGame(v, RANDOM)));
   const [a, b] = await Promise.all(pages.map(page => page.evaluate((board, match) => {

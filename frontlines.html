@@ -548,6 +548,7 @@
         <li><span class="k">Companies</span>: 6 or more gathered together form up under a banner, facing the enemy: spearmen in front, archers behind, cavalry on the wings. When any of them fights, they all join in.</li>
         <li><span class="k">Volleys</span>: a company with 8 or more archers shoots together every 4 s, a rain of arrows on the thickest crowd of enemies, far beyond one archer's reach. Close-packed blocks suffer most; charging cavalry mostly outrun it.</li>
         <li><span class="k">Shield wall</span>: a company with 8 or more spearmen holds its ground. They fight two ranks deep, take 35% less in hand-to-hand fighting, and cavalry charging them get hurt. Arrows still break it.</li>
+        <li><span class="k">Riding out</span>: a company with 6 or more riders rides out at enemy archers and cavalry attacking your troops nearby, wheels off to charge again, and comes back to its place.</li>
       </ul>
       <h3 style="margin-top:12px">Combat</h3><ul>
         <li>Each nearby ally adds 6% damage, up to +60%.</li>
@@ -1821,6 +1822,29 @@ import * as THREE from 'three';
         }
       }
     }
+    for (const co of companies) if (co.n[2] >= RIDERS_MIN) rideOut(co);
+  }
+  // A company with RIDERS_MIN or more riders rides out at enemy archers and cavalry attacking its side within
+  // SALLY_R, hand to hand or shooting, each rider not already fighting at the nearest of them, and comes back to its
+  // place when they're dead or gone. It leaves spearmen alone: their spears beat a charge.
+  const SALLY_R = 200;
+  function rideOut(co) {
+    const riders = co.units.filter(u => u.kind === 2 && !u.dead && !u.enemy && u.slot);
+    if (!riders.length) return;
+    const found = [], cx = co.x / CELL | 0, cy = co.y / CELL | 0, k = Math.ceil(SALLY_R / CELL);
+    for (let j = Math.max(0, cy - k); j <= Math.min(grows - 1, cy + k); j++)
+      for (let i = Math.max(0, cx - k); i <= Math.min(gcols - 1, cx + k); i++)
+        for (const o of grid[i + j * gcols]) {
+          if (o.team === co.team || o.dead || o.kind === 0 || (o.x - co.x) ** 2 + (o.y - co.y) ** 2 > SALLY_R * SALLY_R) continue;
+          const t = o.enemy;
+          if (t && !t.dead && t.team === co.team && (t.x - o.x) ** 2 + (t.y - o.y) ** 2 < 60 * 60) found.push(o);
+        }
+    if (!found.length) return;
+    for (const u of riders) {
+      let best = null, bd = Infinity;
+      for (const o of found) { const d = (o.x - u.x) ** 2 + (o.y - u.y) ** 2; if (d < bd) { bd = d; best = o; } }
+      u.enemy = best; u.sally = true;
+    }
   }
 
   function puff(x, y, color, size) {
@@ -1846,9 +1870,10 @@ import * as THREE from 'three';
     let kb = ranged ? 0 : 2.2;
     // a charge: cavalry's first blow after a pause, unless it meets spears; spearmen charge only on a Charge order
     const wall = !ranged && inWall(e);
+    let charged = false;
     if (!ranged && u.calm > 1.2 && u.kind !== 1) {
       const cm = u.kind === 2 ? (e.kind === 0 ? 1 : 3) : u.charge ? 2.2 : 1;
-      if (cm > 1) { dmg *= cm; kb = 5; puff(e.x, e.y, COL.mid[u.team], 12); FX.dust(e.x, e.y, 3); }
+      if (cm > 1) { dmg *= cm; kb = 5; charged = true; puff(e.x, e.y, COL.mid[u.team], 12); FX.dust(e.x, e.y, 3); }
       if (wall && u.kind === 2) {   // a charge onto the spears: the rider is hurt and thrown back
         u.hp -= WALL_SPIKE; u.flash = 0.12; u.x -= nx * 6; u.y -= ny * 6; constrain(u);
         FX.clash(e.x, e.y, true);
@@ -1864,6 +1889,8 @@ import * as THREE from 'three';
     if (!ranged && Math.random() < 0.5) FX.kick(e.x, e.y);
     strikes++;
     e.x += nx * kb; e.y += ny * kb; constrain(e);   // knocked back, but never into a river or a mountainside
+    // hit, then run: from other riders, and from anyone who stood the charge
+    if (charged && u.kind === 2 && !u.charge && (e.kind === 2 || e.hp > 0) && ofRiders(u)) u.wheel = WHEEL_T;
     if (e.hp <= 0) kill(e);
   }
 
@@ -1910,6 +1937,11 @@ import * as THREE from 'three';
   // hand-to-hand fighting and are hardly pushed back, and a rider whose charge hits them is hurt and thrown back.
   // Arrows hurt a wall as much as anyone.
   const WALL_MIN = 8, WALL_GUARD = 0.65, WALL_SPIKE = 1.5, WALL_REACH = 17;
+  // Hit and run: riders of a company with RIDERS_MIN or more, after charging other riders or anyone who stood the
+  // charge, wheel away from the fight for WHEEL_T seconds and charge again, so their charge keeps coming. Archers,
+  // whom a charge kills outright, they ride down where they stand; spearmen don't take charges at all.
+  const RIDERS_MIN = 6, WHEEL_T = 1.4, WHEEL_C = cos(0.9), WHEEL_S = sin(0.9);   // they veer off about 50°
+  const ofRiders = u => u.kind === 2 && u.co && u.co.n[2] >= RIDERS_MIN && u.slot && u.route && u.arrived && u.slot.rid === u.route.id;
   const ofWall = u => u.kind === 0 && !u.dead && u.co && u.co.n[0] >= WALL_MIN && u.slot && u.route && u.arrived && u.slot.rid === u.route.id;
   const inWall = u => ofWall(u) && (u.x - u.slot.x) ** 2 + (u.y - u.slot.y) ** 2 < 144;
   let volleyCount = 0;
@@ -2014,7 +2046,10 @@ import * as THREE from 'three';
           if (Math.random() < dt * 6) FX.kick(u.x, u.y);   // dust thrown up by the running feet
         }
       }
-      if (u.enemy && !u.charge && (u.enemy.dead || (u.enemy.x - u.x) ** 2 + (u.enemy.y - u.y) ** 2 > (aggro * 1.4) ** 2)) u.enemy = null;
+      // a rider riding out keeps after its target further, but not beyond reach of its company's ground
+      const keep = u.sally ? SALLY_R * 1.6 : aggro * 1.4;
+      if (u.enemy && !u.charge && (u.enemy.dead || (u.enemy.x - u.x) ** 2 + (u.enemy.y - u.y) ** 2 > keep * keep)) u.enemy = null;
+      if (!u.enemy) u.sally = false;
       if (!u.enemy && (u.id + frameNo) % 5 === 0) u.enemy = findEnemy(u, aggro);
       if (u.enemy && u.co) u.co.fight = frameNo;
 
@@ -2024,7 +2059,12 @@ import * as THREE from 'three';
       else if (inForest(u.x, u.y)) spd *= 0.65;
       else if (inMarsh(u.x, u.y)) spd *= MARSH_SPEED;
       else if (onFord(u.x, u.y)) spd *= 0.45;
-      if (u.enemy) {
+      if (u.wheel > 0) u.wheel -= dt;
+      if (u.enemy && u.wheel > 0) {   // wheeling away after a charge, peeling off to one side, to come again
+        const e = u.enemy, d = hypot(u.x - e.x, u.y - e.y) || 1, ax = (u.x - e.x) / d, ay = (u.y - e.y) / d, sd = u.id % 2 ? WHEEL_S : -WHEEL_S;
+        u.calm += dt; spd *= 1.3;
+        [tx, ty] = nav(u.x, u.y, u.x + (ax * WHEEL_C - ay * sd) * 60, u.y + (ax * sd + ay * WHEEL_C) * 60);
+      } else if (u.enemy) {
         const e = u.enemy, dx = e.x - u.x, dy = e.y - u.y, d = hypot(dx, dy) || 1, wall = inWall(u);
         if (u.kind === 1 && d >= 8.5 && d < 44 + 10 * hillLevel(u.x, u.y)) {   // archers stop and shoot
           spd *= 0.08;
@@ -3182,6 +3222,7 @@ import * as THREE from 'three';
       const parts = [0, 1, 2].filter(k => n[k]).map(k => `${n[k]} ${KIND[k].toLowerCase()} ${where[k][one >= 0 ? 1 : 0]}`);
       const lines = [`${total} soldiers in formation: ${parts.join(', ')}.`, 'It faces the nearest enemy, or else the way it marched.'];
       if (n[0] >= WALL_MIN) lines.push('Its spearmen hold a shield wall: they wait for the enemy in their places, take 35% less in hand-to-hand fighting, and hurt cavalry that charge them. Arrows still break it.');
+      if (n[2] >= RIDERS_MIN) lines.push(`Its riders ride out at enemy archers and cavalry attacking its side up to ${SALLY_R} away, wheel off to charge again, and come back to their places.`);
       if (n[1] >= VOLLEY_MIN) lines.push(`Its archers shoot a volley every ${VOLLEY_T} s at the thickest crowd of enemies up to ${VOLLEY_R} away.`);
       if (co.team === me) lines.push('Drag from it to send it on as one army.');
       return { title: one >= 0 ? `${['Spear', 'Archer', 'Cavalry'][one]} company` : 'Company', own: OWN(co.team), lines };
@@ -5013,6 +5054,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
         town: null, route, rid: route.id, ri: 0, arrived: at === goal, cd: 0, flash: 0, enemy: null, calm: 0, ox: rand(-16, 16), oy: rand(-24, 24), id: uid++, dead: false });
     };
     const left = team => units.filter(u => !u.dead && u.team === team).length;
+    let staged = null;
     window.__t = {
       start: () => { $('startBtn').click(); endTutorial(); },
       pos: (n, dx = 0, dy = 0) => { const t = town(n); return toScreen(t.x + dx, t.y + dy, 0); },
@@ -5050,13 +5092,18 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       standoff: (ka, na, kb, nb, gap, attack) => {
         const c = stage();
         if (!c) return null;
+        staged = c;
         const L = { x: c.x - gap / 2, y: c.y }, R = { x: c.x + gap / 2, y: c.y };
         side(0, ka, na, L, attack ? R : L); side(1, kb, nb, R, R);
         return toScreen(c.x, c.y, 0);
       },
+      // one more army for the last standoff, standing (dx, dy) from the point between the two
+      company: (team, kinds, n, dx, dy) => { const at = { x: staged.x + dx, y: staged.y + dy }; side(team, kinds, n, at, at); },
       left: () => [left(0), left(1)],
       volleys: () => volleyCount,
       walls: () => units.filter(inWall).length,   // spearmen standing in a shield wall
+      wheeling: () => units.filter(u => !u.dead && u.wheel > 0).length,   // riders wheeling away after a charge
+      riding: () => units.filter(u => !u.dead && u.sally).length,   // riders riding out from their company
       capture: (n, team) => { capture(town(n), team); return town(n).owner; },
       hitCapital: () => { const c = towns.find(t => t.capital && t.owner === 0), h = c.hold; enterTown(c, { team: 1, dead: false }); return { hold: c.hold, before: h, shake: FX.shakeAmount }; },
       shake: () => FX.shakeAmount,
