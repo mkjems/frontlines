@@ -4031,12 +4031,19 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       }
       addFlag(g, s.x, y0, s.y, 16, flag);
     } else {
-      put(g, GEO.cyl, mat(STONE2), s.x, y0, s.y, 6, 3, 6);
-      put(g, GEO.cyl, mat(STONE), s.x, y0 + 3, s.y, 4, 22, 4);
-      put(g, GEO.cyl, mat(col), s.x, y0 + 24, s.y, 6, 2.2, 6);
-      put(g, GEO.cone, mat(col), s.x, y0 + 26, s.y, 6.4, 8, 6.4);
-      addFlag(g, s.x, y0 + 33.5, s.y, 6, flag, 0.8);
+      const t = buildTower(col, flag);
+      t.position.set(s.x, y0, s.y); g.add(t);
+      g.userData.flags = t.userData.flags;
     }
+    return g;
+  }
+  function buildTower(col, flag) {
+    const g = new THREE.Group();
+    put(g, GEO.cyl, mat(STONE2), 0, 0, 0, 6, 3, 6);
+    put(g, GEO.cyl, mat(STONE), 0, 3, 0, 4, 22, 4);
+    put(g, GEO.cyl, mat(col), 0, 24, 0, 6, 2.2, 6);
+    put(g, GEO.cone, mat(col), 0, 26, 0, 6.4, 8, 6.4);
+    addFlag(g, 0, 33.5, 0, 6, flag, 0.8);
     return g;
   }
   function buildFieldFlag(f) {
@@ -4080,13 +4087,14 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     }
   }
 
-  // The barracks being placed: a hall that follows the pointer, and drops into the place it will stand once the
-  // pointer comes near one of the player's towns. Clicking anywhere near that town builds it there.
-  let hallGhost = null;
+  // The building being placed, in 3D under the pointer: red where it can't go. A watchtower rides just above the
+  // ground; a barracks hall drops into the place it will stand once the pointer comes near one of the player's
+  // towns, and clicking anywhere near that town builds it there.
+  let placeGhost = null;
   const ghostMats = new Map();
   function barracksTown(p) { return p ? townAt(p.x, p.y, 60, me) : null; }
-  function ghostHall(col) {
-    const g = buildHall(col);
+  function ghostModel(kind, team) {
+    const g = kind === 'barracks' ? buildHall(COL.team[team]) : buildTower(KEEPC[team], COL.team[team]);
     g.traverse(o => {
       if (!o.isMesh) return;
       if (!ghostMats.has(o.material)) ghostMats.set(o.material, Object.assign(o.material.clone(), { transparent: true, opacity: 0.82 }));
@@ -4094,22 +4102,28 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     });
     return g;
   }
-  function syncHallGhost(nowS) {
-    const dt = hallGhost ? Math.min(0.1, nowS - hallGhost.t) : 0;
-    if (armed !== 'barracks' || !ghost || state !== 'play') { if (hallGhost) { dyn.remove(hallGhost.g); hallGhost = null; } return; }
-    const t = barracksTown(ghost), col = t ? COL.team[me] : COL.team[1 - me];
-    if (!hallGhost || hallGhost.col !== col) {
-      const g = ghostHall(col);
-      if (hallGhost) { g.position.copy(hallGhost.g.position); g.rotation.y = hallGhost.g.rotation.y; dyn.remove(hallGhost.g); }
-      else g.position.set(ghost.x, groundAt(ghost.x, ghost.y) + 12, ghost.y);
-      dyn.add(g); hallGhost = { g, col, town: undefined, pop: 0, t: nowS };
+  function syncPlaceGhost(nowS) {
+    const dt = placeGhost ? Math.min(0.1, nowS - placeGhost.t) : 0, kind = armed;
+    if ((kind !== 'barracks' && kind !== 'tower') || !ghost || state !== 'play') { if (placeGhost) { dyn.remove(placeGhost.g); placeGhost = null; } return; }
+    const t = kind === 'barracks' ? barracksTown(ghost) : null;
+    const ok = kind === 'barracks' ? !!t : !placeCheck(me, kind, ghost), team = ok ? me : 1 - me;
+    if (!placeGhost || placeGhost.team !== team || placeGhost.kind !== kind) {
+      const g = ghostModel(kind, team), lift = kind === 'barracks' ? 12 : 4;
+      if (placeGhost && placeGhost.kind === kind) { g.position.copy(placeGhost.g.position); g.rotation.y = placeGhost.g.rotation.y; }
+      else g.position.set(ghost.x, groundAt(ghost.x, ghost.y) + lift, ghost.y);
+      if (placeGhost) dyn.remove(placeGhost.g);
+      dyn.add(g); placeGhost = { g, team, kind, town: undefined, pop: 0, t: nowS };
     }
-    const h = hallGhost, g = h.g;
-    if (t !== h.town) { h.town = t; if (t) { Sound.lock(); h.pop = 1; } }
-    let x = ghost.x, z = ghost.y, y = groundAt(x, z) + 12 + Math.sin(nowS * 3) * 1.5, ry = me ? Math.PI : 0;
-    if (t && t.barracks < 4) { const q = hallSpot(t, t.barracks, t.barracks + 1); x = q.x; z = q.z; y = groundAt(x, z); ry = q.ry; }
-    else if (t) { x = t.x; z = t.y; y = groundAt(x, z) + keepH(t) + 10; }
-    const k = 1 - Math.exp(-dt * 18);
+    const h = placeGhost, g = h.g;
+    let x = ghost.x, z = ghost.y, y, ry = me ? Math.PI : 0, speed = 18;
+    if (kind === 'tower') { y = groundAt(x, z) + 4 + Math.sin(nowS * 3) * 0.8; speed = 30; }
+    else {
+      if (t !== h.town) { h.town = t; if (t) { Sound.lock(); h.pop = 1; } }
+      y = groundAt(x, z) + 12 + Math.sin(nowS * 3) * 1.5;
+      if (t && t.barracks < 4) { const q = hallSpot(t, t.barracks, t.barracks + 1); x = q.x; z = q.z; y = groundAt(x, z); ry = q.ry; }
+      else if (t) { x = t.x; z = t.y; y = groundAt(x, z) + keepH(t) + 10; }
+    }
+    const k = 1 - Math.exp(-dt * speed);
     g.position.x += (x - g.position.x) * k; g.position.y += (y - g.position.y) * k; g.position.z += (z - g.position.z) * k;
     let d = ry - g.rotation.y; d -= Math.round(d / (Math.PI * 2)) * Math.PI * 2; g.rotation.y += d * k;
     h.pop = Math.max(0, h.pop - dt * 5); g.scale.setScalar(1 + 0.14 * Math.sin(h.pop * Math.PI));
@@ -4118,7 +4132,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     h.t = nowS;
   }
   function sync3D(nowS) {
-    syncHallGhost(nowS);
+    syncPlaceGhost(nowS);
     syncMap(townG, towns, t => { const [s, f] = houseCounts(t); return `${t.owner}|${t.barracks}#${s}|${f}`; }, t => buildTown(t, ...houseCounts(t)), nowS);
     syncMap(structG, structs, s => s.type + s.team, buildStruct, nowS);
     syncMap(fieldG, fields, f => f.town && f.town.owner >= 0 ? String(f.town.owner) : null, buildFieldFlag, nowS);
@@ -4590,7 +4604,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       ctx.globalAlpha = 0.55; ctx.lineWidth = 1.5; ctx.setLineDash([8, 8]); ctx.lineDashOffset = -nowS * 18;
       ctx.beginPath(); ctx.arc(ghost.x, ghost.y, R - 7, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); ctx.lineDashOffset = 0;
       ctx.globalAlpha = 1;
-      (armed === 'fort' ? drawFort : drawTower)(ghost.x, ghost.y, col, 0.6);
+      if (armed === 'fort') drawFort(ghost.x, ghost.y, col, 0.6);
     }
     else if (armed === 'farm') {
       ctx.globalAlpha = 0.6; rr(ctx, ghost.x - 20, ghost.y - 13, 40, 26, 3); ctx.fillStyle = ok ? '#4d4a3c' : COL.light[1 - me]; ctx.fill();
