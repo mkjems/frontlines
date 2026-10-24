@@ -69,7 +69,8 @@ walls; `__t.standoff(…, attack)` marches blue on red.
   same spot) gave the spearmen one map in 6. Reach now applies only against spearmen and cavalry, and archers
   win every such meeting again.
 
-**Done (24 October 2026): cavalry ride out, and hit and run** (`rideOut`, `u.wheel`). Raids are still to do.
+**Done (24 October 2026): cavalry ride out, and hit and run** (`rideOut`, `u.wheel`). Raids are still to do,
+after the catapult team (see below).
 - Riding out: a company with 6 or more riders (`RIDERS_MIN`) rides out at enemy archers and cavalry attacking
   its side within 200 (`SALLY_R`), hand to hand or shooting, and comes back to its place when they're dead or
   gone. It leaves spearmen alone. 28 archers attacking a wall of 24 spearmen with 12 riders standing 150 to the
@@ -111,6 +112,66 @@ Around all three:
 - Rules sheet, tips and browser tests need updating, and fights will need balance tuning.
 
 Each formation is roughly one focused session.
+
+## Next up: the catapult team
+
+Agreed on 24 October 2026, before cavalry raids (which wait until after it). A fourth kind of force: a heavy
+catapult pushed along by a team of men. It moves very slowly and can't defend itself, but its stones fly high
+and far and break what nothing else in the game can damage: town defences, city walls and bridges. It reloads
+slowly.
+
+How it fits the game:
+- **Bought, not trained.** It's bought in the tray (around 120 gold, 50% more for each repeat like the other
+  items) and placed in one of your towns. From there you draw its route like an army's, and its team pushes it
+  slowly along, the last stretch towards the target included. At most one or two alive per side.
+- **Aimed by its route.** A route ending on an enemy town makes it stop at its range and bombard the town; a
+  route ending on a bridge bombards the bridge. No new command: the player still never commands individual
+  soldiers. It has a minimum range, so it needs an escort (a shield wall in front is the natural one).
+- **Towns are not destroyed** (decided: not to begin with). A hit knocks a big piece off the town's defence
+  (its strength) and kills part of its garrison; about three hits leave it open for infantry to walk in. On a
+  capital the stones breach the city wall first. Taking towns stays the core of the game.
+- **Bridges are.** A broken bridge leaves ruined piers (as on Broken Bridges), soldiers on the deck fall into
+  the river, routes find another crossing, and the tray's bridge is the way to rebuild. Bridges are used by
+  both sides, so this is a choice, not a free win.
+- **Capture:** enemies that reach a catapult whose team is dead or gone take it over, and it turns their colour.
+  "Vulnerable" has a real price for one side and a prize for the other.
+- **"Time freezes" as a short slow motion,** not a full stop: about a second, the camera following the stone,
+  only for hits on a town, bridge or wall that are on screen. Ordinary shots fly normally. A full freeze on every
+  shot would interrupt route drawing, get old with several catapults, and can't work in two-player lockstep
+  unless both screens freeze together (so it stays visual only, or happens on both at once).
+- Counters: cavalry riding out at it, any attack on its team. The computer should both use catapults and hunt
+  the player's.
+
+**Done (24 October 2026): step 1, the catapult team** (`stepEngines`, `engines`, `stones`). Bought in the tray
+(120 gold, `CAT_MAX` 2 alive per side) and built beside one of your towns, facing the nearest enemy town, with a
+team of 4 (`CREW`) who walk out of the town to it. Its team are real soldiers (spearmen, `u.crew`) with places
+round it (`SEATS`): two push at the back, two at the wheels; they fight only enemies within 24 and never enter
+towns. Dragging from it draws its route (free, like a gathered army). It moves at 35% of a spearman's speed
+(`CAT_SPEED`), slower with men missing or out of place, and stops once the town its route ends on is within
+215. Standing, it sets up for 2.5 s, then throws every 10 s (`CAT_RELOAD`; slower with men missing, and it needs
+2 men) up to 230 (`CAT_RANGE`) but not under 60: at its target town, else an enemy catapult, else the nearest
+enemy town, else the thickest crowd of 4 or more. A stone flies 2–3 s in a high arc with a dust trail, a shadow
+and a ring where it will land; it crushes enemies within 14 (6 damage at the centre) and wrecks a catapult it
+lands on. A hit on a town takes 30% of its strength (15% off a capital) but never below 1, and stops it
+recovering for 12 s (`t.stun`), so three hits leave a town at 10%. Places left empty fill from idle soldiers of
+its side within 50 (at home or gathered, not cavalry); a catapult with no team is taken by enemies within 30
+when none of its side is within 60, and they become its team. The computer sends the nearest town's soldiers at
+an enemy catapult that comes within 290 of one of its towns. `__t.siege`, `__t.engines`, `__t.shots`,
+`__t.stones` and `__t.crewless` help test it.
+- Learned: the computer's answer is strong. A lone catapult sent at a town is overrun and taken within about
+  15 s, before its first stone, so it needs an army with it. Worth watching in real games whether that's
+  too harsh.
+- Not done yet: wrecking by soldiers (only stones wreck a catapult), a 3D ghost when placing it, and team
+  members that look different from spearmen.
+
+Order of work, each step worth having on its own:
+1. The catapult team: buying and placing it in a town, the team pushing it along its route, the high stone arc,
+   hits on towns (defence and garrison), a wreck when it's destroyed, capture, Shift-hover text, rules sheet,
+   tests.
+2. Bridges: breaking them, ruins, soldiers falling in, routes and the computer's plans finding another way.
+3. Breaching capital walls.
+4. The slow-motion camera and the sound of the shot and the hit.
+5. The computer buying catapults and hunting the player's.
 
 ## Sound
 

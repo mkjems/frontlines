@@ -126,8 +126,12 @@
   /* narrower screens: icons and prices only (the names show on hover), so the tray stays one row */
   @media (max-width: 1180px) { .tray .name { display: none; } }
   @media (max-width: 560px) {
-    .tray { gap: 5px; }
-    .tray button { padding: 8px 7px; gap: 4px; }
+    .tray { gap: 4px; }
+    .tray button { padding: 8px 5px; gap: 3px; }
+    .tray .price { gap: 2px; }
+  }
+  @media (max-width: 430px) {   /* phones: prices without the coin, so the tray stays one row */
+    .tray .price .coin { display: none; }
     .tray .sep { margin: 6px 0; }
     .tray #chargeBtn:not(:disabled) .cd { display: none; }
     .tray #chargeBtn .cd { min-width: 0; }
@@ -549,6 +553,7 @@
         <li><span class="k">Volleys</span>: a company with 8 or more archers shoots together every 4 s, a rain of arrows on the thickest crowd of enemies, far beyond one archer's reach. Close-packed blocks suffer most; charging cavalry mostly outrun it.</li>
         <li><span class="k">Shield wall</span>: a company with 8 or more spearmen holds its ground. They fight two ranks deep, take 35% less in hand-to-hand fighting, and cavalry charging them get hurt. Arrows still break it.</li>
         <li><span class="k">Riding out</span>: a company with 6 or more riders rides out at enemy archers and cavalry attacking your troops nearby, wheels off to charge again, and comes back to its place.</li>
+        <li><span class="k">Catapult</span>: bought in the tray, built in a town with a team of 4 who push it, very slowly. Drag from it to send it; a route ending on an enemy town stops it in reach. Every 10 s it throws a stone up to 230 away: each hit knocks 30% off a town's strength (15% off a capital) and crushes soldiers, but only soldiers take towns. Enemies who reach it with its team gone capture it.</li>
       </ul>
       <h3 style="margin-top:12px">Combat</h3><ul>
         <li>Each nearby ally adds 6% damage, up to +60%.</li>
@@ -564,7 +569,7 @@
       <div><h3>Economy</h3><ul>
         <li><span class="k">Farms</span> earn about 7 gold a week for whoever holds their town.</li>
         <li><span class="k">Gold mines</span> earn 27 a week for whoever holds the land around them.</li>
-        <li>Buy in the tray: farm 30, watchtower 40, barracks 70, bridge 80. Each repeat costs 50% more.</li>
+        <li>Buy in the tray: farm 30, watchtower 40, barracks 70, bridge 80, catapult 120. Each repeat costs 50% more.</li>
         <li>Route ink: 600 plus 300 per town you hold.</li>
         <li>Each week: one free reinforcement, and the enemy grows stronger.</li>
       </ul></div>
@@ -749,6 +754,18 @@ import * as THREE from 'three';
         }
       },
       crumble() { noise(0.9, { filter: 'lowpass', freq: 220, vol: 0.45 }); noise(0.5, { freq: 900, q: 2, vol: 0.12, delay: 0.1 }); },
+      // a catapult's throw: the arm cracks against its stop bar with a deep wooden thud, and the stone whooshes away
+      catapult() {
+        tone(95, 0.35, { vol: 0.28, glide: 48 }); noise(0.14, { filter: 'lowpass', freq: 500, vol: 0.5 });
+        noise(0.05, { freq: 1400, q: 3, vol: 0.2, delay: 0.02 });
+        noise(1.1, { freq: 650, q: 1.2, vol: 0.1, delay: 0.1 });
+      },
+      // a stone landing: a deep boom, then rubble rattling down
+      boom(far) {
+        const v = far ? 0.45 : 1;
+        tone(58, 0.9, { vol: 0.4 * v, glide: 28 }); noise(1.2, { filter: 'lowpass', freq: 200, vol: 0.65 * v });
+        for (let i = 0; i < 8; i++) noise(0.06, { freq: fxRand(500, 1500), q: 3, vol: 0.12 * v, delay: 0.1 + fxRand(0, 0.55) });
+      },
       // Called every frame: the ambient bed while things are calm, war drums that build with the fighting.
       ambient(level, playing) {
         if (!ac || !bedGain) return;
@@ -781,6 +798,7 @@ import * as THREE from 'three';
     farm: '<path d="M12 21V8"/><path d="M12 8c-3 0-4.5-2.5-4.5-5 2.5 0 4.5 1.5 4.5 5zM12 8c3 0 4.5-2.5 4.5-5-2.5 0-4.5 1.5-4.5 5zM12 14c-3 0-4.5-2.5-4.5-5 2.5 0 4.5 1.5 4.5 5zM12 14c3 0 4.5-2.5 4.5-5-2.5 0-4.5 1.5-4.5 5z"/>',
     ink: '<circle cx="12" cy="12" r="8.5"/><path d="M12 6.5l2 5.5-2 5.5-2-5.5z"/>',
     charge: '<path d="M5 6l6 6-6 6"/><path d="M12 6l6 6-6 6"/>',
+    catapult: '<circle cx="7" cy="18.5" r="2.5"/><circle cx="17" cy="18.5" r="2.5"/><path d="M3 15.5h18M9 15.5l3-5 3 5M12 13L19 4.5"/><circle cx="19.5" cy="3.5" r="1.5"/>',
     drill: '<ellipse cx="12" cy="9" rx="7" ry="2.8"/><path d="M5 9v7c0 1.6 3.1 2.8 7 2.8s7-1.2 7-2.8V9"/><path d="M6 3l5 4M18 3l-5 4"/>',
   };
   const icon = (k, size = 24) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k] || ''}</svg>`;
@@ -813,9 +831,9 @@ import * as THREE from 'three';
   let me = 0, state = 'intro', paused = false, speed = 1, time = 0, week = 1, weekT = 0, aiT = 6, ink = [0, 0];
   let uid = 0, routeSeq = 0, frameNo = 0, routesDrawn = 0;
   let stats, structs = [], tracers = [], inventory = [{}, {}], armed = null, ghost = null, plan = null, hintBase = '';
-  const ITEM = { farm: 'Farm', tower: 'Watchtower', barracks: 'Barracks', bridge: 'Bridge' };
+  const ITEM = { farm: 'Farm', tower: 'Watchtower', barracks: 'Barracks', bridge: 'Bridge', catapult: 'Catapult' };
   // Gold comes from farms around your towns and from gold mines on land you control.
-  const PRICE = { farm: 30, tower: 40, barracks: 70, bridge: 80 };
+  const PRICE = { farm: 30, tower: 40, barracks: 70, bridge: 80, catapult: 120 };
   const FARM_RATE = 0.15, MINE_RATE = 0.6;   // gold per second
   let gold = [0, 0], bought = [{}, {}], mines = [], coins = [], redBuys = 0;
   const priceOf = (team, k) => Math.round(PRICE[k] * 1.5 ** (bought[team][k] || 0));
@@ -1005,7 +1023,7 @@ import * as THREE from 'three';
   const at01 = (an, bn) => XY(blueSide() < 0 ? an * LA : (1 - an) * LA, bn * LB);   // an: across from blue's edge, bn: along
   function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = rng() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; }
   function makeTown(name, p, owner, capital, kind) {
-    const t = { name, x: p.x, y: p.y, owner, capital: !!capital, route: null, spawnT: rand(0.5, 2), n: 0, hit: 0, barracks: 0, kind };
+    const t = { name, x: p.x, y: p.y, owner, capital: !!capital, route: null, spawnT: rand(0.5, 2), n: 0, hit: 0, stun: 0, barracks: 0, kind };
     t.holdMax = owner < 0 ? 10 : baseHold(t); t.hold = t.holdMax;
     return t;
   }
@@ -1224,6 +1242,7 @@ import * as THREE from 'three';
     time = 0; week = 1; weekT = 0; aiT = 6; ink = [0, 0]; chargeCd = [0, 0]; closeMenu(); routesDrawn = 0; drawing = null;
     uid = 0; routeSeq = 0; frameNo = 0; structT = 0; orderQueue = []; orderLog = []; offers = [null, null];   // counters the battle depends on start afresh, so a game never depends on the one before
     alerts = []; tally = { trained: 0, lost: 0, killed: 0, captured: 0, fallen: 0 };
+    engines = []; stones = []; wrecks = []; impacts = []; engSeq = 0; engT = 0; shots = 0; stoneHits = 0;
     structs = []; tracers = []; inventory = [0, 1].map(t => ({ ...(t === match.ai ? {} : { tower: 1 }), ...(land.freeBridge ? { bridge: 1 } : {}) })); armed = null; plan = null;
     gold = [0, 0]; bought = [{}, {}]; coins = []; redBuys = 0;
     setHint(land.freeBridge ? 'No bridge crosses the river. Your bridge is in the tray: build it where you want to cross.'
@@ -1636,6 +1655,7 @@ import * as THREE from 'three';
   // Soldiers take their town's route when they leave and keep it, even if the town gets new orders later,
   // on both sides: an army on the march is turned only as a gathered group, or called home by clearing the route.
   function goalOf(u) {
+    if (u.crew) { const p = seatOf(u.crew, u.seat); return { x: p.x, y: p.y, hold: true }; }   // its place at its catapult
     const t = u.town;
     if (!u.route && t && t.owner === u.team && t.route) u.route = t.route;
     const r = u.route;
@@ -1881,7 +1901,7 @@ import * as THREE from 'three';
     const prev = t.owner;
     t.owner = team;
     t.holdMax = baseHold(t) * stats.holdMult[team];
-    t.hold = t.holdMax * 0.4;
+    t.hold = t.holdMax * 0.4; t.stun = 0;
     t.route = null; t.spawnT = 2;
     for (const u of units) if (u.town === t && u.team !== team) u.town = null;
     for (let i = 0; i < 10; i++) puff(t.x + fxRand(-14, 14), t.y + fxRand(-14, 14), COL.team[team], fxRand(16, 30));
@@ -1987,6 +2007,178 @@ import * as THREE from 'three';
     volleys = volleys.filter(v => v.t > 0);
   }
 
+  // Catapults: bought in the tray and built beside one of the side's towns, with a team of CREW men trained there
+  // to push it. Dragged from like a gathered army, it is pushed along its route at a crawl, slower with men
+  // missing, and stops once the enemy town its route ends on is in reach. Standing, and once set up, it throws a
+  // stone every CAT_RELOAD seconds (slower with men missing) in a high arc, up to CAT_RANGE away but no closer
+  // than CAT_MIN: at the town its route ends on, else at an enemy catapult, else at the nearest enemy town, else
+  // at the thickest crowd of enemies. A stone that lands on a town knocks CAT_HOLD of its strength away (half that
+  // off a capital, behind its walls) and stops it recovering for CAT_STUN seconds, but never takes it: soldiers
+  // must still march in. It crushes enemies within STONE_R and wrecks a catapult it lands on.
+  // Its team are soldiers of its side: they keep to their places round it and fight only enemies that come at
+  // them. Idle soldiers of its side close by (at home in a town, or gathered) fill places left empty; a catapult
+  // left with no team is taken by enemies that reach it with none of its side near, and they become its team.
+  const CREW = 4, CAT_MAX = 2, CAT_SPEED = 0.35, CAT_RANGE = 230, CAT_MIN = 60, CAT_RELOAD = 10, CAT_SET = 2.5;
+  const CAT_HOLD = 0.3, CAT_STUN = 12, STONE_R = 14, STONE_DMG = 6;
+  // the team's places, as [forward, across] from its middle: two pushing at the back, two at the wheels
+  const SEATS = [[-17, -5], [-17, 5], [-2, -11.5], [-2, 11.5]];
+  let engines = [], stones = [], wrecks = [], impacts = [], engSeq = 0, engT = 0, shots = 0, stoneHits = 0;
+  function seatOf(e, i) { const [d, a] = SEATS[i]; return { x: e.x + e.hx * d - e.hy * a, y: e.y + e.hy * d + e.hx * a }; }
+  function enlist(e, u) {
+    const used = new Set(e.crew.map(c => c.seat));
+    Object.assign(u, { crew: e, seat: [0, 1, 2, 3].find(i => !used.has(i)), route: null, town: null, enemy: null, charge: null, arrived: false });
+    e.crew.push(u);
+  }
+  // a new catapult at (x, y) facing (hx, hy), its team coming out to it from (cx, cy)
+  function newEngine(team, x, y, hx, hy, cx, cy) {
+    const e = { id: engSeq++, team, x, y, hx, hy, route: null, ri: 0, arrived: true, crew: [], load: CAT_SET, set: 0, moving: false, shot: -99 };
+    engines.push(e);
+    for (let i = 0; i < CREW; i++) {
+      enlist(e, { x: cx + rand(-6, 6), y: cy + rand(-6, 6), vx: 0, vy: 0, team, kind: 0, hp: K_HP[0] + stats.hp[team] - 3, boost: 0,
+        town: null, route: null, rid: -1, ri: 0, arrived: false, cd: 0, flash: 0, enemy: null, calm: 0, ox: 0, oy: 0, id: uid++, dead: false });
+      units.push(e.crew[i]);
+    }
+    if (team === me) tally.trained += CREW;
+    return e;
+  }
+  // built beside a town, on the side facing the nearest enemy town (or the middle of the map)
+  function buildEngine(t, team) {
+    let fx = W / 2 - t.x, fy = H / 2 - t.y, bd = Infinity;
+    for (const o of towns) if (o.owner === 1 - team) { const d = (o.x - t.x) ** 2 + (o.y - t.y) ** 2; if (d < bd) { bd = d; fx = o.x - t.x; fy = o.y - t.y; } }
+    const L = hypot(fx, fy) || 1, r = t.capital ? 82 : townRing(t) + 18, reg = regionOf(t.x, t.y);
+    let hx = fx / L, hy = fy / L;
+    for (const k of [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 7]) {
+      const c = cos(k * 0.45), s = sin(k * 0.45), dx = (fx * c - fy * s) / L, dy = (fx * s + fy * c) / L;
+      if (standable(t.x + dx * r, t.y + dy * r, reg)) { hx = dx; hy = dy; break; }
+    }
+    return newEngine(team, t.x + hx * r, t.y + hy * r, hx, hy, t.x, t.y);
+  }
+  function inReach(e, x, y) { const d = (x - e.x) ** 2 + (y - e.y) ** 2; return d <= CAT_RANGE * CAT_RANGE && d >= CAT_MIN * CAT_MIN; }
+  function aimOf(e) {
+    const tg = e.route && e.route.target;
+    if (tg && tg.owner !== e.team && inReach(e, tg.x, tg.y)) return { x: tg.x, y: tg.y, town: tg };
+    let best = null, bd = Infinity;
+    const nearest = (x, y, town) => { const d = (x - e.x) ** 2 + (y - e.y) ** 2; if (d < bd && inReach(e, x, y)) { bd = d; best = { x, y, town }; } };
+    for (const o of engines) if (o.team !== e.team) nearest(o.x, o.y, null);
+    if (best) return best;
+    for (const t of towns) if (t.owner === 1 - e.team) nearest(t.x, t.y, t);
+    if (best) return best;
+    const c = thickest(e.x, e.y, e.team, CAT_RANGE);
+    if (!c || c.n < 4) return null;
+    // like a volley, aimed half as far ahead as the crowd will go while the stone flies
+    const lead = (2 + hypot(c.x - e.x, c.y - e.y) / 250) * 0.5, x = c.x + c.vx * lead, y = c.y + c.vy * lead;
+    return inReach(e, x, y) ? { x, y, town: null } : null;
+  }
+  function throwStone(e, aim) {
+    const a = rand(0, Math.PI * 2), sc = 8 * Math.sqrt(rng()), x = aim.x + cos(a) * sc, y = aim.y + sin(a) * sc;
+    const L = hypot(x - e.x, y - e.y) || 1, dur = 2 + L / 250;
+    stones.push({ team: e.team, x0: e.x, y0: e.y, x, y, t: dur, dur, town: aim.town });
+    e.hx = (x - e.x) / L; e.hy = (y - e.y) / L;   // it's turned to throw
+    e.load = CAT_RELOAD; e.shot = time; shots++;
+  }
+  function wreck(e) {
+    engines = engines.filter(o => o !== e);
+    wrecks.push({ x: e.x, y: e.y, hx: e.hx, hy: e.hy, team: e.team, at: time });
+    for (const u of e.crew) {   // its team goes home to the nearest town of their side
+      let home = null, bd = Infinity;
+      for (const t of towns) if (t.owner === u.team) { const d = (t.x - u.x) ** 2 + (t.y - u.y) ** 2; if (d < bd) { bd = d; home = t; } }
+      u.crew = null; u.town = home;
+    }
+    if (e.team === me) toast('Your catapult was smashed', 'bad');
+  }
+  function landStone(s) {
+    let town = null;
+    const cx = s.x / CELL | 0, cy = s.y / CELL | 0;
+    for (let j = Math.max(0, cy - 1); j <= Math.min(grows - 1, cy + 1); j++)
+      for (let i = Math.max(0, cx - 1); i <= Math.min(gcols - 1, cx + 1); i++)
+        for (const o of grid[i + j * gcols]) {
+          if (o.team === s.team || o.dead) continue;
+          const dx = o.x - s.x, dy = o.y - s.y, d = hypot(dx, dy);
+          if (d >= STONE_R) continue;
+          o.hp -= STONE_DMG * (1 - 0.5 * d / STONE_R); o.flash = 0.12;
+          if (d > 0.5) { o.x += dx / d * 5; o.y += dy / d * 5; constrain(o); }
+          if (o.hp <= 0) kill(o);
+        }
+    for (const o of engines) if (o.team !== s.team && (o.x - s.x) ** 2 + (o.y - s.y) ** 2 < 100) wreck(o);
+    const t = s.town;
+    if (t && t.owner !== s.team && (t.x - s.x) ** 2 + (t.y - s.y) ** 2 < 30 * 30) {
+      t.hold = Math.max(Math.min(t.hold, 1), t.hold - t.holdMax * CAT_HOLD * (t.capital ? 0.5 : 1));
+      t.stun = CAT_STUN; t.hit = Math.max(t.hit, 0.6); stoneHits++; town = t;
+    }
+    impacts.push({ x: s.x, y: s.y, team: s.team, town, t: 0 });
+    scars.push({ x: s.x, y: s.y, born: time, team: s.team, r: 7 });
+  }
+  // Every half second: a catapult with no team is taken by enemies that reach it with none of its side near, and
+  // empty places are filled by idle soldiers of its side close by.
+  function muster(e) {
+    const by = (a, b) => (a.x - e.x) ** 2 + (a.y - e.y) ** 2 - (b.x - e.x) ** 2 - (b.y - e.y) ** 2 || a.id - b.id;
+    if (!e.crew.length) {
+      const foes = units.filter(u => u.team !== e.team && !u.dead && !u.crew && (u.x - e.x) ** 2 + (u.y - e.y) ** 2 < 30 * 30);
+      if (foes.length && !countNear(e.team, e.x, e.y, 60)) {
+        const was = e.team;
+        Object.assign(e, { team: 1 - e.team, route: null, arrived: true, load: Math.max(e.load, CAT_SET) });
+        for (const u of foes.sort(by).slice(0, CREW)) enlist(e, u);
+        for (let i = 0; i < 6; i++) puff(e.x + fxRand(-10, 10), e.y + fxRand(-10, 10), COL.team[e.team], fxRand(14, 24));
+        if (e.team === me) toast('You captured an enemy catapult. Drag from it to turn it on them', 'good');
+        else if (was === me) toast('Your catapult was captured', 'bad');
+        return;
+      }
+    }
+    if (e.crew.length >= CREW) return;
+    const idle = units.filter(u => u.team === e.team && !u.dead && !u.crew && !u.enemy && u.kind !== 2 &&
+      (gathered(u) || (!u.route && u.town && u.town.owner === u.team)) && (u.x - e.x) ** 2 + (u.y - e.y) ** 2 < 50 * 50);
+    for (const u of idle.sort(by).slice(0, CREW - e.crew.length)) enlist(e, u);
+  }
+  function stepEngines(dt) {
+    const mustering = (engT -= dt) <= 0;
+    if (mustering) engT = 0.5;
+    for (const e of engines) {
+      e.crew = e.crew.filter(u => !u.dead && u.crew === e);
+      if (mustering) muster(e);
+      // the men in their places, pushing (or loading)
+      let at = 0;
+      for (const u of e.crew) { const p = seatOf(e, u.seat); if (!u.enemy && (u.x - p.x) ** 2 + (u.y - p.y) ** 2 < 100) at++; }
+      const r = e.route;
+      let goal = null;
+      if (r && !e.arrived) {
+        const tg = r.target;
+        if (tg && tg.owner !== e.team && (tg.x - e.x) ** 2 + (tg.y - e.y) ** 2 < (CAT_RANGE - 15) ** 2) e.arrived = true;
+        else {
+          let p = r.pts[e.ri];
+          while (e.ri < r.pts.length - 1 && (p.x - e.x) ** 2 + (p.y - e.y) ** 2 < 100) p = r.pts[++e.ri];
+          if (e.ri >= r.pts.length - 1 && (p.x - e.x) ** 2 + (p.y - e.y) ** 2 < 36) e.arrived = true;
+          else goal = p;
+        }
+      }
+      e.moving = !!goal && at > 0;
+      if (goal) {
+        e.set = CAT_SET;   // it must be set up again wherever it stops
+        if (!at) continue;
+        let spd = SPEED * CAT_SPEED * at / CREW;
+        if (onRoad(e.x, e.y)) spd *= ROAD_SPEED;
+        else if (inForest(e.x, e.y)) spd *= 0.65;
+        else if (onFord(e.x, e.y)) spd *= 0.45;
+        const [tx, ty] = nav(e.x, e.y, goal.x, goal.y), dx = tx - e.x, dy = ty - e.y, d = hypot(dx, dy) || 1;
+        e.x += dx / d * spd * dt; e.y += dy / d * spd * dt;
+        constrain(e);
+        const k = Math.min(1, dt * 2);   // it turns slowly the way it's pushed
+        e.hx += (dx / d - e.hx) * k; e.hy += (dy / d - e.hy) * k;
+        const hl = hypot(e.hx, e.hy) || 1; e.hx /= hl; e.hy /= hl;
+        continue;
+      }
+      if (at < 2) continue;   // two men at least to set it up, load it and throw
+      if (e.set > 0) { e.set -= dt; continue; }
+      if (e.load > 0) { e.load -= dt * at / CREW; continue; }
+      const aim = aimOf(e);
+      if (aim) throwStone(e, aim); else e.load = 0.5;   // nothing in reach: look again soon
+    }
+    for (const s of stones) if ((s.t -= dt) <= 0) landStone(s);
+    stones = stones.filter(s => s.t > 0);
+    for (const i of impacts) i.t += dt;
+    impacts = impacts.filter(i => i.t < 1);
+    if (wrecks.length && time - wrecks[0].at > 40) wrecks = wrecks.filter(w => time - w.at < 40);
+  }
+
   function updateUnits(dt) {
     frameNo++;
     for (const t of towns) t.n = 0;
@@ -2009,7 +2201,8 @@ import * as THREE from 'three';
           }
 
       const g = goalOf(u);
-      const aggro = (g.hold ? 100 : 60) + (u.co && frameNo - u.co.fight < 80 ? Math.min(u.co.r, 120) : 0);
+      // a catapult's team fight only enemies that come at them
+      const aggro = u.crew ? 24 : (g.hold ? 100 : 60) + (u.co && frameNo - u.co.fight < 80 ? Math.min(u.co.r, 120) : 0);
       if (u.charge) {   // on a charge: run at the enemies around the spot it was aimed at, for a few seconds
         u.charge.t -= dt;
         if (u.charge.t <= 0) u.charge = null;
@@ -2073,7 +2266,7 @@ import * as THREE from 'three';
       u.x += u.vx * dt; u.y += u.vy * dt;
       constrain(u);
 
-      if (u.dead) continue;   // a rider that died charging a shield wall
+      if (u.dead || u.crew) continue;   // a rider that died charging a shield wall; a catapult's team stays with it
       for (const t of towns) {
         if (t.owner === u.team) continue;
         const ex = t.x - u.x, ey = t.y - u.y;
@@ -2090,8 +2283,8 @@ import * as THREE from 'three';
 
   function updateTowns(dt) {
     for (const t of towns) {
-      t.hit -= dt;
-      if (t.hit <= 0 && t.hold < t.holdMax) t.hold = Math.min(t.holdMax, t.hold + dt * (t.owner < 0 ? 0.3 : 1.2));
+      t.hit -= dt; t.stun -= dt;
+      if (t.hit <= 0 && t.stun <= 0 && t.hold < t.holdMax) t.hold = Math.min(t.holdMax, t.hold + dt * (t.owner < 0 ? 0.3 : 1.2));
       if (t.owner < 0) continue;
       t.spawnT -= dt * stats.train[t.owner];
       if (t.spawnT <= 0) {
@@ -2253,6 +2446,14 @@ import * as THREE from 'three';
       for (const t of red) if ((t.x - u.x) ** 2 + (t.y - u.y) ** 2 < 170 * 170) threat.set(t, (threat.get(t) || 0) + 1);
     }
     aiSpend();
+    // an enemy catapult within reach of one of its towns: the nearest of its towns sends its soldiers at it
+    const hunt = new Map();
+    for (const e of engines) {
+      if (e.team !== aiFoe || !red.some(t => (t.x - e.x) ** 2 + (t.y - e.y) ** 2 < (CAT_RANGE + 60) ** 2)) continue;
+      let near = null, bd = Infinity;
+      for (const t of red) { const d = (t.x - e.x) ** 2 + (t.y - e.y) ** 2; if (d < bd && !hunt.has(t)) { bd = d; near = t; } }
+      if (near) hunt.set(near, { x: e.x, y: e.y });
+    }
     // send one town's troops to camp on a gold mine on the enemy's side that it doesn't hold yet
     let minerTown = null, minerSpot = null;
     const wanted = mines.filter(m => m.owner !== aiTeam && sideOf(m.x, m.y) === redSide());
@@ -2273,6 +2474,7 @@ import * as THREE from 'three';
     const wants = [];
     for (const t of red) {
       if ((threat.get(t) || 0) > 4) { aiHold(t, true); continue; }
+      if (hunt.has(t)) { wants.push({ t, point: hunt.get(t) }); continue; }
       let helping = null;
       for (const [o, n] of threat) if (o !== t && n > 6) { helping = o; break; }
       if (helping && rng() < 0.5) { wants.push({ t, target: helping }); continue; }
@@ -2469,6 +2671,7 @@ import * as THREE from 'three';
       units: hash(units.flatMap(u => [u.team, u.kind, u.x, u.y, u.hp])),
       economy: hash([...gold, ...ink, ...chargeCd, redBuys, ...stats.train, ...stats.hp, ...inventory.flatMap(i => Object.entries(i).flat())]),
       buildings: hash(structs.flatMap(s => [s.type, s.team, s.x, s.y]).concat(bridges.map(b => b.b))),
+      catapults: hash(engines.flatMap(e => [e.team, e.x, e.y, e.load, e.crew.length]).concat(stones.flatMap(s => [s.x, s.y, s.t]))),
       enemyPlan: hash(plan ? [plan.phase, plan.target.name, plan.main ? plan.main.b : -1, plan.decoy ? plan.decoy.b : -1] : []),
     };
   }
@@ -2488,6 +2691,10 @@ import * as THREE from 'three';
       return null;
     }
     if (kind === 'barracks') return townAt(p.x, p.y, 30, team) ? null : 'Barracks go on one of your towns';
+    if (kind === 'catapult') {
+      if (!townAt(p.x, p.y, 30, team)) return 'Catapults are built in one of your towns';
+      return engines.filter(e => e.team === team).length >= CAT_MAX ? `You have ${CAT_MAX} catapults already` : null;
+    }
     if (kind === 'farm') {
       if (riverGap(p.x, p.y) < 24) return 'Too close to the water';
       if (!towns.some(t => t.owner === team && hypot(t.x - p.x, t.y - p.y) < 150)) return 'Farms go next to one of your towns';
@@ -2538,6 +2745,7 @@ import * as THREE from 'three';
     else if (armed) {
       el2.textContent = armed === 'bridge' ? 'Click on the river to build the bridge. Esc cancels.'
         : armed === 'barracks' ? 'Click one of your towns to add barracks. Esc cancels.'
+        : armed === 'catapult' ? 'Click one of your towns to build a catapult beside it, with a team of 4 to push it. Esc cancels.'
         : armed === 'farm' ? 'Click next to one of your towns to plant a farm. Esc cancels.'
         : `Click on your side of the river to place the ${ITEM[armed].toLowerCase()}. Esc cancels.`;
       el2.style.opacity = 1;
@@ -2591,6 +2799,7 @@ import * as THREE from 'three';
     updateUnits(dt);
     if (!running()) return;
     stepVolleys(dt);
+    stepEngines(dt);
     if (!running()) return;
     updateTowns(dt);
     updateStructs(dt);
@@ -2658,6 +2867,13 @@ import * as THREE from 'three';
       const ids = new Set(o.units), route = { id: ++routeSeq, pts: o.pts, target: o.target ? townNamed(o.target) : null, len: o.len };
       for (const u of units) if (ids.has(u.id) && u.team === team && gathered(u)) u.route = route;
     },
+    // a catapult sent on a drawn route, free like a gathered army; it stops in reach of a town the route ends on
+    engine(o, team) {
+      const e = engines.find(x => x.id === o.id);
+      if (!e || e.team !== team) return;
+      e.route = { id: ++routeSeq, pts: o.pts, target: o.target ? townNamed(o.target) : null, len: o.len };
+      e.ri = closestIdx(o.pts, e.x, e.y); e.arrived = false;
+    },
     // what a town trains
     train(o, team) { const t = townNamed(o.town); if (t && t.owner === team) t.kind = o.kind; },
     // everyone of the side within the circle sprints at the spot and hits harder
@@ -2665,7 +2881,7 @@ import * as THREE from 'three';
       if (chargeCd[team] > 0) return;
       const p = { x: o.x, y: o.y };
       let n = 0;
-      for (const u of units) if (u.team === team && !u.dead && (u.x - p.x) ** 2 + (u.y - p.y) ** 2 < 140 * 140) {
+      for (const u of units) if (u.team === team && !u.dead && !u.crew && (u.x - p.x) ** 2 + (u.y - p.y) ** 2 < 140 * 140) {
         u.boost = 4; u.calm = 5; u.charge = { x: p.x, y: p.y, t: 4 }; u.enemy = null; n++;   // see updateUnits
       }
       waves.push({ x: p.x, y: p.y, t: 0, color: COL.team[team] });
@@ -2674,7 +2890,7 @@ import * as THREE from 'three';
       chargeCd[team] = CHARGE_CD;
       if (team === me) toast(n ? `Charge! ${n} soldiers crash into the enemy` : 'No soldiers in range', n ? 'good' : '');
     },
-    // a bridge, barracks, farm or watchtower, paid for from the tray (or free: the computer's weekly one).
+    // a bridge, barracks, catapult, farm or watchtower, paid for from the tray (or free: the computer's weekly one).
     // Checked against the placing rules (a player's again, since a step may have passed since it was placed),
     // except the computer's free one. Returns what was built.
     build(o, team, check) {
@@ -2692,6 +2908,10 @@ import * as THREE from 'three';
         const t = o.town ? townNamed(o.town) : townAt(p.x, p.y, 30, team);
         t.barracks++;
         if (team === me) toast(`${t.name} now trains faster`, 'good'); else at = t;
+      } else if (k === 'catapult') {
+        const t = o.town ? townNamed(o.town) : townAt(p.x, p.y, 30, team);
+        made = at = buildEngine(t, team);
+        if (team === me) toast(`A catapult for ${t.name}: its team is coming out to push it. Drag from it to send it`, 'good');
       } else if (k === 'farm') {
         let near = o.town ? townNamed(o.town) : null, bd = Infinity;
         if (!near) for (const t of towns) if (t.owner === team) { const d = hypot(t.x - p.x, t.y - p.y); if (d < bd) { bd = d; near = t; } }
@@ -2905,7 +3125,8 @@ import * as THREE from 'three';
   }
 
   // ---------- input ----------
-  let drawing = null, hover = null, hoverGroup = null, pointerId = null;
+  let drawing = null, hover = null, hoverGroup = null, hoverEngine = null, pointerId = null;
+  const engineAt = (x, y, team) => engines.find(e => e.team === team && (e.x - x) ** 2 + (e.y - y) ** 2 < 18 * 18) || null;
   function toWorld(e) {
     return pointAt(e.clientX, e.clientY, true);
   }
@@ -3001,6 +3222,12 @@ import * as THREE from 'three';
     const pts = d.pts.slice();
     if (target) pts.push({ x: target.x, y: target.y });
     const route = { pts, target: target && target.name, len: d.len };
+    if (d.engine) {
+      order(me, { type: 'engine', id: d.engine.id, ...route });
+      Sound.commit();
+      toast(target && target.owner !== me ? `Catapult on the move: it stops when ${target.name} is in reach` : 'Catapult on the move');
+      return;
+    }
     if (!t) {
       const group = d.group.filter(u => !u.dead);
       order(me, { type: 'group', units: group.map(u => u.id), ...route });
@@ -3082,7 +3309,7 @@ import * as THREE from 'three';
     if (e.button === 1 || e.button === 2) { startPan(e); e.preventDefault(); return; }
     let p = toWorld(e);
     if (armed) {
-      if (armed === 'barracks' && barracksTown(p)) { const t = barracksTown(p); p = { x: t.x, y: t.y }; }
+      if ((armed === 'barracks' || armed === 'catapult') && barracksTown(p)) { const t = barracksTown(p); p = { x: t.x, y: t.y }; }
       const err = placeCheck(me, armed, p);
       if (err) toast(err, 'bad');
       else if (armed !== 'charge' && !(inventory[me][armed] > 0) && gold[me] < priceOf(me, armed)) toast(`Not enough gold: ${priceOf(me, armed)} needed`, 'bad');
@@ -3090,10 +3317,12 @@ import * as THREE from 'three';
       e.preventDefault();
       return;
     }
-    const t = townAt(p.x, p.y, 30, me);
-    const group = t ? null : groupAt(p.x, p.y);
-    if (!t && !group) { startPan(e); return; }
+    const engine = engineAt(p.x, p.y, me);
+    const t = engine ? null : townAt(p.x, p.y, 30, me);
+    const group = t || engine ? null : groupAt(p.x, p.y);
+    if (!t && !group && !engine) { startPan(e); return; }
     drawing = t ? { town: t, pts: [{ x: t.x, y: t.y }], len: 0, blocked: null, tip: null }
+      : engine ? { town: null, engine, pts: [{ x: engine.x, y: engine.y }], len: 0, blocked: null, tip: null }
       : { town: null, group, pts: [{ x: p.x, y: p.y }], len: 0, blocked: null, tip: null };
     pointerId = e.pointerId;
     cvs.setPointerCapture(e.pointerId);
@@ -3117,9 +3346,10 @@ import * as THREE from 'three';
     inspectAt = e.shiftKey && canInspect(lastPointer) ? lastPointer : null;
     showInspect();
     if (!drawing) {
-      hover = state === 'play' && !armed ? townAt(p.x, p.y, 30, me) : null;
-      hoverGroup = state === 'play' && !armed && !hover ? groupAt(p.x, p.y) : null;
-      cvs.style.cursor = hover || hoverGroup || armed ? 'pointer' : view.z > 1 ? 'grab' : 'default';
+      hoverEngine = state === 'play' && !armed ? engineAt(p.x, p.y, me) : null;
+      hover = state === 'play' && !armed && !hoverEngine ? townAt(p.x, p.y, 30, me) : null;
+      hoverGroup = state === 'play' && !armed && !hover && !hoverEngine ? groupAt(p.x, p.y) : null;
+      cvs.style.cursor = hover || hoverGroup || hoverEngine || armed ? 'pointer' : view.z > 1 ? 'grab' : 'default';
       return;
     }
     freehand = e.shiftKey;
@@ -3172,6 +3402,14 @@ import * as THREE from 'three';
     return Math.abs(lx) < f.w / 2 && Math.abs(ly) < f.h / 2;
   }
   function describe(x, y) {
+    const e = engines.find(o => (o.x - x) ** 2 + (o.y - y) ** 2 < 16 * 16);
+    if (e) {
+      const n = e.crew.length, lines = [n ? `A team of ${n} of ${CREW} to push and load it.` : 'No team: idle soldiers of its side that come near take it up. Enemies that reach it first capture it.'];
+      lines.push(e.moving ? 'On the move, slowly.' : e.route && !e.arrived ? 'Stopped: it needs its team to push it.' : e.set > 0 ? 'Setting up.' : e.load > 0 ? `Reloading: ready in ${Math.ceil(e.load * CREW / Math.max(1, n))}s.` : 'Loaded.');
+      lines.push(`Throws a stone up to ${CAT_RANGE} away, no closer than ${CAT_MIN}, every ${CAT_RELOAD} s. A hit knocks ${Math.round(CAT_HOLD * 100)}% off a town's strength (half that off a capital, behind its walls) and stops it recovering for a while, but only soldiers can take it. The stone crushes soldiers under it.`);
+      if (e.team === me) lines.push('Drag from it to send it. End the route on an enemy town and it stops in reach and bombards it.');
+      return { title: 'Catapult', own: OWN(e.team), lines };
+    }
     const t = townAt(x, y, 30);
     if (t) {
       // its strength first: how full the defence ring an attack must empty is, and how many of its side's
@@ -3238,7 +3476,10 @@ import * as THREE from 'three';
   // The panels, buttons and tray, by their data-inspect key: what each is, and how to get more of it.
   const plural = n => n === 1 ? '' : 's';
   const WHERE = { farm: 'Place it next to one of your towns.', barracks: 'Place it on one of your towns.', bridge: 'Place it on a river.',
+    catapult: `Place it on one of your towns. At most ${CAT_MAX} at a time.`,
     tower: 'Place it on your side of the river or near your towns.' };
+  // tray items that aren't among the weekly rewards
+  const ITEM_DESC = { catapult: `A siege engine pushed slowly by a team of ${CREW}. Every ${CAT_RELOAD} s it throws a stone up to ${CAT_RANGE} away that knocks ${Math.round(CAT_HOLD * 100)}% off a town's strength and crushes soldiers. Guard its team: enemies take a catapult left without one.` };
   const HUD_INFO = {
     week: () => {
       const lines = [`A week lasts ${WEEK} seconds. This one ends in ${Math.ceil(WEEK - weekT)}s.`];
@@ -3294,7 +3535,7 @@ import * as THREE from 'three';
   function describeHud(key) {
     if (HUD_INFO[key]) return HUD_INFO[key]();
     const up = UPGRADES.find(u => u.key === key), n = inventory[me][key] || 0;
-    return { title: ITEM[key], lines: [up.desc, WHERE[key],
+    return { title: ITEM[key], lines: [up ? up.desc : ITEM_DESC[key], WHERE[key],
       n ? `${n} ready to place, already paid for.` : `Costs ${priceOf(me, key)} gold. Each one you buy makes the next 50% dearer.`] };
   }
   let inspectKey = '';
@@ -3331,6 +3572,7 @@ import * as THREE from 'three';
     { id: 'ford', when: () => units.some(u => onFord(u.x, u.y)), text: 'Troops are wading the ford. It is slow, but it gets around the bridges, so watch it.' },
     { id: 'clash', when: () => chargeCd[me] === 0 && clashLevel > 6, text: 'A big fight! Press Charge and click on it to send your soldiers in at a sprint.' },
     { id: 'lost', when: () => tally.fallen > 0, text: 'A lost town stops training for you and its farms pay the enemy. Take it back to restore your income.' },
+    { id: 'catapult', when: () => engines.some(e => e.team === me && !e.route), text: 'Drag from your catapult to an enemy town: it stops when the town is in reach and bombards it. Keep its team safe, or the enemy takes it.' },
     { id: 'enemyBuild', when: () => structs.some(st => st.team !== me), text: 'The enemy has built defences. Hold Shift and hover over anything on the map to see what it does.' },
   ];
   let coachSeen = {}, coachT = 4, coachHide = 0, tipsOff = false;
@@ -3635,6 +3877,9 @@ import * as THREE from 'three';
     GEO.trunk = new THREE.CylinderGeometry(0.6, 0.9, 1, 6).translate(0, 0.5, 0);
     GEO.rock = new THREE.DodecahedronGeometry(1, 0);
     GEO.nugget = new THREE.OctahedronGeometry(1, 0);
+    GEO.wheel = new THREE.CylinderGeometry(1, 1, 1, 12).rotateZ(Math.PI / 2);   // centred, turning about x
+    GEO.arm = new THREE.BoxGeometry(1, 1, 1).translate(0, 0, -0.5);             // reaching back from its axle
+    GEO.stone = new THREE.IcosahedronGeometry(1, 0);
     GEO.unit = [
       new THREE.ConeGeometry(4.2, 8.6, 3).translate(0, 4.3, 0),           // spearmen: a triangle from above
       new THREE.CapsuleGeometry(3, 3, 3, 10).translate(0, 4.5, 0),         // archers: a circle
@@ -4068,6 +4313,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       kick: { col: '#c2b08a', life: [0.8, 1.4], size: [5, 8], grow: 9, rise: [4, 9], spread: 6, a: 0.45, drag: 2.5, grav: 0 },
       smoke: { col: '#5f625c', life: [3.5, 5], size: [8, 12], grow: 9, rise: [10, 16], spread: 3, a: 0.55, drag: 0.4, grav: 0, wind: 6 },
       spark: { col: null, life: [1.1, 1.8], size: [3.6, 5.6], grow: -1.2, rise: [34, 60], spread: 42, a: 1, drag: 1.1, grav: -55 },
+      trail: { col: '#a9a69c', life: [0.7, 1.1], size: [4, 6], grow: 4, rise: [0, 1], spread: 0.6, a: 0.45, drag: 1, grav: 0 },
       glint: { col: '#ffd447', life: [0.5, 0.9], size: [1.8, 2.8], grow: -1.5, rise: [8, 14], spread: 5, a: 1, drag: 2, grav: -12 },
     };
     function init() {
@@ -4146,6 +4392,27 @@ vec3 noised(vec2 p) {   // value noise, and its slope
               L, arc: 0.45 + 22 / Math.max(L, 30), t: -late, dur: v.t - late, stick: fxRand(2, 3.5), s: 1.6, team: v.team });
           }
         }
+        // a catapult's throw: a puff of dust at its feet; a stone landing: a burst of dust, rubble and smoke, and
+        // a town it hits smoulders. Heard if it's yours or on screen.
+        const onScreen = (x, y) => { const p = toScreen(x, y, 0); return p.x > 0 && p.y > 0 && p.x < innerWidth && p.y < innerHeight; };
+        for (const s of stones) {
+          if (seen.has(s)) continue;
+          seen.add(s);
+          emit('dust', s.x0, s.y0, surfaceAt(s.x0, s.y0), 5);
+          if (s.team === me || onScreen(s.x0, s.y0)) Sound.catapult();
+        }
+        if (dt > 0) for (const s of stones) { const p = stoneAt(s); emit('trail', p.x, p.z, p.h, 1); }   // dust streaming off the stone
+        for (const i of impacts) {
+          if (seen.has(i)) continue;
+          seen.add(i);
+          // on a town it bursts on the keep's roof, where it can be seen
+          const near = onScreen(i.x, i.y), g = surfaceAt(i.x, i.y) + (i.town ? keepH(i.town) : 0);
+          emit('dust', i.x, i.y, g, 28); emit('spark', i.x, i.y, g + 2, 22, '#8d7d64'); emit('smoke', i.x, i.y, g + 3, 6);
+          if (i.town) { i.town.smokeUntil = Math.max(i.town.smokeUntil || 0, nowS + 8); emit('spark', i.x, i.y, g + 4, 18, '#b4b3ab'); }
+          if (near || i.team === me) Sound.boom(!near);
+          if (near) this.shake(i.town ? 0.35 : 0.2);
+        }
+        for (const w of wrecks) if (time - w.at < 15 && Math.random() < dt * 5) emit('smoke', w.x, w.y, surfaceAt(w.x, w.y) + 3, 1);
         // smouldering towns and cavalry dust
         for (const t of towns) if (t.smokeUntil > nowS && Math.random() < dt * 16) {
           const h = t.houses[(Math.random() * Math.min(6, t.houses.length)) | 0] || t;
@@ -4425,6 +4692,66 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     }
     for (const [r, b] of banners) if (!seen.has(r)) { b.visible = false; banners.delete(r); spareBanners[b.userData.team].push(b); }
   }
+  // ---- catapults: a wheeled frame with a throwing arm, pushed by its team; the stones in flight; wrecks ----
+  // Built facing +z. The arm lies back, cocked, while loaded; it whips up against the stop bar when it throws, and
+  // is wound slowly back down as the team reloads. A stone climbs higher the further it's thrown.
+  const engineG = new Map(), stoneMeshes = [], ARM_REST = 0.15, ARM_UP = 1.8;
+  // where a stone in the air is: x and z on the board, h its height
+  function stoneAt(s) {
+    const q = 1 - s.t / s.dur, L = Math.hypot(s.x - s.x0, s.y - s.y0), h0 = surfaceAt(s.x0, s.y0) + 16, h1 = surfaceAt(s.x, s.y) + 2;
+    return { x: lerp(s.x0, s.x, q), z: lerp(s.y0, s.y, q), h: lerp(h0, h1, q) + 4 * (40 + L * 0.45) * q * (1 - q) };
+  }
+  function engineModel(team) {
+    const g = new THREE.Group(), wood = mat(WOOD), dark = mat(SEAM), arm = new THREE.Group(), wheels = [];
+    for (const e of [-1, 1]) {
+      put(g, GEO.box, wood, e * 4, 2, -2, 1.8, 1.6, 18);         // the side beams
+      put(g, GEO.box, wood, e * 3.6, 3.6, 3.5, 1.4, 9.6, 1.4);   // posts holding the stop bar
+      for (const z of [-8, 4]) wheels.push(put(g, GEO.wheel, dark, e * 5.6, 2.6, z, 1.3, 2.6, 2.6));
+    }
+    put(g, GEO.box, wood, 0, 2.1, -9.6, 9.6, 1.3, 1.6);   // cross beams: the team pushes on the back one
+    put(g, GEO.box, wood, 0, 2.1, 6.2, 9.6, 1.3, 1.6);
+    put(g, GEO.box, wood, 0, 13, 3.5, 8.6, 1.4, 1.6);     // the stop bar
+    put(g, GEO.wheel, mat('#4a4034'), 0, 4.4, 0.5, 6.6, 1.5, 1.5);   // twisted rope round the axle
+    arm.position.set(0, 4.4, 0.5);
+    put(arm, GEO.arm, wood, 0, 0, 0, 1.3, 1.3, 12.5);
+    put(arm, GEO.box, dark, 0, 0.2, -12, 3.2, 1, 3.2);   // the cup, and the stone in it
+    arm.userData.stone = put(arm, GEO.stone, mat(STONE2), 0, 1.9, -12, 1.8, 1.8, 1.8);
+    g.add(arm);
+    addFlag(g, 4.6, 2.8, 6.2, 9, COL.mid[team], 0.6);
+    Object.assign(g.userData, { arm, wheels, team });
+    g.scale.setScalar(1.35);
+    dyn.add(g);
+    return g;
+  }
+  function syncEngines(nowS) {
+    const live = new Set();
+    for (const list of [engines, wrecks]) for (const e of list) {
+      live.add(e);
+      let g = engineG.get(e);
+      if (g && g.userData.team !== e.team) { dropGroup(g); g = null; }   // captured
+      if (!g) { g = engineModel(e.team); g.position.set(e.x, 0, e.y); g.rotation.y = Math.atan2(e.hx, e.hy); engineG.set(e, g); }
+      const { arm, wheels } = g.userData, moved = Math.hypot(e.x - g.position.x, e.y - g.position.z);
+      g.position.set(e.x, surfaceAt(e.x, e.y), e.y);
+      for (const w of wheels) w.rotation.x += moved / 3.5;
+      let d = Math.atan2(e.hx, e.hy) - g.rotation.y; d -= Math.round(d / (Math.PI * 2)) * Math.PI * 2; g.rotation.y += d * 0.12;
+      g.userData.flags[0].rotation.y = Math.sin(nowS * 2.6 + e.x * 0.1) * 0.35;
+      if (list === wrecks) { g.rotation.z = 0.32; g.position.y -= 1.2; arm.rotation.x = -0.35; arm.userData.stone.visible = false; continue; }
+      const since = time - e.shot, back = clamp((1 - e.load / CAT_RELOAD - 0.08) / 0.6, 0, 1);
+      arm.rotation.x = e.shot < 0 ? ARM_REST : since < 0.25 ? lerp(ARM_REST, ARM_UP, 1 - (1 - since / 0.25) ** 3) : lerp(ARM_UP, ARM_REST, back);
+      arm.userData.stone.visible = e.shot < 0 || (since >= 0.25 && back >= 1);
+    }
+    for (const [e, g] of engineG) if (!live.has(e)) { dropGroup(g); engineG.delete(e); }
+    let n = 0;
+    for (const s of stones) {
+      let m = stoneMeshes[n++];
+      if (!m) { m = new THREE.Mesh(GEO.stone, mat(STONE)); m.castShadow = true; m.scale.setScalar(4.2); dyn.add(m); stoneMeshes.push(m); }
+      const p = stoneAt(s);
+      m.visible = true;
+      m.position.set(p.x, p.h, p.z);
+      m.rotation.set(nowS * 5, nowS * 3, 0);
+    }
+    for (let i = n; i < stoneMeshes.length; i++) stoneMeshes[i].visible = false;
+  }
   function sync3D(nowS) {
     syncPlaceGhost(nowS);
     syncMap(townG, towns, t => { const [s, f] = houseCounts(t); return `${t.owner}|${t.barracks}#${s}|${f}`; }, t => buildTown(t, ...houseCounts(t)), nowS);
@@ -4472,6 +4799,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     unitMeshes.forEach((im, k) => { im.count = cnt[k]; im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true; });
     unitOutlines.forEach((im, k) => { im.count = cnt[k]; im.instanceMatrix.needsUpdate = true; });
     syncBanners(nowS);
+    syncEngines(nowS);
     WATER_U.uTime.value = nowS;
   }
 
@@ -4685,6 +5013,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       }
     }
 
+    drawEngines();
     drawMines(nowS);
     drawStructs();
 
@@ -4749,6 +5078,38 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     }
   }
 
+  // Catapults on the ground: the stretch of route still to push, a ring round each that fills as it reloads, its
+  // reach while you point at one of yours or draw its route, and where each stone in the air will come down.
+  function drawEngines() {
+    const reach = (x, y) => {
+      ctx.strokeStyle = COL.team[me]; ctx.lineWidth = 2; ctx.globalAlpha = 0.6; ctx.setLineDash([10, 8]);
+      ctx.beginPath(); ctx.arc(x, y, CAT_RANGE, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 0.3; ctx.setLineDash([3, 6]); ctx.beginPath(); ctx.arc(x, y, CAT_MIN, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha = 1;
+    };
+    for (const e of engines) {
+      if (e.route && !e.arrived) drawRoute({ pts: [{ x: e.x, y: e.y }, ...e.route.pts.slice(e.ri)], target: e.route.target }, e.team);
+      const prog = e.shot < 0 ? 1 : clamp(1 - e.load / CAT_RELOAD, 0, 1);
+      ctx.lineWidth = 2.5; ctx.strokeStyle = COL.track; ctx.globalAlpha = 0.5;
+      ctx.beginPath(); ctx.arc(e.x, e.y, 15, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = COL.team[e.team]; ctx.globalAlpha = 0.9;
+      ctx.beginPath(); ctx.arc(e.x, e.y, 15, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * prog); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    if (hoverEngine && !drawing) reach(hoverEngine.x, hoverEngine.y);
+    if (drawing && drawing.engine && drawing.pts.length > 1) {
+      const L = drawing.lock, e = drawing.pts[drawing.pts.length - 1];
+      if (L && L.owner !== me) reach(L.x, L.y); else reach(e.x, e.y);   // round a target: where it will stop
+    }
+    for (const s of stones) {
+      const q = 1 - s.t / s.dur, x = lerp(s.x0, s.x, q), y = lerp(s.y0, s.y, q);
+      ctx.globalAlpha = 0.12 + 0.4 * q; ctx.fillStyle = '#0a0d10';
+      ctx.beginPath(); ctx.ellipse(x, y, 2 + 3 * q, 1.6 + 2.4 * q, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.25 + 0.5 * q; ctx.strokeStyle = COL.team[s.team]; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(s.x, s.y, STONE_R + 16 * (1 - q), 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
   const lockColor = t => t.owner >= 0 ? COL.team[t.owner] : '#5c6460';
   const INK = 'rgba(232,236,228,.9)', LIGHTC = ['#9fc0ff', '#ff9a88'];   // light text on the dark board
   function label(text, x, y, size, weight, fill, halo = 3) {
@@ -4819,6 +5180,11 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     if (armed === 'barracks' && ghost && state === 'play') {
       const t = barracksTown(ghost), p = t ? toScreen(t.x, t.y + townRing(t) + 52, 0) : toScreen(ghost.x, ghost.y, groundAt(ghost.x, ghost.y) + 34);
       label(t ? `${t.name}: trains 50% faster, holds 10 more` : 'Barracks go on one of your towns', p.x, p.y, 12, 700, t ? LIGHTC[me] : LIGHTC[1 - me], 4);
+    }
+    if (armed === 'catapult' && ghost && state === 'play') {
+      const t = barracksTown(ghost), err = t && placeCheck(me, 'catapult', t);
+      const p = t ? toScreen(t.x, t.y + townRing(t) + 40, 0) : toScreen(ghost.x, ghost.y, groundAt(ghost.x, ghost.y) + 20);
+      label(t ? err || `${t.name}: a catapult and its team of ${CREW}` : 'Catapults are built in one of your towns', p.x, p.y, 12, 700, t && !err ? LIGHTC[me] : LIGHTC[1 - me], 4);
     }
     for (const m of mines) {
       const p = toScreen(m.x, m.y + 38, 0), k = pxPerUnit(m.x, m.y) * zs;
@@ -4900,7 +5266,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       ctx.globalAlpha = 0.8; ctx.strokeStyle = COL.team[me]; ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
       ctx.beginPath(); ctx.arc(ghost.x, ghost.y, 140, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
     }
-    else if (armed === 'barracks') {   // the towns that can take it, and the one it would join with its hall's plot
+    else if (armed === 'barracks' || armed === 'catapult') {   // the towns that can take it, and for barracks its hall's plot
       const pick = barracksTown(ghost), nowS = performance.now() / 1000;
       ctx.strokeStyle = COL.team[me];
       for (const t of towns) {
@@ -4908,7 +5274,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
         const on = t === pick;
         ctx.globalAlpha = on ? 0.95 : 0.5; ctx.lineWidth = on ? 3 : 1.5; ctx.setLineDash(on ? [] : [5, 6]);
         ctx.beginPath(); ctx.arc(t.x, t.y, townRing(t) + 10 + (on ? Math.sin(nowS * 6) * 1.5 : 0), 0, Math.PI * 2); ctx.stroke();
-        if (on && t.barracks < 4) {
+        if (on && armed === 'barracks' && t.barracks < 4) {
           const q = hallSpot(t, t.barracks, t.barracks + 1);
           ctx.save(); ctx.translate(q.x, q.z); ctx.rotate(-q.ry);
           ctx.globalAlpha = 0.28; ctx.fillStyle = COL.team[me]; ctx.setLineDash([]); rr(ctx, -18, -10, 36, 28, 3); ctx.fill();
@@ -5001,7 +5367,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     // towns, rivers, woods and hills (null if there's none)
     const stage = () => {
       for (const t of towns) t.owner = -1;
-      units = []; structs = []; companies = []; volleys = [];
+      units = []; structs = []; companies = []; volleys = []; engines = []; stones = []; wrecks = [];
       const open = (x, y) => !blockedAt(x, y) && !inForest(x, y) && !hillLevel(x, y) && riverGap(x, y) > 100;
       for (let i = 0; i < 4000; i++) {
         const x = rand(150, W - 150), y = rand(150, H - 150);
@@ -5064,6 +5430,35 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       left: () => [left(0), left(1)],
       volleys: () => volleyCount,
       walls: () => units.filter(inWall).length,   // spearmen standing in a shield wall
+      gold: n => { gold[me] = n; refreshTray(true); },
+      // the catapults: side, team, whether moving or arrived, the town their route ends on, where they stand
+      engines: () => engines.map(e => ({ team: e.team, crew: e.crew.length, moving: e.moving, arrived: e.arrived, target: e.route && e.route.target ? e.route.target.name : null,
+        x: e.x, y: e.y, at: toScreen(e.x, e.y, 0), shot: e.shot })),
+      shots: () => ({ thrown: shots, hits: stoneHits }),   // stones thrown, and those that hit a town
+      stones: () => stones.map(st => { const q = 1 - st.t / st.dur; return { q, ground: toScreen(lerp(st.x0, st.x, q), lerp(st.y0, st.y, q), 0) }; }),   // in the air
+      strength: n => { const t = town(n); return { owner: t.owner, frac: t.hold / t.holdMax }; },
+      // a blue catapult and its team dist from a red town (the nearest to the middle of the map), on open ground,
+      // sent at it; the rest of the board cleared. Without ai the computer does nothing. Returns the town's name.
+      siege: (dist, ai) => {
+        stage();
+        const T = towns.filter(t => !t.capital).sort((a, b) => hypot(a.x - W / 2, a.y - H / 2) - hypot(b.x - W / 2, b.y - H / 2))[0];
+        Object.assign(T, { owner: 1, holdMax: baseHold(T), hold: baseHold(T), stun: 0 });
+        for (let k = 0; k < 64; k++) {
+          const a = k * 0.4, x = T.x + cos(a) * dist, y = T.y + sin(a) * dist, reg = regionOf(T.x, T.y);
+          let ok = true;
+          for (let f = 0; f <= 1.0001 && ok; f += 0.05) ok = standable(lerp(T.x, x, f), lerp(T.y, y, f), reg) || hypot(T.x - lerp(T.x, x, f), T.y - lerp(T.y, y, f)) < 40;
+          if (!ok || towns.some(o => o !== T && Math.hypot(o.x - x, o.y - y) < 120)) continue;
+          const e = newEngine(0, x, y, (T.x - x) / dist, (T.y - y) / dist, x, y);
+          for (const u of e.crew) { const q = seatOf(e, u.seat); u.x = q.x; u.y = q.y; }
+          carryOut(0, { type: 'engine', id: e.id, pts: [{ x, y }, { x: T.x, y: T.y }], target: T.name, len: dist });
+          if (!ai) aiT = 1e9;
+          staged = { x, y };
+          return T.name;
+        }
+        return null;
+      },
+      // the first catapult's team are all killed; company() then places armies relative to where it stands
+      crewless: () => { const e = engines[0]; for (const u of e.crew) kill(u); staged = { x: e.x, y: e.y }; },
       wheeling: () => units.filter(u => !u.dead && u.wheel > 0).length,   // riders wheeling away after a charge
       riding: () => units.filter(u => !u.dead && u.sally).length,   // riders riding out from their company
       capture: (n, team) => { capture(town(n), team); return town(n).owner; },

@@ -397,6 +397,92 @@ test('6 or more riders in a company ride out at archers and cavalry attacking th
   await page.close();
 });
 
+test('a catapult: bought in the tray, built beside a town with its team, sent by dragging from it, pushed slowly', async () => {
+  const page = await openGame();
+  await t(page, 'start');
+  await page.keyboard.press('Space');
+  await t(page, 'gold', 1000);
+  await page.click('#tray-catapult');
+  const brin = await t(page, 'pos', 'Brindle');
+  await page.mouse.move(brin.x, brin.y);
+  await page.mouse.click(brin.x, brin.y);
+  await sleep(100);
+  const [cat] = await t(page, 'engines');
+  assert.ok(cat && cat.team === 0 && cat.crew === 4, 'clicking a town with the catapult armed builds one there, with a team of 4');
+  assert.equal(await page.$eval('#goldv', e => e.textContent), '880', 'it costs 120 gold');
+
+  await page.mouse.move(cat.at.x, cat.at.y);
+  await page.keyboard.down('Shift');
+  assert.match(await page.$eval('#inspect', e => e.hidden ? '' : e.textContent), /Catapult.*team of 4 of 4.*230 away/, 'Shift over it tells what it does');
+  await page.keyboard.up('Shift');
+
+  await dragTo(page, cat.at, await t(page, 'pos', 'Oakhollow'));
+  await page.mouse.up();
+  await sleep(100);
+  assert.equal((await t(page, 'engines'))[0].target, 'Oakhollow', 'a route dragged from it onto a town aims it at the town');
+  await t(page, 'run', 5);   // the team walks out to it first
+  const before = (await t(page, 'engines'))[0];
+  await t(page, 'run', 3);
+  const after = (await t(page, 'engines'))[0], moved = Math.hypot(after.x - before.x, after.y - before.y);
+  assert.ok(moved > 10 && moved < 3 * 34 * 0.35 * 1.4 + 1, `its team pushes it, at a crawl (${moved.toFixed(1)} in 3 s)`);
+
+  for (const town of ['Coldwater', 'Ashford']) {   // two at a time at most
+    await page.click('#tray-catapult');
+    const p = await t(page, 'pos', town);
+    await page.mouse.move(p.x, p.y);
+    await page.mouse.click(p.x, p.y);
+    await sleep(100);
+  }
+  assert.equal((await t(page, 'engines')).length, 2, 'no more than two catapults');
+  assert.match(await page.$eval('#toast', e => e.textContent), /2 catapults already/);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test('a catapult stops in reach of the town it is sent at and throws it down in three stones, but can\'t take it; enemies take a catapult whose team is gone', async () => {
+  const page = await openGame(undefined, new URL('../site/index.html?test&land=open&map=100', import.meta.url).href);
+  await t(page, 'start');
+  await page.keyboard.press('Space');
+  const name = await t(page, 'siege', 320, false);
+  assert.ok(name, 'open ground for the siege');
+  await t(page, 'run', 4);
+  assert.ok((await t(page, 'engines'))[0].moving, 'its team pushes it towards the town');
+  await t(page, 'run', 36);
+  const [cat] = await t(page, 'engines'), shots = await t(page, 'shots'), town = await t(page, 'strength', name);
+  assert.ok(cat.arrived && !cat.moving, 'it stops once the town is in reach');
+  assert.ok(shots.hits >= 3, `stones hit the town (${shots.hits} of ${shots.thrown})`);
+  assert.ok(town.owner === 1 && town.frac > 0 && town.frac <= 0.15, `three hits leave the town nearly defenceless, still the enemy's (${(town.frac * 100).toFixed(0)}%)`);
+  await page.mouse.move(cat.at.x, cat.at.y);
+  await page.keyboard.down('Shift');
+  assert.match(await page.$eval('#inspect', e => e.hidden ? '' : e.textContent), /Yours\s*Catapult/, 'Shift over it shows it');
+  await page.keyboard.up('Shift');
+
+  await t(page, 'crewless');
+  await t(page, 'company', 1, [0], 5, 0, 18);
+  await t(page, 'run', 2);
+  const [taken] = await t(page, 'engines');
+  assert.ok(taken.team === 1 && taken.crew === 4, 'enemies who reach it with its team gone take it, and become its team');
+  assert.match(await page.$eval('#toast', e => e.textContent), /Your catapult was captured/);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test('the computer sends troops at a catapult shelling its town and takes it, the same in two copies', async () => {
+  const pages = await Promise.all([{ width: 1200, height: 800 }, { width: 390, height: 844, isMobile: true, hasTouch: true }].map(v => openGame(v, RANDOM)));
+  const [a, b] = await Promise.all(pages.map(page => page.evaluate((board, match) => {
+    __t.freeze(); __t.board(board); __t.match(match); __t.newMap('open', 100); __t.start();
+    const name = __t.siege(320, true);
+    __t.run(10);
+    const route = __t.route(name);
+    __t.run(20);
+    return { name, route, team: __t.engines()[0].team, parts: __t.snapshot().parts };
+  }, BOARD, MATCH)));
+  assert.equal(a.route, 'point', 'the town it comes at sends its soldiers out at it');
+  assert.equal(a.team, 1, 'they kill its unguarded team and take it');
+  assert.deepEqual(a, b);
+  for (const page of pages) { assert.deepEqual(page.errors, []); await page.close(); }
+});
+
 test('volleys play out the same in two copies, as two players\' browsers must', async () => {
   const pages = await Promise.all([{ width: 1200, height: 800 }, { width: 390, height: 844, isMobile: true, hasTouch: true }].map(v => openGame(v, RANDOM)));
   const [a, b] = await Promise.all(pages.map(page => page.evaluate((board, match) => {
