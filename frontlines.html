@@ -74,6 +74,9 @@
     box-shadow: var(--shadow), inset 0 0 0 1px var(--edge);
   }
   .controls button:hover, .btn:hover { background: var(--raised); }
+  .keyhint { align-self: center; font-size: 12px; color: var(--muted); white-space: nowrap; pointer-events: none; }
+  .keyhint b { color: var(--ink); font-weight: 600; }
+  @media (hover: none), (max-width: 900px) { .keyhint { display: none; } }   /* no Shift key on a phone or tablet */
   button:focus-visible { outline: 2px solid var(--blue-ink); outline-offset: 2px; }
   .tray {
     position: fixed; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
@@ -367,11 +370,11 @@
 
 <div class="hud">
   <div class="panel" id="clock">
-    <div>
+    <div data-inspect="week">
       <div class="row"><span class="big">Week <span id="wk">1</span></span><span id="day">Monday</span></div>
       <div class="bar"><i id="wkbar"></i></div>
     </div>
-    <div id="beats" title="Spearmen (triangles) beat cavalry (squares). Cavalry beat archers (circles). Archers beat spearmen.">
+    <div id="beats" data-inspect="beats">
       <span class="label">Beats</span>
       <svg viewBox="0 0 40 38" width="42" height="40" aria-label="Triangle beats square, square beats circle, circle beats triangle">
         <defs><marker id="beatHead" viewBox="0 0 6 6" refX="4" refY="3" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0l6 3-6 3z"/></marker></defs>
@@ -379,23 +382,23 @@
         <path d="M20 1.5l4.6 8.2h-9.2z"/><rect x="27.3" y="21.5" width="8" height="8" rx="1"/><circle cx="8.7" cy="25.5" r="4.3"/>
       </svg>
     </div>
-    <div id="level" title="Difficulty. Change it from the start screen.">
+    <div id="level" data-inspect="level">
       <span class="label">Difficulty</span>
       <span id="levelv">Normal</span>
     </div>
   </div>
-  <div class="panel" id="balance">
+  <div class="panel" id="balance" data-inspect="army">
     <span class="label">Army strength</span>
     <div class="split"><i id="balB" style="background:var(--blue);width:50%"></i><i id="balR" style="background:var(--red);width:50%"></i></div>
     <div class="counts"><span id="cntB" style="color:var(--blue-ink)">0</span><span id="cntR" style="color:var(--red-ink)">0</span></div>
   </div>
   <div class="hud-right">
-  <div class="panel" id="gold">
+  <div class="panel" id="gold" data-inspect="gold">
     <span class="label">Gold</span>
     <div class="big"><i class="coin"></i><span id="goldv">0</span></div>
     <span id="goldRate">+0 per week</span>
   </div>
-  <div class="panel" id="ink">
+  <div class="panel" id="ink" data-inspect="ink">
     <span class="label">Route ink</span>
     <div class="big"><span id="inkv">0</span></div>
     <div class="bar"><i id="inkbar"></i></div>
@@ -404,11 +407,12 @@
 </div>
 
 <div class="controls">
-  <button id="pauseBtn" type="button" aria-label="Pause">❚❚ Pause</button>
-  <button id="speedBtn" type="button" aria-label="Game speed">1×</button>
-  <span class="opp" id="opp" hidden><i id="oppDot"></i><span id="oppName"></span><small id="oppPing"></small></span>
-  <button id="soundBtn" type="button" aria-label="Toggle sound">Sound on</button>
-  <button id="rulesBtn" type="button">Rules</button>
+  <button id="pauseBtn" type="button" aria-label="Pause" data-inspect="pause">❚❚ Pause</button>
+  <button id="speedBtn" type="button" aria-label="Game speed" data-inspect="speed">1×</button>
+  <span class="opp" id="opp" data-inspect="opp" hidden><i id="oppDot"></i><span id="oppName"></span><small id="oppPing"></small></span>
+  <button id="soundBtn" type="button" aria-label="Toggle sound" data-inspect="sound">Sound on</button>
+  <button id="rulesBtn" type="button" data-inspect="rules">Rules</button>
+  <span class="keyhint" id="shiftHint">Hold <b>Shift</b> to inspect</span>
 </div>
 <div class="townmenu" id="townMenu" hidden>
   <span class="label" id="tmName">Town</span>
@@ -438,6 +442,7 @@
           <div class="legend"><span><i class="shape k0"></i>Spearmen beat cavalry</span><span><i class="shape k2"></i>Cavalry beat archers</span><span><i class="shape k1"></i>Archers beat spearmen</span></div></div>
         <div class="slide"><span class="kicker">Gold and building</span><p>Farms and gold mines earn gold. Spend it in the tray on forts, watchtowers, bridges, barracks and more farms. A mine works for whoever holds the land around it.</p></div>
         <div class="slide"><span class="kicker">Terrain matters</span><p>Roads are 40% faster. Archers on hills shoot further, and attacking uphill is weaker. Forests slow troops but shelter them from arrows. Fords let anyone wade across, slowly.</p></div>
+        <div class="slide"><span class="kicker">Learn as you play</span><p>Hold Shift and point at anything to see what it does and how it works: towns and ground, gold and route ink, every button in the tray. Press Space to pause first.</p></div>
         <div class="slide r"><span class="kicker">Know your enemy</span><p>The enemy gathers at the bridges and sometimes fakes an attack. Take Redmarsh to win; lose Ashford and the war is over.</p></div>
       </div>
       <div class="cnav">
@@ -815,8 +820,9 @@ import * as THREE from 'three';
   // a side's training speed before the weekly growth: the computer's is set by the difficulty, and so is the
   // player's against it; two players train alike
   const baseTrain = team => team === match.ai ? D().redTrain : match.ai >= 0 ? D().blueTrain : 1;
-  // Route ink grows with the towns a side holds.
-  function inkCap(team) { return 600 + 300 * towns.filter(t => t.owner === team).length + ink[team]; }
+  // Route ink grows with the towns a side holds (ink[team]: extra from Surveyors).
+  const INK_BASE = 600, INK_TOWN = 300;
+  function inkCap(team) { return INK_BASE + INK_TOWN * towns.filter(t => t.owner === team).length + ink[team]; }
 
   // a = axis between the two kingdoms, b = axis along the river
   const A = (x, y) => P ? y : x;
@@ -1736,8 +1742,8 @@ import * as THREE from 'three';
     if (prev === me) tally.fallen++;
     if (t.capital && state === 'play') { endGame(team === me); return; }
     if (team === me) Sound.good(); else if (prev === me) Sound.bad();
-    if (team === me) toast(towns.some(o => o.owner === me && o.route && o.route.target === t) ? `${t.name} captured. Its attackers now guard it` : `${t.name} captured`, 'good');
-    else if (prev === me) toast(`${t.name} has fallen`, 'bad');
+    if (team === me) toast(`${t.name} captured${towns.some(o => o.owner === me && o.route && o.route.target === t) ? '. Its attackers now guard it' : ''}. +${INK_TOWN} route ink`, 'good');
+    else if (prev === me) toast(`${t.name} has fallen. −${INK_TOWN} route ink`, 'bad');
     aiT = Math.min(aiT, 0.5);
   }
 
@@ -2258,7 +2264,7 @@ import * as THREE from 'three';
   function renderTray() {
     const el = $('tray'); el.innerHTML = '';
     const cb = document.createElement('button');   // Charge first, then a divider, then what gold buys
-    cb.type = 'button'; cb.id = 'chargeBtn'; cb.title = 'Charge (C): everyone in the circle sprints and hits harder';
+    cb.type = 'button'; cb.id = 'chargeBtn'; cb.dataset.inspect = 'charge';
     cb.onclick = toggleCharge;
     el.appendChild(cb);
     el.insertAdjacentHTML('beforeend', '<span class="sep" aria-hidden="true"></span>');
@@ -2267,7 +2273,7 @@ import * as THREE from 'three';
     renderCharge();
     for (const k of trayItems()) {
       const b = document.createElement('button');
-      b.type = 'button'; b.id = 'tray-' + k; b.className = armed === k ? 'armed' : ''; b.title = ITEM[k];
+      b.type = 'button'; b.id = 'tray-' + k; b.dataset.inspect = k; b.className = armed === k ? 'armed' : '';
       b.onclick = () => {
         if (armed === k) { armed = null; renderTray(); return; }
         if (!(inventory[me][k] > 0) && gold[me] < priceOf(me, k)) { toast(`Not enough gold: ${priceOf(me, k)} needed`, 'bad'); return; }
@@ -2295,7 +2301,6 @@ import * as THREE from 'three';
       const html = `${icon(k, 16)}<span class="name">${ITEM[k]}</span> ${n ? `×${n}` : `<span class="price"><i class="coin"></i>${pr}</span>`}`;
       if (force || b.dataset.html !== html) { b.innerHTML = html; b.dataset.html = html; }
       b.disabled = !n && gold[me] < pr && armed !== k;
-      b.title = n ? `${ITEM[k]}: ${n} ready to place` : `Buy a ${ITEM[k].toLowerCase()} for ${pr} gold`;
     }
   }
   function setHint(text) { hintBase = text; if (!armed) { $('hint').textContent = text; $('hint').style.opacity = text ? 1 : 0; } }
@@ -2854,7 +2859,7 @@ import * as THREE from 'three';
     const p = toWorld(e);
     ghost = p;
     lastPointer = { p, cx: e.clientX, cy: e.clientY };
-    inspectAt = e.shiftKey && !drawing && !armed && state === 'play' ? lastPointer : null;
+    inspectAt = e.shiftKey && canInspect(lastPointer) ? lastPointer : null;
     showInspect();
     if (!drawing) {
       hover = state === 'play' && !armed ? townAt(p.x, p.y, 30, me) : null;
@@ -2881,9 +2886,18 @@ import * as THREE from 'three';
   const togglePause = () => { if (net && net.live) { if (state === 'play') order(me, { type: 'pause', on: !held }); } else setPaused(!paused); };
   $('pauseBtn').onclick = togglePause;
   $('speedBtn').onclick = () => { if (net && net.live) return; speed = speed === 1 ? 2 : speed === 2 ? 3 : 1; $('speedBtn').textContent = speed + '×'; };
-  // Holding Shift shows what is under the pointer; letting go hides it.
+  // Holding Shift shows what is under the pointer; letting go hides it. On the board that waits while a route is
+  // drawn or something is being placed; over the panels, buttons and tray (data-inspect) it always works.
+  const canInspect = lp => lp && state === 'play' && (lp.el || (!drawing && !armed));
   addEventListener('keydown', e => {
-    if (e.key === 'Shift' && lastPointer && !drawing && !armed && state === 'play') { inspectAt = lastPointer; showInspect(); }
+    if (e.key === 'Shift' && canInspect(lastPointer)) { inspectAt = lastPointer; showInspect(); }
+  });
+  addEventListener('pointermove', e => {
+    if (e.target === cvs) return;   // the board has its own handler
+    const el = e.target.closest && e.target.closest('[data-inspect]');
+    lastPointer = el ? { el: el.dataset.inspect, cx: e.clientX, cy: e.clientY } : null;
+    inspectAt = e.shiftKey && canInspect(lastPointer) ? lastPointer : null;
+    showInspect();
   });
   addEventListener('keyup', e => { if (e.key === 'Shift') { inspectAt = null; showInspect(); } });
   addEventListener('blur', () => { inspectAt = null; showInspect(); });
@@ -2955,10 +2969,72 @@ import * as THREE from 'three';
     if (!lines.length) return null;
     return { title, lines };
   }
+  // The panels, buttons and tray, by their data-inspect key: what each is, and how to get more of it.
+  const plural = n => n === 1 ? '' : 's';
+  const WHERE = { farm: 'Place it next to one of your towns.', barracks: 'Place it on one of your towns.', bridge: 'Place it on a river.',
+    tower: 'Place it on your side of the river or near your towns.', fort: 'Place it on your side of the river or near your towns.' };
+  const HUD_INFO = {
+    week: () => {
+      const lines = [`A week lasts ${WEEK} seconds. This one ends in ${Math.ceil(WEEK - weekT)}s.`];
+      if (match.ai < 0) lines.push('Then each player chooses a free reinforcement.');
+      else {
+        lines.push('Then you choose a free reinforcement, and the enemy grows stronger.');
+        const faster = Math.round((stats.train[match.ai] / D().redTrain - 1) * 100), hp = stats.hp[match.ai] - 3;
+        if (faster > 0) lines.push(`So far its towns train ${faster}% faster${hp ? `, and its new soldiers have ${hp} extra hit point${plural(hp)}` : ''}.`);
+      }
+      return { title: `Week ${week}, ${DAYS[Math.min(6, Math.floor(weekT / WEEK * 7))]}`, lines };
+    },
+    beats: () => ({ title: 'Who beats whom', lines: ['Spearmen ▲ beat cavalry ■.', 'Cavalry ■ beat archers ●.', 'Archers ● beat spearmen ▲.', 'Tap one of your towns to choose what it trains.'] }),
+    level: () => {
+      const d = D(), pct = v => `${Math.round(v * 100)}%`, lines = [];
+      lines.push(`The enemy trains at ${pct(d.redTrain)} speed, earns ${pct(d.redIncome)} of what its farms and mines make, and trains ${pct(d.redGrowth)} faster each week.`);
+      if (d.hpEvery) lines.push(`Its new soldiers get an extra hit point every ${d.hpEvery} weeks.`);
+      if (d.blueTrain !== 1) lines.push(`Your towns train ${pct(d.blueTrain - 1)} faster.`);
+      lines.push('Change it on the start screen, for the next battle.');
+      return { title: `Difficulty: ${match.difficulty[0].toUpperCase() + match.difficulty.slice(1)}`, lines };
+    },
+    army: () => {
+      let b = 0, r = 0;
+      for (const u of units) if (!u.dead) u.team === me ? b++ : r++;
+      return { title: 'Army strength', lines: [`You have ${b} soldier${plural(b)}, the enemy ${r}.`, 'Every soldier on the board counts: at home, on the march or fighting.'] };
+    },
+    gold: () => {
+      const nf = fields.filter(f => f.town && f.town.owner === me).length, nm = mines.filter(m => m.owner === me).length;
+      return { title: 'Gold', lines: [
+        `${gold[me]} gold, earning ${Math.round(goldPerSecond(me) * WEEK)} a week.`,
+        `${nf} farm${plural(nf)}: +${Math.round(nf * FARM_RATE * WEEK)} a week. A farm pays while you hold its town.`,
+        `${nm} gold mine${plural(nm)}: +${Math.round(nm * MINE_RATE * WEEK)} a week. A mine pays while your colour covers the land around it.`,
+        'Spend it in the tray at the bottom right.'] };
+    },
+    ink: () => {
+      const cap = inkCap(me), used = Math.round(inkUsed(me)), n = towns.filter(t => t.owner === me).length;
+      const lines = [`${Math.max(0, cap - used)} of ${cap} left. Your routes use ${used}.`,
+        'Each town’s march route uses ink for its length. Clearing a route gives it back. Sending a gathered army on is free.',
+        `You get ${INK_BASE}, plus ${INK_TOWN} for each town you hold (${n} now)${ink[me] ? `, plus ${ink[me]} from Surveyors` : ''}.`,
+        'Take towns to get more. A town you lose takes its ink with it.'];
+      if (used > cap) lines.push('Over the limit: your routes stay, but you can’t draw a new one until you clear one.');
+      return { title: 'Route ink', lines };
+    },
+    pause: () => ({ title: `${paused || held ? 'Resume' : 'Pause'} (Space)`, lines: [net && net.live ? 'Stops both players’ battles, until either of you resumes.'
+      : 'Stops the battle. While it stands still you can still draw routes, buy from the tray, and hold Shift to inspect anything.'] }),
+    speed: () => ({ title: 'Game speed', lines: ['Click to run the battle at 1×, 2× or 3×.'] }),
+    sound: () => ({ title: 'Sound', lines: ['Turns all the game’s sound on or off.'] }),
+    rules: () => ({ title: 'Rules', lines: [`All the rules on one sheet. ${net && net.live ? 'The battle carries on while you read.' : 'Opening it pauses the battle.'}`] }),
+    opp: () => ({ title: oppName(), lines: ['Your opponent. The number is how long a message takes to reach their browser and back.'] }),
+    charge: () => ({ title: 'Charge (C)', lines: [
+      'Click it, then click on a fight. Your soldiers within the circle sprint there for 4 seconds, and spearmen and cavalry hit two to three times as hard with their first blow.',
+      chargeCd[me] > 0 ? `Ready again in ${Math.ceil(chargeCd[me])}s.` : `Ready. After a charge it takes ${CHARGE_CD}s to recharge.`] }),
+  };
+  function describeHud(key) {
+    if (HUD_INFO[key]) return HUD_INFO[key]();
+    const up = UPGRADES.find(u => u.key === key), n = inventory[me][key] || 0;
+    return { title: ITEM[key], lines: [up.desc, WHERE[key],
+      n ? `${n} ready to place, already paid for.` : `Costs ${priceOf(me, key)} gold. Each one you buy makes the next 50% dearer.`] };
+  }
   let inspectKey = '';
   function showInspect() {
     const el = $('inspect');
-    const d = inspectAt && describe(inspectAt.p.x, inspectAt.p.y);
+    const d = inspectAt && (inspectAt.el ? describeHud(inspectAt.el) : describe(inspectAt.p.x, inspectAt.p.y));
     if (!d) { el.hidden = true; inspectKey = ''; return; }
     const html = `${d.own ? `<span class="own" style="color:${d.own[1]}">${d.own[0]}</span>` : ''}<b>${d.title}</b>${d.lines.map(l => `<span>${l}</span>`).join('')}`;
     if (html !== inspectKey) { el.innerHTML = html; inspectKey = html; }
@@ -2979,7 +3055,7 @@ import * as THREE from 'three';
 
   // ---------- tips that appear the first time something becomes relevant ----------
   const COACH = [
-    { id: 'inspect', when: () => time > 25, text: 'Hold Shift and hover over a town, mine, farm or patch of ground to see what it does.' },
+    { id: 'inspect', when: () => time > 25, text: 'Hold Shift and point at anything, on the map, in the panels or in the tray, to see what it does. Press Space to pause first.' },
     { id: 'gold', when: () => gold[me] >= 30, text: 'You have gold to spend. Buy farms, watchtowers and more from the tray at the bottom right.' },
     { id: 'mineNear', when: () => mines.some(m => m.owner !== me && units.some(u => u.team === me && Math.hypot(u.x - m.x, u.y - m.y) < 70)), text: 'Your troops are near a gold mine. Keep them there until the land turns blue to claim it.' },
     { id: 'mine', when: () => mines.some(m => m.owner === me), text: 'You hold a gold mine: +27 gold a week while your color covers the land around it.' },

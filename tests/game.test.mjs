@@ -68,7 +68,8 @@ test('start screen: welcome and tips, then the map, then the difficulty', async 
   await page.click('#tipNext');
   assert.equal(await active(), 1, 'the next arrow moves on');
   await page.click('#tipPrev'); await page.click('#tipPrev');
-  assert.equal(await active(), 6, 'going back from the first tip wraps to the last');
+  const slides = await page.$$eval('#carousel .slide', s => s.length);
+  assert.equal(await active(), slides - 1, 'going back from the first tip wraps to the last');
   await page.click('#step1 [data-go="2"]');
   assert.equal(await step(), 2, 'Choose a map moves on to the map');
   assert.ok(await page.$eval('#step1', e => e.hidden) && !(await page.$eval('#step2', e => e.hidden)), 'one card at a time');
@@ -220,6 +221,31 @@ test('Charge sends the soldiers in the circle running at the spot', async () => 
   assert.ok(await t(page, 'near', 0, aim.x, aim.y, 45) >= 15, 'and they get there at a sprint');
   await t(page, 'run', 3);
   assert.equal(await t(page, 'charging'), 0, 'then the charge is over and they go back to their orders');
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test('paused, Shift over the panels and tray explains them; taking a town shows the route ink it brings', async () => {
+  const page = await openGame();
+  await t(page, 'start');
+  await page.keyboard.press('Space');
+  const centre = sel => page.$eval(sel, e => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  const box = () => page.$eval('#inspect', e => e.hidden ? null : e.textContent);
+  let p = await centre('#ink');
+  await page.mouse.move(p.x, p.y);
+  assert.equal(await box(), null, 'nothing without Shift');
+  await page.keyboard.down('Shift');
+  assert.match(await box(), /Route ink.*left.*plus 300 for each town you hold/, 'the route ink: how much is left and how to get more');
+  p = await centre('#tray-farm');
+  await page.mouse.move(p.x, p.y);
+  assert.match(await box(), /Farm.*Costs 30 gold/, 'a tray item: what it does and what it costs');
+  p = await centre('#chargeBtn');
+  await page.mouse.move(p.x, p.y);
+  assert.match(await box(), /Charge \(C\).*Ready/, 'Charge, and whether it is ready');
+  await page.keyboard.up('Shift');
+  assert.equal(await box(), null, 'letting go of Shift hides it');
+  await t(page, 'capture', 'Millbrook', 0);
+  assert.match(await page.$eval('#toast', e => e.textContent), /Millbrook captured.*\+300 route ink/);
   assert.deepEqual(page.errors, []);
   await page.close();
 });
