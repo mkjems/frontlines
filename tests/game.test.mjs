@@ -423,6 +423,26 @@ test('farms grow crops, cut them and cart the harvest to their town; unclaimed t
   await page.close();
 });
 
+test('towns need food to train at full speed: a fed town trains far faster than a starving one', async () => {
+  const page = await openGame(undefined, GAME + '&week=900');
+  await t(page, 'start');
+  await page.keyboard.press('Space');
+  const grow = async food => {
+    const n0 = await t(page, 'trained', 'Brindle');
+    for (let i = 0; i < 20; i++) { await t(page, 'food', 'Brindle', food); await t(page, 'run', 0.5); }
+    return await t(page, 'trained', 'Brindle') - n0;
+  };
+  const fed = await grow(40), starving = await grow(0);
+  assert.ok(fed >= 3 && starving <= fed / 2, `in 10 s Brindle trains ${fed} with food, ${starving} without`);
+  const b = await t(page, 'pos', 'Brindle');
+  await page.mouse.move(b.x, b.y);
+  await page.keyboard.down('Shift');
+  assert.match(await page.$eval('#inspect', e => e.hidden ? '' : e.textContent), /Food 0 of 40.*out of food/, 'Shift over a town shows its food');
+  await page.keyboard.up('Shift');
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
 test('volleys play out the same in two copies, as two players\' browsers must', async () => {
   const pages = await Promise.all([{ width: 1200, height: 800 }, { width: 390, height: 844, isMobile: true, hasTouch: true }].map(v => openGame(v, RANDOM)));
   const [a, b] = await Promise.all(pages.map(page => page.evaluate((board, match) => {

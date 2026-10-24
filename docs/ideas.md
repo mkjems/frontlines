@@ -33,6 +33,20 @@ rows. Shift over a farm tells when its harvest is due. `__t.farms()` reports har
 - Learned: the first, dark green crops were invisible against the dark soil; they are a mid green now, still
   well below the soldiers' glowing colours.
 
+**Done (24 October 2026): step 2, food** (`t.food`, `fed`, `FOOD_*`, `townRate`). Each town has a food store
+(starts at 10, holds up to 40). A harvest brings 5 food to its town on the cart, times its side's training speed
+(`stats.train`), so the computer's harvests grow with it week by week, as do yours with Drill sergeants. Each
+soldier trained eats 1; a town without food trains at a quarter of its speed, for nothing. A captured town's store
+is emptied. Farms no longer earn gold: each town you hold pays 0.3 gold a second (a capital 0.45), about what
+its farms paid before, and mines pay as before. The store shows beside each town's name (a sheaf and the number,
+red when empty), Shift over a town and over a farm tells of food, the rules sheet and opening slide say so, and a
+tip appears when one of your towns runs out. `__t.food`, `__t.trained` help test it.
+- Measured: in a game where blue does nothing, the computer had 174 soldiers after four minutes with food,
+  against 329 without; the first minute is only a little slower (36 and 69 at 30 s and 60 s, against 44 and 72).
+- To watch: capitals train fast, so they run out of food early; both sides alike. Whether 5 a harvest, a store of
+  40 and a quarter speed when hungry feel right.
+- Later: upkeep (soldiers alive eating), and cavalry raids that burn farms.
+
 ## Then: formations for the three troop types
 
 The three types differ mostly in numbers today, so a big army of archers fights much like a big army of

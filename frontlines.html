@@ -438,7 +438,7 @@
         <div class="slide"><span class="kicker">Strength in numbers</span><p>Big groups hit harder, troops arriving at a run hit hardest, and everyone fights better near home.</p></div>
         <div class="slide"><span class="kicker">Spearmen, archers, cavalry</span>
           <div class="legend"><span><i class="shape k0"></i>Spearmen beat cavalry</span><span><i class="shape k2"></i>Cavalry beat archers</span><span><i class="shape k1"></i>Archers beat spearmen</span></div></div>
-        <div class="slide"><span class="kicker">Gold and building</span><p>Farms and gold mines earn gold. Spend it in the tray on watchtowers, bridges, barracks and more farms. A mine works for whoever holds the land around it.</p></div>
+        <div class="slide"><span class="kicker">Gold and building</span><p>Your towns and gold mines earn gold. Farms grow food, and towns need food to train soldiers quickly. Spend gold in the tray on farms, watchtowers, bridges and barracks. A mine works for whoever holds the land around it.</p></div>
         <div class="slide"><span class="kicker">Terrain matters</span><p>Roads are 40% faster. Archers on hills shoot further, and attacking uphill is weaker. Forests slow troops but shelter them from arrows. Fords let anyone wade across, slowly.</p></div>
         <div class="slide"><span class="kicker">Learn as you play</span><p>Hold Shift and point at anything to see what it does and how it works: towns and ground, gold and route ink, every button in the tray. Press Space to pause first.</p></div>
         <div class="slide r"><span class="kicker">Know your enemy</span><p>The enemy gathers at the bridges and sometimes fakes an attack. Take Redmarsh to win; lose Ashford and the war is over.</p></div>
@@ -562,7 +562,8 @@
         <li><span class="k">Fords</span>: anyone can wade across at 45% speed.</li>
       </ul></div>
       <div><h3>Economy</h3><ul>
-        <li><span class="k">Farms</span> earn about 7 gold a week for whoever holds their town.</li>
+        <li><span class="k">Towns</span> earn about 14 gold a week each (a capital 20) for whoever holds them.</li>
+        <li><span class="k">Farms</span> grow food: about every 36 s a cart brings 5 to the farm's town (it stores up to 40). Each soldier trained eats 1; a town out of food trains at a quarter of its speed.</li>
         <li><span class="k">Gold mines</span> earn 27 a week for whoever holds the land around them.</li>
         <li>Buy in the tray: farm 30, watchtower 40, barracks 70, bridge 80. Each repeat costs 50% more.</li>
         <li>Route ink: 600 plus 300 per town you hold.</li>
@@ -814,9 +815,11 @@ import * as THREE from 'three';
   let uid = 0, routeSeq = 0, frameNo = 0, routesDrawn = 0;
   let stats, structs = [], tracers = [], inventory = [{}, {}], armed = null, ghost = null, plan = null, hintBase = '';
   const ITEM = { farm: 'Farm', tower: 'Watchtower', barracks: 'Barracks', bridge: 'Bridge' };
-  // Gold comes from farms around your towns and from gold mines on land you control.
+  // Gold comes from each town you hold (TOWN_RATE, more for a capital) and from gold mines on land you control.
+  // Farms grow food (see stepFarms).
   const PRICE = { farm: 30, tower: 40, barracks: 70, bridge: 80 };
-  const FARM_RATE = 0.15, MINE_RATE = 0.6;   // gold per second
+  const TOWN_RATE = 0.3, CAPITAL_RATE = 0.45, MINE_RATE = 0.6;   // gold per second
+  const townRate = t => t.capital ? CAPITAL_RATE : TOWN_RATE;
   let gold = [0, 0], bought = [{}, {}], mines = [], coins = [], redBuys = 0;
   const priceOf = (team, k) => Math.round(PRICE[k] * 1.5 ** (bought[team][k] || 0));
   // Troop types: 0 spearmen, 1 archers, 2 cavalry
@@ -1012,7 +1015,7 @@ import * as THREE from 'three';
   const at01 = (an, bn) => XY(blueSide() < 0 ? an * LA : (1 - an) * LA, bn * LB);   // an: across from blue's edge, bn: along
   function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = rng() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; }
   function makeTown(name, p, owner, capital, kind) {
-    const t = { name, x: p.x, y: p.y, owner, capital: !!capital, route: null, spawnT: rand(0.5, 2), n: 0, hit: 0, barracks: 0, kind };
+    const t = { name, x: p.x, y: p.y, owner, capital: !!capital, route: null, spawnT: rand(0.5, 2), n: 0, hit: 0, barracks: 0, kind, food: FOOD_START, acc: 0 };
     t.holdMax = owner < 0 ? 10 : baseHold(t); t.hold = t.holdMax;
     return t;
   }
@@ -1492,16 +1495,20 @@ import * as THREE from 'three';
   }
   function goldPerSecond(team) {
     let r = 0;
-    for (const f of fields) if (f.town && f.town.owner === team) r += FARM_RATE;
+    for (const t of towns) if (t.owner === team) r += townRate(t);
     for (const m of mines) if (m.owner === team) r += MINE_RATE;
     return r;
   }
   // ---------- farms: crops grow, are cut, and the harvest is carted to town ----------
   // Every farm whose town has an owner runs its own cycle: its crops grow for GROW_T seconds from bare soil, are
   // cut row by row over CUT_T, and the harvest goes to its town on a cart along the farm's own track, at CART_SPEED
-  // (faster where it runs on a road); then it is sown again. A farm whose town has no owner lies fallow, and what grew there withers.
-  // (For now the harvest is a sight only: farms earn gold as before.)
+  // (faster where it runs on a road); then it is sown again. A farm whose town has no owner lies fallow, and what
+  // grew there withers. A harvest brings its town FOOD_HARVEST food, more as its side trains faster (the computer's
+  // towns speed up every week, so its harvests keep pace), into a store of at most FOOD_CAP. Each soldier a town
+  // trains eats FOOD_SOLDIER; a town with too little trains at FOOD_TRICKLE of its speed, for nothing.
   const GROW_T = 32, CUT_T = 4, CART_SPEED = 22;
+  const FOOD_START = 10, FOOD_HARVEST = 5, FOOD_CAP = 40, FOOD_SOLDIER = 1, FOOD_TRICKLE = 0.25;
+  const fed = t => t.food >= FOOD_SOLDIER;
   let carts = [], deliveries = [], harvests = 0;
   // the track from a farm to the edge of its town: a gentle curve, its ends a, b and its bend point m
   function farmTrack(f) {
@@ -1530,14 +1537,17 @@ import * as THREE from 'three';
       c.x += dx / d * step; c.y += dy / d * step;
       if (d > 0.5) { c.hx = dx / d; c.hy = dy / d; }
       const t = c.town;
-      if ((t.x - c.x) ** 2 + (t.y - c.y) ** 2 < (townRing(t) + 4) ** 2) { c.done = true; deliveries.push({ x: c.x, y: c.y, town: t, t: 0 }); }
+      if ((t.x - c.x) ** 2 + (t.y - c.y) ** 2 < (townRing(t) + 4) ** 2) {
+        c.done = true; deliveries.push({ x: c.x, y: c.y, town: t, t: 0 });
+        if (t.owner >= 0) t.food = Math.min(FOOD_CAP, t.food + FOOD_HARVEST * stats.train[t.owner]);
+      }
     }
     carts = carts.filter(c => !c.done);
     for (const v of deliveries) v.t += dt;
     deliveries = deliveries.filter(v => v.t < 1);
   }
   function stepEconomy(dt) {
-    for (const f of fields) if (f.town && f.town.owner >= 0) earn(f, FARM_RATE, dt, f.town.owner);
+    for (const t of towns) if (t.owner >= 0) earn(t, townRate(t), dt, t.owner);
     for (const m of mines) {
       const v = terrAt(m.x, m.y);
       const owner = v > 0.25 ? 0 : v < -0.25 ? 1 : -1;
@@ -1934,7 +1944,7 @@ import * as THREE from 'three';
     const prev = t.owner;
     t.owner = team;
     t.holdMax = baseHold(t) * stats.holdMult[team];
-    t.hold = t.holdMax * 0.4;
+    t.hold = t.holdMax * 0.4; t.food = 0;   // its store is looted
     t.route = null; t.spawnT = 2;
     for (const u of units) if (u.town === t && u.team !== team) u.town = null;
     for (let i = 0; i < 10; i++) puff(t.x + fxRand(-14, 14), t.y + fxRand(-14, 14), COL.team[team], fxRand(16, 30));
@@ -2146,10 +2156,10 @@ import * as THREE from 'three';
       t.hit -= dt;
       if (t.hit <= 0 && t.hold < t.holdMax) t.hold = Math.min(t.holdMax, t.hold + dt * (t.owner < 0 ? 0.3 : 1.2));
       if (t.owner < 0) continue;
-      t.spawnT -= dt * stats.train[t.owner];
+      t.spawnT -= dt * stats.train[t.owner] * (fed(t) ? 1 : FOOD_TRICKLE);   // without food, a trickle
       if (t.spawnT <= 0) {
         t.spawnT += trainBase(t);
-        if (t.n < townCap(t) && units.length < 1600) { spawn(t); t.n++; }
+        if (t.n < townCap(t) && units.length < 1600) { spawn(t); t.n++; if (fed(t)) t.food -= FOOD_SOLDIER; }
       }
     }
   }
@@ -2464,7 +2474,7 @@ import * as THREE from 'three';
   const UPGRADES = [
     { key: 'tower', name: 'Watchtower', desc: 'Archers shoot enemies in range, even across the river.', place: true },
     { key: 'bridge', name: 'Bridge', desc: 'A new crossing anywhere on the river. The enemy can use it too.', place: true },
-    { key: 'farm', name: 'Farm', desc: 'New fields beside one of your towns. Each farm earns gold while you hold the town.', place: true },
+    { key: 'farm', name: 'Farm', desc: 'New fields beside one of your towns. Their harvests feed the town, so it trains at full speed.', place: true },
     { key: 'barracks', name: 'Barracks', desc: 'Put it on one town: it trains 50% faster and fields 10 more soldiers.', place: true },
     { key: 'ink', name: 'Surveyors', desc: '+400 route ink for longer or more routes.', apply: team => { ink[team] += 400; } },
     { key: 'drill', name: 'Drill sergeants', desc: 'All your towns train 15% faster.', apply: team => { stats.train[team] += 0.15; } },
@@ -2518,7 +2528,7 @@ import * as THREE from 'three';
     };
     return {
       clock: hash([time, week, weekT]),
-      towns: hash(towns.flatMap(t => [t.name, t.owner, t.hold, t.kind, t.barracks || 0, t.spawnT])),
+      towns: hash(towns.flatMap(t => [t.name, t.owner, t.hold, t.kind, t.barracks || 0, t.spawnT, t.food])),
       units: hash(units.flatMap(u => [u.team, u.kind, u.x, u.y, u.hp])),
       farms: hash(fields.flatMap(f => [f.grow ?? -1, f.cut || 0]).concat(carts.flatMap(c => [c.x, c.y]))),
       economy: hash([...gold, ...ink, ...chargeCd, redBuys, ...stats.train, ...stats.hp, ...inventory.flatMap(i => Object.entries(i).flat())]),
@@ -3239,7 +3249,7 @@ import * as THREE from 'three';
       } else lines.push(strength, 'Capture it by marching soldiers into it.');
       if (t.barracks) lines.push(`${t.barracks} barracks: trains faster, holds more`);
       const farms = fields.filter(f => f.town === t).length;
-      if (farms) lines.push(`${farms} farms · ${t.owner === me ? `+${Math.round(farms * FARM_RATE * WEEK)} gold a week` : 'pay whoever holds the town'}`);
+      if (t.owner >= 0) lines.push(`Food ${Math.floor(t.food)} of ${FOOD_CAP} · ${farms} farm${plural(farms)} · ${fed(t) ? `each soldier eats ${FOOD_SOLDIER}` : 'out of food: trains at a quarter of its speed'}`);
       if (t.capital) lines.push(t.owner === me ? 'Your capital. Lose it and the war is over.' : 'Enemy capital. Take it to win.');
       return { title: t.name, own: OWN(t.owner), lines };
     }
@@ -3266,7 +3276,7 @@ import * as THREE from 'three';
       const o = f.town ? f.town.owner : -1;
       const g = f.grow ?? 0, crop = o < 0 ? 'Lying fallow.' : g >= 1 ? 'Being harvested: the cart takes it to town.'
         : `Crops ${g < 0.6 ? 'growing' : 'ripening'}: harvest in ${Math.ceil((1 - g) * GROW_T)}s.`;
-      return { title: 'Farm', own: OWN(o), lines: [f.town ? `Belongs to ${f.town.name}.` : '', crop, o === 0 ? `+${Math.round(FARM_RATE * WEEK)} gold a week while you hold ${f.town.name}.` : o === 1 ? `Pays the enemy. Take ${f.town.name} to make it yours.` : `Fallow. Capture ${f.town.name} to work it.`].filter(Boolean) };
+      return { title: 'Farm', own: OWN(o), lines: [f.town ? `Belongs to ${f.town.name}.` : '', crop, o === me ? `Each harvest brings ${f.town.name} ${FOOD_HARVEST} food for training.` : o >= 0 ? `Feeds the enemy. Take ${f.town.name} to make it yours.` : `Capture ${f.town.name} to work it.`].filter(Boolean) };
     }
     for (const c of crags) if (Math.hypot(c.x - x, c.y - y) < c.r + 6) return { title: 'Crag', lines: ['Sheer rock: no army can cross it. Soldiers march around.'] };
     const band = bandAt(x, y);
@@ -3322,10 +3332,10 @@ import * as THREE from 'three';
       return { title: 'Army strength', lines: [`You have ${b} soldier${plural(b)}, the enemy ${r}.`, 'Every soldier on the board counts: at home, on the march or fighting.'] };
     },
     gold: () => {
-      const nf = fields.filter(f => f.town && f.town.owner === me).length, nm = mines.filter(m => m.owner === me).length;
+      const own = towns.filter(t => t.owner === me), nm = mines.filter(m => m.owner === me).length;
       return { title: 'Gold', lines: [
         `${gold[me]} gold, earning ${Math.round(goldPerSecond(me) * WEEK)} a week.`,
-        `${nf} farm${plural(nf)}: +${Math.round(nf * FARM_RATE * WEEK)} a week. A farm pays while you hold its town.`,
+        `${own.length} town${plural(own.length)}: +${Math.round(own.reduce((s, t) => s + townRate(t), 0) * WEEK)} a week.`,
         `${nm} gold mine${plural(nm)}: +${Math.round(nm * MINE_RATE * WEEK)} a week. A mine pays while your colour covers the land around it.`,
         'Spend it in the tray at the bottom right.'] };
     },
@@ -3379,7 +3389,8 @@ import * as THREE from 'three';
   // ---------- tips that appear the first time something becomes relevant ----------
   const COACH = [
     { id: 'inspect', when: () => time > 25, text: 'Hold Shift and point at anything, on the map, in the panels or in the tray, to see what it does. Press Space to pause first.' },
-    { id: 'gold', when: () => gold[me] >= 30, text: 'You have gold to spend. Buy farms, watchtowers and more from the tray at the bottom right.' },
+    { id: 'gold', when: () => gold[me] >= 30, text: 'You have gold to spend. Farms feed a town so it trains at full speed; watchtowers guard the front. Buy them from the tray at the bottom right.' },
+    { id: 'hungry', when: () => towns.some(t => t.owner === me && !fed(t)), text: 'One of your towns is out of food, so it trains slowly. Buy a farm beside it, or wait for its own farms\' harvests.' },
     { id: 'mineNear', when: () => mines.some(m => m.owner !== me && units.some(u => u.team === me && Math.hypot(u.x - m.x, u.y - m.y) < 70)), text: 'Your troops are near a gold mine. Keep them there until the land turns blue to claim it.' },
     { id: 'mine', when: () => mines.some(m => m.owner === me), text: 'You hold a gold mine: +27 gold a week while your color covers the land around it.' },
     { id: 'road', when: () => units.some(u => u.team === me && onRoad(u.x, u.y) && Math.hypot(u.vx, u.vy) > 20 && Math.hypot(u.x - u.town?.x, u.y - u.town?.y) > 80), text: 'Your troops are on a road, marching 40% faster. Draw routes along roads to reach the front sooner.' },
@@ -4926,6 +4937,20 @@ vec3 noised(vec2 p) {   // value noise, and its slope
         label(t.name.toUpperCase(), p.x, p.y + 2 * k, Math.round(14 * k), 800, t.owner < 0 ? INK : LIGHTC[t.owner], 4);
         label('CAPITAL', p.x, p.y + 16 * k, Math.round(9 * k), 600, 'rgba(226,230,222,.65)');
       } else label(t.name, p.x, p.y, Math.round(11.5 * k), 600, INK);
+      if (t.owner >= 0) {   // its food store, beside the name: a sheaf and the number, red when it has run out
+        ctx.font = `${t.capital ? 800 : 600} ${Math.round((t.capital ? 14 : 11.5) * k)}px Lexend, "Avenir Next", system-ui, sans-serif`;   // the name's
+        const ny = p.y + (t.capital ? 2 * k : 0), fx = p.x + ctx.measureText(t.capital ? t.name.toUpperCase() : t.name).width / 2 + 9 * k, col = fed(t) ? '#a6d982' : '#ff9a88';
+        ctx.lineCap = 'round';
+        for (const [w, c] of [[3.4 * k, 'rgba(16,19,18,.85)'], [1.3 * k, col]]) {   // three stalks, each with an ear of grain
+          ctx.lineWidth = w; ctx.strokeStyle = c; ctx.fillStyle = c;
+          for (const a of [-0.4, 0, 0.4]) {
+            const tx = fx + Math.sin(a) * 5 * k, ty = ny + 5 * k - Math.cos(a) * 6 * k;
+            ctx.beginPath(); ctx.moveTo(fx, ny + 5 * k); ctx.lineTo(tx, ty); ctx.stroke();
+            ctx.beginPath(); ctx.ellipse(tx + Math.sin(a) * 1.6 * k, ty - Math.cos(a) * 1.6 * k, 1.3 * k + (w > 2 ? 1 * k : 0), 2.6 * k + (w > 2 ? 1 * k : 0), a, 0, Math.PI * 2); ctx.fill();
+          }
+        }
+        ctx.textAlign = 'left'; label(String(Math.floor(t.food)), fx + 6 * k, ny + 0.5 * k, Math.round(10.5 * k), 700, col); ctx.textAlign = 'center';
+      }
       if (t.barracks > 0) {   // barracks: a rank insignia, one chevron per barracks, beside the label
         const by = p.y + (t.capital ? 29 : 14) * k, fill = t.owner < 0 ? INK : LIGHTC[t.owner], n = Math.min(3, t.barracks);
         label('Barracks', p.x + 7 * k, by, Math.round(9.5 * k), 700, fill);
@@ -5199,6 +5224,8 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       left: () => [left(0), left(1)],
       volleys: () => volleyCount,
       walls: () => units.filter(inWall).length,
+      food: (n, v) => { const t = town(n); if (v !== undefined) t.food = v; return t.food; },
+      trained: n => town(n).n,   // a town's soldiers alive
       // the farms: harvests so far, carts on the road, and the cycle of each field (its town's owner, how grown)
       farms: () => ({ harvests, carts: carts.map(c => toScreen(c.x, c.y, 0)), fields: fields.map(f => ({ owner: f.town ? f.town.owner : -1, grow: f.grow ?? 0, cut: f.cut || 0, at: toScreen(f.x, f.y, 0) })) }),   // spearmen standing in a shield wall
       wheeling: () => units.filter(u => !u.dead && u.wheel > 0).length,   // riders wheeling away after a charge
