@@ -258,3 +258,10 @@ The computer playing itself measures balance. It can't tell:
 
 The best way to find those is to watch someone play for the first time without explaining anything, and note
 where they hesitate, what they never touch, and when they look bored.
+
+
+## Martins Thoughts
+
+- Rules and features are only valuable if they are visible
+- All elements of the game should be understandable and should have a role. 
+- Players should know how everything on he screen plays together. How do you get more router ink for example.
