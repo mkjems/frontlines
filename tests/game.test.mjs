@@ -397,6 +397,32 @@ test('6 or more riders in a company ride out at archers and cavalry attacking th
   await page.close();
 });
 
+test('farms grow crops, cut them and cart the harvest to their town; unclaimed towns\' fields lie fallow', async () => {
+  const page = await openGame(undefined, GAME + '&week=900');
+  await t(page, 'start');
+  await page.keyboard.press('Space');
+  const before = await t(page, 'farms');
+  await t(page, 'run', 12);
+  const mid = await t(page, 'farms');
+  const grew = mid.fields.filter((f, i) => f.owner >= 0 && f.grow > before.fields[i].grow).length;
+  assert.ok(grew > 0, `held farms' crops grow (${grew} growing)`);
+  assert.ok(mid.fields.filter(f => f.owner < 0).every(f => f.grow === 0 || f.grow < 0.5), 'unclaimed towns\' crops wither');
+  await t(page, 'run', 40);
+  const after = await t(page, 'farms');
+  assert.ok(after.harvests >= 6, `farms are harvested (${after.harvests} harvests in 52 s)`);
+  assert.ok(after.fields.some(f => f.owner >= 0 && f.grow < 0.5), 'and sown again');
+  let sawCart = false;
+  for (let i = 0; i < 40 && !sawCart; i++) { await t(page, 'run', 0.5); sawCart = (await t(page, 'farms')).carts.length > 0; }
+  assert.ok(sawCart, 'a cart takes the harvest to town');
+  const f = after.fields.find(f => f.owner === 0);
+  await page.mouse.move(f.at.x, f.at.y);
+  await page.keyboard.down('Shift');
+  assert.match(await page.$eval('#inspect', e => e.hidden ? '' : e.textContent), /Farm.*(harvest in \d+s|Being harvested)/, 'Shift over a farm tells where its crops are');
+  await page.keyboard.up('Shift');
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
 test('volleys play out the same in two copies, as two players\' browsers must', async () => {
   const pages = await Promise.all([{ width: 1200, height: 800 }, { width: 390, height: 844, isMobile: true, hasTouch: true }].map(v => openGame(v, RANDOM)));
   const [a, b] = await Promise.all(pages.map(page => page.evaluate((board, match) => {

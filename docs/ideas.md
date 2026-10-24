@@ -4,7 +4,36 @@ Ideas for Frontlines that have been discussed but not built yet, collected on 23
 enough detail to pick it up without the original conversation. The **Decided against** list at the end
 records ideas that were tried or weighed and dropped, so they aren't proposed again.
 
-## Next up: formations for the three troop types
+## Next up: food
+
+Agreed on 24 October 2026. Towns train soldiers for nothing today, so there are many troops and farms only earn
+gold on the side. With food, farms decide how fast towns produce soldiers, which touches every part of what wins
+games: gold buys farms, towns with farms feed the stream of routes (front towns without farms are supplied along
+the chain), and fields become worth guarding with watchtowers. Raids by cavalry (below) would then hurt.
+- Each town has its own food store, filled by the harvests of its own farms.
+- Food is spent on training only: each soldier trained uses some; a town with an empty store trains at a
+  trickle (not nothing, so the front never freezes). Upkeep, food eaten by soldiers alive, may come later.
+- Farms grow food instead of earning gold; gold mines still bring gold. Barracks train faster and so eat faster.
+- The computer plays by the same rules and will need more farms.
+
+Order: the farms' look first, then the food economy.
+1. Farms that live: each farm you hold grows dark green crops from bare soil, ripens, is cut row by row, and
+   its harvest goes along the roads to its town on a cart; then it is sown again. Fields of unclaimed towns
+   lie fallow. (Farms still earn gold in this step.)
+2. Food: harvests fill the town's store, training uses it, the store is shown at each town, and the balance.
+
+**Done (24 October 2026): step 1, farms that live** (`stepFarms`, `syncCrops`, `carts`). Each farm of a held town
+runs its own cycle in the battle itself (so food can ride on it next): crops grow for 32 s (`GROW_T`), are cut
+row by row, back and forth, over 4 s (`CUT_T`) with chaff flying, and the harvest goes to its town on an ox cart
+along the farm's own track (`farmTrack`: a thin curved path painted from each farm to the edge of its town, so you
+see which town it belongs to; `CART_SPEED` 22), where grain tumbles in; then the field is sown again. Fields
+of unclaimed towns wither and lie fallow. The plants are one instanced mesh of small bushy crops in rows (up to
+8000), green while growing, olive when ripe, straw-coloured stubble when cut; the painted furrows follow the same
+rows. Shift over a farm tells when its harvest is due. `__t.farms()` reports harvests, carts and each field.
+- Learned: the first, dark green crops were invisible against the dark soil; they are a mid green now, still
+  well below the soldiers' glowing colours.
+
+## Then: formations for the three troop types
 
 The three types differ mostly in numbers today, so a big army of archers fights much like a big army of
 spearmen. The aim is to give each type something it can only do **as a group**, without breaking the core

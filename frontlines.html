@@ -1232,7 +1232,7 @@ import * as THREE from 'three';
     uid = 0; routeSeq = 0; frameNo = 0; structT = 0; orderQueue = []; orderLog = []; offers = [null, null];   // counters the battle depends on start afresh, so a game never depends on the one before
     alerts = []; tally = { trained: 0, lost: 0, killed: 0, captured: 0, fallen: 0 };
     structs = []; tracers = []; inventory = [0, 1].map(t => ({ ...(t === match.ai ? {} : { tower: 1 }), ...(land.freeBridge ? { bridge: 1 } : {}) })); armed = null; plan = null;
-    gold = [0, 0]; bought = [{}, {}]; coins = []; redBuys = 0;
+    gold = [0, 0]; bought = [{}, {}]; coins = []; redBuys = 0; carts = []; deliveries = []; harvests = 0;
     setHint(land.freeBridge ? 'No bridge crosses the river. Your bridge is in the tray: build it where you want to cross.'
       : 'Drag from a blue town to draw a march route. Your first watchtower is in the tray.');
     startTutorial();
@@ -1404,11 +1404,17 @@ import * as THREE from 'three';
         c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = 'rgba(12,15,13,.4)'; c.lineWidth = 1; c.stroke();
       });
     }
+    // a farm track from each farm to the edge of its town, under the fields, lighter and thinner than the roads
+    c.lineCap = 'round';
+    for (const [col, wdt] of [['#3b3f37', 3.6], ['#4a4b40', 1.6]]) {
+      c.strokeStyle = col; c.lineWidth = wdt;
+      for (const f of fields) { const k = farmTrack(f); c.beginPath(); c.moveTo(k.a.x, k.a.y); c.quadraticCurveTo(k.m.x, k.m.y, k.b.x, k.b.y); c.stroke(); }
+    }
     for (const f of fields) {
       c.save(); c.translate(f.x, f.y); c.rotate(f.rot);
       rr(c, -f.w / 2, -f.h / 2, f.w, f.h, 3); c.fillStyle = f.c; c.fill();
       c.strokeStyle = 'rgba(55,45,25,.3)'; c.lineWidth = 1.4;
-      for (let o = -f.h / 2 + 5; o < f.h / 2 - 2; o += 5) { c.beginPath(); c.moveTo(-f.w / 2 + 3, o); c.lineTo(f.w / 2 - 3, o); c.stroke(); }
+      for (const o of fieldRows(f)) { c.beginPath(); c.moveTo(-f.w / 2 + 3, o); c.lineTo(f.w / 2 - 3, o); c.stroke(); }   // furrows
       c.restore();
     }
     // crags stand on a skirt of broken, stony ground
@@ -1489,6 +1495,46 @@ import * as THREE from 'three';
     for (const f of fields) if (f.town && f.town.owner === team) r += FARM_RATE;
     for (const m of mines) if (m.owner === team) r += MINE_RATE;
     return r;
+  }
+  // ---------- farms: crops grow, are cut, and the harvest is carted to town ----------
+  // Every farm whose town has an owner runs its own cycle: its crops grow for GROW_T seconds from bare soil, are
+  // cut row by row over CUT_T, and the harvest goes to its town on a cart along the farm's own track, at CART_SPEED
+  // (faster where it runs on a road); then it is sown again. A farm whose town has no owner lies fallow, and what grew there withers.
+  // (For now the harvest is a sight only: farms earn gold as before.)
+  const GROW_T = 32, CUT_T = 4, CART_SPEED = 22;
+  let carts = [], deliveries = [], harvests = 0;
+  // the track from a farm to the edge of its town: a gentle curve, its ends a, b and its bend point m
+  function farmTrack(f) {
+    const t = f.town, dx = t.x - f.x, dy = t.y - f.y, d = hypot(dx, dy) || 1, e = (d - townRing(t) - 2) / d, bend = f.rot * 0.25;
+    return { a: { x: f.x, y: f.y }, b: { x: f.x + dx * e, y: f.y + dy * e }, m: { x: f.x + dx * e / 2 - dy * e * bend, y: f.y + dy * e / 2 + dx * e * bend } };
+  }
+  // points every few steps along it, for the carts
+  function trackPts(f) {
+    const { a, m, b } = farmTrack(f), pts = [];
+    for (let i = 0; i <= 12; i++) { const q = i / 12, r = 1 - q; pts.push({ x: r * r * a.x + 2 * r * q * m.x + q * q * b.x, y: r * r * a.y + 2 * r * q * m.y + q * q * b.y }); }
+    return pts;
+  }
+  function stepFarms(dt) {
+    for (const f of fields) {
+      f.grow ??= (f.x * 0.37 + f.y * 0.61) % 1;   // each farm starts at its own point in the cycle
+      if (!f.town || f.town.owner < 0) { f.grow = Math.max(0, f.grow - dt / 8); f.cut = 0; continue; }
+      if (f.grow < 1) { f.grow = Math.min(1, f.grow + dt / GROW_T); continue; }
+      if ((f.cut = (f.cut || 0) + dt / CUT_T) < 1) continue;
+      f.grow = 0; f.cut = 0; harvests++;
+      carts.push({ town: f.town, pts: trackPts(f), i: 0, x: f.x, y: f.y, hx: 0, hy: 1 });
+    }
+    for (const c of carts) {
+      let p = c.pts[c.i];
+      while (c.i < c.pts.length - 1 && (p.x - c.x) ** 2 + (p.y - c.y) ** 2 < 9) p = c.pts[++c.i];
+      const dx = p.x - c.x, dy = p.y - c.y, d = hypot(dx, dy) || 1, step = Math.min(d, CART_SPEED * (onRoad(c.x, c.y) ? ROAD_SPEED : 1) * dt);
+      c.x += dx / d * step; c.y += dy / d * step;
+      if (d > 0.5) { c.hx = dx / d; c.hy = dy / d; }
+      const t = c.town;
+      if ((t.x - c.x) ** 2 + (t.y - c.y) ** 2 < (townRing(t) + 4) ** 2) { c.done = true; deliveries.push({ x: c.x, y: c.y, town: t, t: 0 }); }
+    }
+    carts = carts.filter(c => !c.done);
+    for (const v of deliveries) v.t += dt;
+    deliveries = deliveries.filter(v => v.t < 1);
   }
   function stepEconomy(dt) {
     for (const f of fields) if (f.town && f.town.owner >= 0) earn(f, FARM_RATE, dt, f.town.owner);
@@ -2474,6 +2520,7 @@ import * as THREE from 'three';
       clock: hash([time, week, weekT]),
       towns: hash(towns.flatMap(t => [t.name, t.owner, t.hold, t.kind, t.barracks || 0, t.spawnT])),
       units: hash(units.flatMap(u => [u.team, u.kind, u.x, u.y, u.hp])),
+      farms: hash(fields.flatMap(f => [f.grow ?? -1, f.cut || 0]).concat(carts.flatMap(c => [c.x, c.y]))),
       economy: hash([...gold, ...ink, ...chargeCd, redBuys, ...stats.train, ...stats.hp, ...inventory.flatMap(i => Object.entries(i).flat())]),
       buildings: hash(structs.flatMap(s => [s.type, s.team, s.x, s.y]).concat(bridges.map(b => b.b))),
       enemyPlan: hash(plan ? [plan.phase, plan.target.name, plan.main ? plan.main.b : -1, plan.decoy ? plan.decoy.b : -1] : []),
@@ -2612,6 +2659,7 @@ import * as THREE from 'three';
     if (scars.length && time - scars[0].born > 30) scars = scars.filter(sc => time - sc.born < 30);
     stepTerritory(dt);
     stepEconomy(dt);
+    stepFarms(dt);
     if (state === 'play') stepCoach(dt);
     alerts = alerts.filter(a => a.t < 6);
     for (let i = 0; i < 2; i++) chargeCd[i] = Math.max(0, chargeCd[i] - dt);
@@ -3216,7 +3264,9 @@ import * as THREE from 'three';
     }
     for (const f of fields) if (inField(f, x, y)) {
       const o = f.town ? f.town.owner : -1;
-      return { title: 'Farm', own: OWN(o), lines: [f.town ? `Belongs to ${f.town.name}.` : '', o === 0 ? `+${Math.round(FARM_RATE * WEEK)} gold a week while you hold ${f.town.name}.` : o === 1 ? `Pays the enemy. Take ${f.town.name} to make it yours.` : `Fallow. Capture ${f.town.name} to work it.`].filter(Boolean) };
+      const g = f.grow ?? 0, crop = o < 0 ? 'Lying fallow.' : g >= 1 ? 'Being harvested: the cart takes it to town.'
+        : `Crops ${g < 0.6 ? 'growing' : 'ripening'}: harvest in ${Math.ceil((1 - g) * GROW_T)}s.`;
+      return { title: 'Farm', own: OWN(o), lines: [f.town ? `Belongs to ${f.town.name}.` : '', crop, o === 0 ? `+${Math.round(FARM_RATE * WEEK)} gold a week while you hold ${f.town.name}.` : o === 1 ? `Pays the enemy. Take ${f.town.name} to make it yours.` : `Fallow. Capture ${f.town.name} to work it.`].filter(Boolean) };
     }
     for (const c of crags) if (Math.hypot(c.x - x, c.y - y) < c.r + 6) return { title: 'Crag', lines: ['Sheer rock: no army can cross it. Soldiers march around.'] };
     const band = bandAt(x, y);
@@ -3642,6 +3692,7 @@ import * as THREE from 'three';
     GEO.trunk = new THREE.CylinderGeometry(0.6, 0.9, 1, 6).translate(0, 0.5, 0);
     GEO.rock = new THREE.DodecahedronGeometry(1, 0);
     GEO.nugget = new THREE.OctahedronGeometry(1, 0);
+    GEO.wheel = new THREE.CylinderGeometry(1, 1, 1, 12).rotateZ(Math.PI / 2);   // centred, turning about x
     GEO.unit = [
       new THREE.ConeGeometry(4.2, 8.6, 3).translate(0, 4.3, 0),           // spearmen: a triangle from above
       new THREE.CapsuleGeometry(3, 3, 3, 10).translate(0, 4.5, 0),         // archers: a circle
@@ -3971,13 +4022,19 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     world.add(instanced(GEO.pine, mat('#ffffff'), pines, (t, d, c) => { d.position.set(t.x, groundAt(t.x, t.y) + t.r * 0.45, t.y); d.scale.set(t.r * 0.95, t.r * 1.7, t.r * 0.95); tint(c, '#38513a', 0.03); }));
     world.add(instanced(GEO.pine, mat('#ffffff'), pines, (t, d, c) => { d.position.set(t.x, groundAt(t.x, t.y) + t.r * 1.45, t.y); d.scale.set(t.r * 0.68, t.r * 1.45, t.r * 0.68); tint(c, '#405a40', 0.03); }));
     clouds = Array.from({ length: 5 }, () => ({ x: rand(0, W + 600), y: rand(0, H), r: rand(120, 230), v: rand(6, 11) }));
-    // crop rows on the fields, and low bushes dotted about the open country
-    const rows = [];
-    for (const f of fields) for (let o = -f.h / 2 + 5; o < f.h / 2 - 2; o += 5) rows.push({ f, o });
-    world.add(instanced(GEO.box, mat('#ffffff'), rows, ({ f, o }, d, c) => {
-      d.position.set(f.x - o * Math.sin(f.rot), groundAt(f.x, f.y), f.y + o * Math.cos(f.rot)); d.rotation.set(0, -f.rot, 0); d.scale.set(f.w - 7, 1.3, 2.2);
-      tint(c, f.c === '#4d4a3c' ? '#57533f' : '#434c39', 0.03);
-    }));
+    // the plants on the fields, row by row (they grow and are cut in sync3D), and low bushes about the open country
+    plants = [];
+    for (const f of fields) {
+      const rows = fieldRows(f);
+      rows.forEach((o, r) => {
+        for (let a = -f.w / 2 + 4; a <= f.w / 2 - 4; a += 2.5) {
+          const p = fieldPoint(f, a + rand(-0.5, 0.5), o + rand(-0.6, 0.6));
+          // u: how far along its row the reapers come to it; they go back and forth, a row at a time
+          plants.push({ f, r, u: (r % 2 ? f.w / 2 - 4 - a : a + f.w / 2 - 4) / (f.w - 8), x: p.x, z: p.y, y: groundAt(p.x, p.y), s: rand(0.8, 1.2), ry: rand(0, 6) });
+        }
+      });
+      f.rows = rows.length;
+    }
     const bushes = [];
     for (let tries = 0; tries < 900 && bushes.length < (land.bushes ?? 90); tries++) {
       const x = rand(15, W - 15), y = rand(15, H - 15);
@@ -4152,6 +4209,14 @@ vec3 noised(vec2 p) {   // value noise, and its slope
             arrows.push({ x0: a.x0, y0: a.y0, h0: surfaceAt(a.x0, a.y0) + 6, x1: a.x, y1: a.y, h1: surfaceAt(a.x, a.y) + 1,
               L, arc: 0.45 + 22 / Math.max(L, 30), t: -late, dur: v.t - late, stick: fxRand(2, 3.5), s: 1.6, team: v.team });
           }
+        }
+        // chaff flying where a field is being cut, and grain tumbling into the town where a harvest arrives
+        if (dt > 0) for (const f of fields) if (f.grow >= 1 && f.cut > 0 && Math.random() < dt * 12) { const p = reaping(f); emit('kick', p.x, p.y, groundAt(p.x, p.y) + 2, 1, '#a8955f'); }
+        for (const v of deliveries) {
+          if (seen.has(v)) continue;
+          seen.add(v);
+          emit('spark', v.town.x, v.town.y, groundAt(v.town.x, v.town.y) + keepH(v.town) * 0.6, 8, '#7fb85a');
+          emit('dust', v.x, v.y, groundAt(v.x, v.y), 2);
         }
         // smouldering towns and cavalry dust
         for (const t of towns) if (t.smokeUntil > nowS && Math.random() < dt * 16) {
@@ -4432,6 +4497,68 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     }
     for (const [r, b] of banners) if (!seen.has(r)) { b.visible = false; banners.delete(r); spareBanners[b.userData.team].push(b); }
   }
+  // ---- farms: the crops on the fields, and the carts taking harvests to town ----
+  // A plant sprouts, grows dark green and ripens to olive as its farm's cycle runs; when the reapers' sweep passes
+  // it, it is cut to stubble. On fallow fields the crops wither away.
+  let plants = [], cropMesh = null;
+  const cartG = new Map(), CROP = { young: new THREE.Color('#6aa64c'), full: new THREE.Color('#4e8f3c'), ripe: new THREE.Color('#9c9a45'),
+    stubble: new THREE.Color('#8a7a52'), dry: new THREE.Color('#6a6448') }, cropC = new THREE.Color();
+  const smooth01 = (a, b, v) => { const k = clamp((v - a) / (b - a), 0, 1); return k * k * (3 - 2 * k); };
+  function fieldRows(f) { const rows = []; for (let o = -f.h / 2 + 3.5; o < f.h / 2 - 2; o += 3.6) rows.push(o); return rows; }
+  function fieldPoint(f, a, o) { return { x: f.x + a * Math.cos(f.rot) - o * Math.sin(f.rot), y: f.y + a * Math.sin(f.rot) + o * Math.cos(f.rot) }; }
+  // where the reapers are on a field being cut
+  function reaping(f) {
+    const k = f.cut * f.rows, r = Math.min(f.rows - 1, Math.floor(k)), u = k - r, a = (r % 2 ? 1 - u : u) * (f.w - 8) - (f.w - 8) / 2;
+    return fieldPoint(f, a, fieldRows(f)[r]);
+  }
+  function syncCrops() {
+    if (!cropMesh) {
+      cropMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0).translate(0, 1, 0), mat('#ffffff', { roughness: 0.9 }), 8000);
+      cropMesh.receiveShadow = true; cropMesh.frustumCulled = false; scene.add(cropMesh);
+    }
+    let n = 0;
+    for (const p of plants) {
+      if (n >= 8000) break;
+      const f = p.f, g = f.grow ?? 0, fallow = !f.town || f.town.owner < 0;
+      let h = 2.4 * smooth01(0.04, 0.7, g), w = 0.4 + 1.15 * smooth01(0, 0.6, g);
+      if (fallow) cropC.copy(CROP.dry);
+      else if (g < 0.6) cropC.copy(CROP.young).lerp(CROP.full, smooth01(0.1, 0.6, g));
+      else cropC.copy(CROP.full).lerp(CROP.ripe, smooth01(0.75, 1, g));
+      if (g >= 1 && clamp(f.cut * f.rows - p.r, 0, 1) > p.u) { h = 0.25; w = 0.9; cropC.copy(CROP.stubble); }   // cut
+      if (h < 0.05) continue;
+      dummy.position.set(p.x, p.y, p.z); dummy.rotation.set(0, p.ry, 0); dummy.scale.set(w * p.s, h * p.s, w * p.s);
+      dummy.updateMatrix(); cropMesh.setMatrixAt(n, dummy.matrix); cropMesh.setColorAt(n, cropC); n++;
+    }
+    cropMesh.count = n; cropMesh.instanceMatrix.needsUpdate = true; if (cropMesh.instanceColor) cropMesh.instanceColor.needsUpdate = true;
+  }
+  // a little ox cart, facing +z: the ox in front, the cart behind it loaded with green bundles of the harvest,
+  // the same green as the crops, glowing a little so they catch the eye
+  const CART_WOOD = '#a08a68', CART_DARK = '#7f6b50', HARVEST = { emissive: '#1e3d12', emissiveIntensity: 0.6, roughness: 0.5 };
+  function cartModel() {
+    const g = new THREE.Group(), wheels = [];
+    put(g, GEO.box, mat(CART_WOOD), 0, 1.6, -2, 4.4, 1, 6.5);
+    for (const e of [-1, 1]) { put(g, GEO.box, mat(CART_DARK), e * 2.1, 2.6, -2, 0.4, 1.2, 6.5); wheels.push(put(g, GEO.wheel, mat(CART_DARK), e * 2.6, 1.6, -2.2, 0.7, 1.6, 1.6)); }
+    for (const [x, z] of [[-1, -3.6], [1, -3.4], [0, -1.6], [-0.9, 0], [0.9, -0.2]]) put(g, GEO.box, mat('#6aa64c', HARVEST), x, 2.6, z, 1.7, 1.6, 1.8);
+    put(g, GEO.box, mat(CART_DARK), 0, 1.8, 2.4, 0.4, 0.4, 3);     // the pole
+    put(g, GEO.box, mat('#8a7155'), 0, 1.6, 5.4, 2.2, 2.4, 4.4);   // the ox
+    put(g, GEO.box, mat('#7a6248'), 0, 2.6, 8, 1.4, 1.5, 1.6);
+    g.userData.wheels = wheels;
+    g.scale.setScalar(1.7);
+    dyn.add(g);
+    return g;
+  }
+  function syncCarts() {
+    const live = new Set(carts);
+    for (const [c, g] of cartG) if (!live.has(c)) { dyn.remove(g); cartG.delete(c); }
+    for (const c of carts) {
+      let g = cartG.get(c);
+      if (!g) { g = cartModel(); cartG.set(c, g); g.position.set(c.x, surfaceAt(c.x, c.y), c.y); g.rotation.y = Math.atan2(c.hx, c.hy); }
+      const moved = Math.hypot(c.x - g.position.x, c.y - g.position.z);
+      g.position.set(c.x, surfaceAt(c.x, c.y), c.y);
+      for (const w of g.userData.wheels) w.rotation.x += moved / 2.7;
+      let d = Math.atan2(c.hx, c.hy) - g.rotation.y; d -= Math.round(d / (Math.PI * 2)) * Math.PI * 2; g.rotation.y += d * 0.15;
+    }
+  }
   function sync3D(nowS) {
     syncPlaceGhost(nowS);
     syncMap(townG, towns, t => { const [s, f] = houseCounts(t); return `${t.owner}|${t.barracks}#${s}|${f}`; }, t => buildTown(t, ...houseCounts(t)), nowS);
@@ -4479,6 +4606,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     unitMeshes.forEach((im, k) => { im.count = cnt[k]; im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true; });
     unitOutlines.forEach((im, k) => { im.count = cnt[k]; im.instanceMatrix.needsUpdate = true; });
     syncBanners(nowS);
+    syncCrops(); syncCarts();
     WATER_U.uTime.value = nowS;
   }
 
@@ -5070,7 +5198,9 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       company: (team, kinds, n, dx, dy) => { const at = { x: staged.x + dx, y: staged.y + dy }; side(team, kinds, n, at, at); },
       left: () => [left(0), left(1)],
       volleys: () => volleyCount,
-      walls: () => units.filter(inWall).length,   // spearmen standing in a shield wall
+      walls: () => units.filter(inWall).length,
+      // the farms: harvests so far, carts on the road, and the cycle of each field (its town's owner, how grown)
+      farms: () => ({ harvests, carts: carts.map(c => toScreen(c.x, c.y, 0)), fields: fields.map(f => ({ owner: f.town ? f.town.owner : -1, grow: f.grow ?? 0, cut: f.cut || 0, at: toScreen(f.x, f.y, 0) })) }),   // spearmen standing in a shield wall
       wheeling: () => units.filter(u => !u.dead && u.wheel > 0).length,   // riders wheeling away after a charge
       riding: () => units.filter(u => !u.dead && u.sally).length,   // riders riding out from their company
       capture: (n, team) => { capture(town(n), team); return town(n).owner; },
