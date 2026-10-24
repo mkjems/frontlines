@@ -548,6 +548,7 @@
         <li><span class="k">Archers ●</span> shoot from range, fragile up close. Beat spearmen.</li>
         <li><span class="k">Cavalry ■</span> fast, triple charge damage, train slowly. Beat archers.</li>
         <li><span class="k">Companies</span>: 6 or more gathered together form up under a banner, facing the enemy: spearmen in front, archers behind, cavalry on the wings. When any of them fights, they all join in.</li>
+        <li><span class="k">Volleys</span>: a company with 8 or more archers shoots together every 4 s, a rain of arrows on the thickest crowd of enemies, far beyond one archer's reach. Close-packed blocks suffer most; charging cavalry mostly outrun it.</li>
       </ul>
       <h3 style="margin-top:12px">Combat</h3><ul>
         <li>Each nearby ally adds 6% damage, up to +60%.</li>
@@ -623,7 +624,7 @@ import * as THREE from 'three';
   // ---------- sound: everything is synthesized, no audio files ----------
   const Sound = (() => {
     let ac = null, master = null, noiseBuf = null, rumbleGain = null, muted = false, lastArrow = 0, lastHit = 0, lastClick = 0;
-    let bedGain = null, nextBeat = 0, beat = 0, nextBird = 0, lastHorn = -99;
+    let bedGain = null, nextBeat = 0, beat = 0, nextBird = 0, lastHorn = -99, lastVolley = -99;
     try { muted = localStorage.getItem('frontlines-muted') === '1'; } catch (e) {}
     function init() {
       if (ac) { if (!muted && ac.state === 'suspended') ac.resume(); return; }
@@ -705,6 +706,19 @@ import * as THREE from 'three';
         for (let i = 0; i < 8; i++) noise(0.06, { freq: 160, q: 1.2, vol: 0.12, delay: 0.15 + i * 0.11 });
       },
       arrow() { if (now() - lastArrow > 90) { lastArrow = now(); noise(0.09, { freq: 2400, q: 2, vol: 0.18 }); tone(420, 0.1, { type: 'triangle', vol: 0.12, glide: 180 }); } },
+      // a volley: the bows thrum together, the arrows whistle up and over, then patter down as they land
+      volley(dur) {
+        if (!ac || muted || ac.currentTime - lastVolley < 0.5) return;
+        lastVolley = ac.currentTime;
+        for (let i = 0; i < 5; i++) noise(0.08, { freq: 240 + i * 45, q: 3, vol: 0.12, delay: i * 0.035 });
+        const t0 = ac.currentTime + 0.08, src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+        src.buffer = noiseBuf; f.type = 'bandpass'; f.Q.value = 6;
+        f.frequency.setValueAtTime(1500, t0); f.frequency.exponentialRampToValueAtTime(3000, t0 + dur * 0.45); f.frequency.exponentialRampToValueAtTime(1300, t0 + dur);
+        g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.45, t0 + dur * 0.5); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        src.connect(f); f.connect(g); g.connect(master); src.start(t0, Math.random()); src.stop(t0 + dur + 0.05);
+        tone(2300, dur * 0.8, { vol: 0.02, glide: 1100, delay: dur * 0.2 + 0.08, attack: 0.2 });
+        for (let i = 0; i < 10; i++) noise(0.04, { freq: fxRand(700, 1600), q: 3, vol: 0.09, delay: dur + 0.05 + fxRand(0, 0.3) });
+      },
       hit() { if (now() - lastHit > 70) { lastHit = now(); noise(0.05, { freq: 600 + Math.random() * 500, q: 4, vol: 0.12 }); } },
       alarm() { tone(784, 0.14, { type: 'square', vol: 0.035 }); tone(784, 0.14, { type: 'square', vol: 0.035, delay: 0.22 }); },
       week() { tone(1047, 1.4, { vol: 0.08 }); tone(1568, 1.4, { vol: 0.04 }); },
@@ -784,7 +798,7 @@ import * as THREE from 'three';
 
   // ---------- world ----------
   let W, H, P, LA, LB, dpr = 1, bg = null;
-  let lines = [], bridges, towns, units, companies = [], deaths, puffs, trees, patches;
+  let lines = [], bridges, towns, units, companies = [], volleys = [], deaths, puffs, trees, patches;
   let scars = [], waves = [], ripples = [], fields = [], hills = [], roads = [], rocks = [], crags = [], marshes = [], compass = { x: 0, y: 0 };
   // me: the team this browser plays. Gold, purchases, tray items, extra route ink and Charge are kept per team.
   let me = 0, state = 'intro', paused = false, speed = 1, time = 0, week = 1, weekT = 0, aiT = 6, ink = [0, 0];
@@ -1191,7 +1205,7 @@ import * as THREE from 'three';
 
     buildRoadGrid();
     buildForestGrid();
-    units = []; companies = []; deaths = []; puffs = []; scars = []; waves = [];
+    units = []; companies = []; volleys = []; volleyCount = 0; deaths = []; puffs = []; scars = []; waves = [];
     ripples = Array.from({ length: 46 }, () => ({ b: rand(0, LB + 60), off: rand(-0.7, 0.7), len: rand(10, 26), sp: rand(5, 11) }));
     for (const t of towns) {
       // house plots around the town, leaving the space under it free for the name
@@ -1869,6 +1883,81 @@ import * as THREE from 'three';
     aiT = Math.min(aiT, 0.5);
   }
 
+  // Volleys: a company with VOLLEY_MIN or more archers also shoots together. Every VOLLEY_T seconds its archers (those not fighting hand to hand) each loose two
+  // arrows in a high arc at the thickest crowd of enemies within VOLLEY_R of them, further than standing soldiers
+  // go out to fight, so an army is hit before it arrives. The arrows scatter over a circle and an arrow hurts the
+  // enemy it lands on, so close-packed blocks suffer most and stragglers are rarely hit. Woods halve the damage,
+  // as for any arrow.
+  const VOLLEY_MIN = 8, VOLLEY_T = 4, VOLLEY_R = 170, VOLLEY_SPREAD = 18, VOLLEY_HIT = 4.5;
+  let volleyCount = 0;
+  // the thickest crowd of enemies within R of (x, y): the middle of the enemies close round the one with most
+  // others near it, and how fast they're going. Enemies already at close quarters with the company's side are
+  // left alone: a volley is for an army that's coming or standing off, not for a melee.
+  // is any soldier of the team within R (up to a cell) of (x, y)?
+  function sideNear(team, x, y, R) {
+    const cx = x / CELL | 0, cy = y / CELL | 0;
+    for (let j = Math.max(0, cy - 1); j <= Math.min(grows - 1, cy + 1); j++)
+      for (let i = Math.max(0, cx - 1); i <= Math.min(gcols - 1, cx + 1); i++)
+        for (const o of grid[i + j * gcols]) if (o.team === team && !o.dead && (o.x - x) ** 2 + (o.y - y) ** 2 < R * R) return true;
+    return false;
+  }
+  function thickest(x, y, team, R) {
+    const found = [], cx = x / CELL | 0, cy = y / CELL | 0, k = Math.ceil(R / CELL);
+    for (let j = Math.max(0, cy - k); j <= Math.min(grows - 1, cy + k); j++)
+      for (let i = Math.max(0, cx - k); i <= Math.min(gcols - 1, cx + k); i++)
+        for (const o of grid[i + j * gcols]) if (o.team !== team && !o.dead && (o.x - x) ** 2 + (o.y - y) ** 2 < R * R && !sideNear(team, o.x, o.y, 15)) found.push(o);
+    if (!found.length) return null;
+    let best = null, bn = 0, bd = 0;
+    for (let i = 0; i < found.length; i += Math.ceil(found.length / 40)) {
+      const c = found[i], d = (c.x - x) ** 2 + (c.y - y) ** 2;
+      let n = 0;
+      for (const o of found) if ((o.x - c.x) ** 2 + (o.y - c.y) ** 2 < 24 * 24) n++;
+      if (n > bn || (n === bn && d < bd)) { best = c; bn = n; bd = d; }
+    }
+    const near = found.filter(o => (o.x - best.x) ** 2 + (o.y - best.y) ** 2 < 24 * 24), m = near.length;
+    const sum = (f) => near.reduce((s, o) => s + f(o), 0) / m;
+    return { x: sum(o => o.x), y: sum(o => o.y), vx: sum(o => o.vx), vy: sum(o => o.vy), n: m };
+  }
+  function stepVolleys(dt) {
+    for (const co of companies) {
+      if (co.n[1] < VOLLEY_MIN) continue;
+      const r = co.route;
+      if (r.vt === undefined) r.vt = rand(0.5, 1.5);   // a new company's first volley comes soon
+      if ((r.vt -= dt) > 0) continue;
+      r.vt = 0.25;   // until there's something to shoot at
+      const shooters = co.units.filter(u => u.kind === 1 && !u.dead && !(u.enemy && (u.enemy.x - u.x) ** 2 + (u.enemy.y - u.y) ** 2 < 100));
+      if (shooters.length < VOLLEY_MIN) continue;
+      let x = 0, y = 0;
+      for (const u of shooters) { x += u.x; y += u.y; }
+      x /= shooters.length; y /= shooters.length;
+      const c = thickest(x, y, co.team, VOLLEY_R + 10 * hillLevel(x, y));
+      if (!c) continue;
+      r.vt = VOLLEY_T + rand(-0.3, 0.3);
+      // they aim half as far ahead as the crowd will go before the arrows come down: a standing army takes the
+      // whole volley, a marching one takes it in its rear ranks, and charging cavalry mostly outrun it
+      const dur = 1 + hypot(c.x - x, c.y - y) / 180, ax = c.x + c.vx * dur * 0.5, ay = c.y + c.vy * dur * 0.5;
+      const v = { team: co.team, t: dur, dur, arrows: [] };
+      for (const u of shooters) {
+        u.cd = Math.max(u.cd, rand(0.9, 1.25));   // the volley takes the place of its next shot
+        for (let i = 0; i < 2; i++) {
+          const a = rand(0, Math.PI * 2), d = VOLLEY_SPREAD * Math.sqrt(rng());
+          v.arrows.push({ x0: u.x, y0: u.y, x: ax + cos(a) * d, y: ay + sin(a) * d });
+        }
+      }
+      volleys.push(v); volleyCount++;
+    }
+    for (const v of volleys) {
+      if ((v.t -= dt) > 0) continue;
+      for (const a of v.arrows) {
+        const e = nearestEnemy(a.x, a.y, v.team, VOLLEY_HIT, false);
+        if (!e) continue;
+        e.hp -= K_MULT[1][e.kind] * (inForest(e.x, e.y) ? 0.5 : 1) * defense(e); e.flash = 0.12;
+        if (e.hp <= 0) kill(e);
+      }
+    }
+    volleys = volleys.filter(v => v.t > 0);
+  }
+
   function updateUnits(dt) {
     frameNo++;
     for (const t of towns) t.n = 0;
@@ -2461,6 +2550,8 @@ import * as THREE from 'three';
     buildGrid();
     if (frameNo % 20 === 0) formCompanies();
     updateUnits(dt);
+    if (!running()) return;
+    stepVolleys(dt);
     if (!running()) return;
     updateTowns(dt);
     updateStructs(dt);
@@ -3063,6 +3154,7 @@ import * as THREE from 'three';
       const where = [['in front', 'in close ranks'], ['behind', 'in loose lines'], ['on the wings', 'in a wedge']];
       const parts = [0, 1, 2].filter(k => n[k]).map(k => `${n[k]} ${KIND[k].toLowerCase()} ${where[k][one >= 0 ? 1 : 0]}`);
       const lines = [`${total} soldiers in formation: ${parts.join(', ')}.`, 'It faces the nearest enemy, or else the way it marched.'];
+      if (n[1] >= VOLLEY_MIN) lines.push(`Its archers shoot a volley every ${VOLLEY_T} s at the thickest crowd of enemies up to ${VOLLEY_R} away.`);
       if (co.team === me) lines.push('Drag from it to send it on as one army.');
       return { title: one >= 0 ? `${['Spear', 'Archer', 'Cavalry'][one]} company` : 'Company', own: OWN(co.team), lines };
     }
@@ -3938,7 +4030,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
 
   // ---- battle effects: dust, smoke and sparks as soft particles; arrows as real 3D shafts ----
   const FX = (() => {
-    const MAX = 2600, parts = [], arrows = [], seen = new WeakSet(), srgb = new THREE.Color();
+    const MAX = 2600, MAXA = 1600, parts = [], arrows = [], seen = new WeakSet(), srgb = new THREE.Color();
     let points = null, geo = null, arrowMesh = null, shake = 0;
     const pos = new Float32Array(MAX * 3), tint = new Float32Array(MAX * 3), size = new Float32Array(MAX), alpha = new Float32Array(MAX);
     const KIND = {
@@ -3965,9 +4057,9 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       points.frustumCulled = false; points.renderOrder = 5;
       scene.add(points);
       const shaft = new THREE.BoxGeometry(0.5, 0.5, 7);
-      arrowMesh = new THREE.InstancedMesh(shaft, mat('#ffffff', { roughness: 0.6 }), 400);
+      arrowMesh = new THREE.InstancedMesh(shaft, mat('#ffffff', { roughness: 0.6 }), MAXA);
       arrowMesh.frustumCulled = false; arrowMesh.castShadow = true; arrowMesh.count = 0;
-      for (let i = 0; i < 400; i++) arrowMesh.setColorAt(i, WHITE);
+      for (let i = 0; i < MAXA; i++) arrowMesh.setColorAt(i, WHITE);
       scene.add(arrowMesh);
     }
     function emit(kind, x, y, h, n = 1, col) {
@@ -3997,10 +4089,24 @@ vec3 noised(vec2 p) {   // value noise, and its slope
         for (const tr of tracers) {
           if (seen.has(tr)) continue;
           seen.add(tr);
-          if (arrows.length >= 400) continue;
+          if (arrows.length >= MAXA) continue;
           const L = Math.hypot(tr.x1 - tr.x0, tr.y1 - tr.y0), tower = structs.some(s => s.x === tr.x0 && s.y === tr.y0);
           arrows.push({ x0: tr.x0, y0: tr.y0, h0: surfaceAt(tr.x0, tr.y0) + (tower ? 27 : 6), x1: tr.x1, y1: tr.y1, h1: surfaceAt(tr.x1, tr.y1) + 3,
-            L, t: 0, dur: 0.22 + L / 520, team: tr.team });
+            L, arc: 0.2, t: 0, dur: 0.22 + L / 520, stick: 0, s: 1, team: tr.team });
+        }
+        // a volley: every arrow climbs high and comes down where the battle says it lands, a few let go a moment
+        // late, and those that land stay stuck in the ground for a while
+        for (const v of volleys) {
+          if (seen.has(v)) continue;
+          seen.add(v);
+          const sp = toScreen(v.arrows[0].x, v.arrows[0].y, 0);   // the enemy's are heard only on screen
+          if (v.team === me || (sp.x > 0 && sp.y > 0 && sp.x < innerWidth && sp.y < innerHeight)) Sound.volley(v.dur);
+          for (const a of v.arrows) {
+            if (arrows.length >= MAXA) break;
+            const L = Math.hypot(a.x - a.x0, a.y - a.y0), late = fxRand(0, 0.15);
+            arrows.push({ x0: a.x0, y0: a.y0, h0: surfaceAt(a.x0, a.y0) + 6, x1: a.x, y1: a.y, h1: surfaceAt(a.x, a.y) + 1,
+              L, arc: 0.45 + 22 / Math.max(L, 30), t: -late, dur: v.t - late, stick: fxRand(2, 3.5), s: 1.6, team: v.team });
+          }
         }
         // smouldering towns and cavalry dust
         for (const t of towns) if (t.smokeUntil > nowS && Math.random() < dt * 16) {
@@ -4033,11 +4139,16 @@ vec3 noised(vec2 p) {   // value noise, and its slope
         for (let i = arrows.length - 1; i >= 0; i--) {
           const a = arrows[i];
           a.t += dt;
+          if (a.t < 0) continue;   // not let go yet
           const u = a.t / a.dur;
-          if (u >= 1) { arrows[i] = arrows[arrows.length - 1]; arrows.pop(); continue; }
-          const at = q => [lerp(a.x0, a.x1, q), lerp(a.h0, a.h1, q) + Math.sin(Math.PI * q) * a.L * 0.2, lerp(a.y0, a.y1, q)];
-          const [x, h, z] = at(u), [x2, h2, z2] = at(Math.min(1, u + 0.02));
-          dummy.position.set(x, h, z); dummy.scale.set(1, 1, 1); dummy.lookAt(x2, h2, z2); dummy.updateMatrix();
+          if (u >= 1 + a.stick / a.dur) { arrows[i] = arrows[arrows.length - 1]; arrows.pop(); continue; }
+          const at = q => [lerp(a.x0, a.x1, q), lerp(a.h0, a.h1, q) + Math.sin(Math.PI * q) * a.L * a.arc, lerp(a.y0, a.y1, q)];
+          // in flight it points along its path; once down it stays as it struck, sunk a little, shrinking away at the end
+          const q = Math.min(u, 1), [x, h, z] = at(q), [x2, h2, z2] = q < 1 ? at(Math.min(1, q + 0.02)) : at(1.02);
+          const left = (1 - u) * a.dur + a.stick, sc = a.s * (u < 1 ? 1 : Math.min(1, left / 0.4));
+          dummy.position.set(x, h, z); dummy.scale.set(sc, sc, sc); dummy.lookAt(x2, h2, z2);
+          if (u >= 1) dummy.translateZ(2.2);
+          dummy.updateMatrix();
           arrowMesh.setMatrixAt(m, dummy.matrix);
           arrowMesh.setColorAt(m, a.team ? ARROWC[1] : ARROWC[0]);
           m++;
@@ -4874,6 +4985,25 @@ vec3 noised(vec2 p) {   // value noise, and its slope
   // ---------- test hook: only with ?test in the URL; used by the browser tests in tests/ ----------
   if (new URLSearchParams(location.search).has('test')) {
     const town = n => towns.find(t => t.name === n);
+    // for staged fights: clears the board of soldiers, buildings and owners, and finds open flat ground away from
+    // towns, rivers, woods and hills (null if there's none)
+    const stage = () => {
+      for (const t of towns) t.owner = -1;
+      units = []; structs = []; companies = []; volleys = [];
+      const open = (x, y) => !blockedAt(x, y) && !inForest(x, y) && !hillLevel(x, y) && !inMarsh(x, y) && riverGap(x, y) > 100;
+      for (let i = 0; i < 4000; i++) {
+        const x = rand(150, W - 150), y = rand(150, H - 150);
+        if ([-200, -120, -60, 0, 60, 120, 200].every(dx => open(x + dx, y)) && towns.every(t => Math.hypot(t.x - x, t.y - y) > 250)) return { x, y };
+      }
+      return null;
+    };
+    // n soldiers of a side at a spot, heading for goal (standing there if it's the same spot); kinds dealt round in turn
+    const side = (team, kinds, n, at, goal) => {
+      const route = { id: ++routeSeq, pts: [goal], target: null, len: 0 };
+      for (let i = 0; i < n; i++) units.push({ x: at.x + rand(-16, 16), y: at.y + rand(-24, 24), vx: 0, vy: 0, team, kind: kinds[i % kinds.length], hp: K_HP[kinds[i % kinds.length]], boost: 0,
+        town: null, route, rid: route.id, ri: 0, arrived: at === goal, cd: 0, flash: 0, enemy: null, calm: 0, ox: rand(-16, 16), oy: rand(-24, 24), id: uid++, dead: false });
+    };
+    const left = team => units.filter(u => !u.dead && u.team === team).length;
     window.__t = {
       start: () => { $('startBtn').click(); endTutorial(); },
       pos: (n, dx = 0, dy = 0) => { const t = town(n); return toScreen(t.x + dx, t.y + dy, 0); },
@@ -4898,26 +5028,24 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       // na blue soldiers of kind ka against nb red of kind kb, alone on open flat ground: blue attacks red where it
       // stands, or (meet) both march to the middle. Fought to the end; returns the survivors of each side.
       duel: (ka, na, kb, nb, meet) => {
-        for (const t of towns) t.owner = -1;
-        units = []; structs = [];
-        const open = (x, y) => !blockedAt(x, y) && !inForest(x, y) && !hillLevel(x, y) && !inMarsh(x, y) && riverGap(x, y) > 100;
-        let c = null;
-        for (let i = 0; i < 4000 && !c; i++) {
-          const x = rand(150, W - 150), y = rand(150, H - 150);
-          if ([-200, -120, -60, 0, 60, 120, 200].every(dx => open(x + dx, y)) && towns.every(t => Math.hypot(t.x - x, t.y - y) > 250)) c = { x, y };
-        }
+        const c = stage();
         if (!c) return null;
-        const side = (team, kind, n, at, goal) => {
-          const route = { id: ++routeSeq, pts: [goal], target: null, len: 0 };
-          for (let i = 0; i < n; i++) units.push({ x: at.x + rand(-16, 16), y: at.y + rand(-24, 24), vx: 0, vy: 0, team, kind, hp: K_HP[kind], boost: 0,
-            town: null, route, rid: route.id, ri: 0, arrived: at === goal, cd: 0, flash: 0, enemy: null, calm: 0, ox: rand(-16, 16), oy: rand(-24, 24), id: uid++, dead: false });
-        };
         const L = { x: c.x - 120, y: c.y }, R = { x: c.x + 120, y: c.y };
-        side(0, ka, na, L, meet ? c : R); side(1, kb, nb, R, meet ? c : R);
-        const left = team => units.filter(u => !u.dead && u.team === team).length;
+        side(0, [ka], na, L, meet ? c : R); side(1, [kb], nb, R, meet ? c : R);
         for (let i = 0; i < 60 * 40 && left(0) && left(1); i++) step(STEP);
         return [left(0), left(1)];
       },
+      // two armies standing gap apart on open flat ground, each gathered as if a route had brought it there; their
+      // kinds are dealt round in turn (so [0, 1] is half spearmen, half archers). Returns the screen point between them.
+      standoff: (ka, na, kb, nb, gap) => {
+        const c = stage();
+        if (!c) return null;
+        const L = { x: c.x - gap / 2, y: c.y }, R = { x: c.x + gap / 2, y: c.y };
+        side(0, ka, na, L, L); side(1, kb, nb, R, R);
+        return toScreen(c.x, c.y, 0);
+      },
+      left: () => [left(0), left(1)],
+      volleys: () => volleyCount,
       capture: (n, team) => { capture(town(n), team); return town(n).owner; },
       hitCapital: () => { const c = towns.find(t => t.capital && t.owner === 0), h = c.hold; enterTown(c, { team: 1, dead: false }); return { hold: c.hold, before: h, shake: FX.shakeAmount }; },
       shake: () => FX.shakeAmount,

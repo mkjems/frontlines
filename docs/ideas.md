@@ -30,6 +30,25 @@ banner stands over its middle. Shift over it describes it. `__t.companies()` rep
 - For tuning the next steps: `__t.duel(kindA, nA, kindB, nB, meet)` stages fights on open ground, and the
   defending side forms a company, so formation against formation can be measured.
 
+**Done (24 October 2026): archer volleys** (`stepVolleys`). A company with 8 or more archers (`VOLLEY_MIN`)
+shoots together every 4 s (`VOLLEY_T`) at the thickest crowd of enemies within 170 of its archers
+(`VOLLEY_R`), each archer two arrows in a high arc; the arrows land after 1–2 s, scattered over a circle of 18,
+and each hurts the enemy it lands on (within 4.5), so dense blocks suffer most. Archers keep shooting one by one
+too; a volley takes the place of an archer's next shot. Enemies already at close quarters with the company's
+side aren't aimed at. Arrows that land stay stuck in the ground for a few seconds, and a volley has its own sound.
+`__t.standoff(kindsA, nA, kindsB, nB, gap)` stages two armies standing apart; `__t.volleys()` counts volleys.
+- Learned: the range had to be well beyond the 100 at which standing soldiers go out to fight (130 hardly ever
+  fired), so it's 170 rather than "double an archer's 44".
+- Learned: with perfect aim ahead of the target, one volley on charging cavalry flipped cavalry-attacks-archers
+  (riders won with 8–10 left, then lost 2 maps in 4), because damage spread over every rider makes them die
+  to the next arrows. Volleys now aim only half as far ahead as the crowd will move, so cavalry mostly outrun
+  them, a marching block takes them in its rear ranks, and a standing army takes them all. All duels are back to
+  their old results; spearmen attacking archers now lose by more.
+- Seen in a full game: an archer company parked 150 from an enemy town shells its garrison, and the computer
+  answers by sending troops at it. The computer's own companies fire few volleys, since it rarely stands within
+  170 of the player's armies. Worth watching in real games: whether players can use river banks to shell the
+  computer's armies gathering at bridges.
+
 1. **Archers: volleys.** About 8 or more archers standing together stop shooting one by one and fire
    volleys: every few seconds the whole group looses a swarm of arrows in a high arc at the densest enemy
    cluster in range.

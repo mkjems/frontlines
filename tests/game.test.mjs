@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
-import { race } from './twins.mjs';
+import { race, BOARD, MATCH } from './twins.mjs';
 
 // the tests run on the classic town layout, whose towns have known names and places
 const GAME = new URL('../site/index.html?test&land=valley&layout=classic', import.meta.url).href;
@@ -316,6 +316,40 @@ test('each company keeps its own banner, even when another marches off', async (
   assert.ok(before.some(p => Math.hypot(p.x - after[0].x, p.y - after[0].y) < 5), 'the other banner stays with its own company');
   assert.deepEqual(page.errors, []);
   await page.close();
+});
+
+test('archer companies shoot volleys at an army standing beyond a single archer\'s reach', async () => {
+  const page = await openGame(undefined, new URL('../site/index.html?test&land=open&map=100', import.meta.url).href);
+  await t(page, 'start');
+  await page.keyboard.press('Space');
+  assert.ok(await t(page, 'standoff', [1], 7, [0], 30, 160), 'open ground for the fight');
+  await t(page, 'run', 10);
+  assert.equal(await t(page, 'volleys'), 0, 'seven archers are too few for volleys');
+  await t(page, 'standoff', [1], 16, [0], 30, 160);
+  await t(page, 'run', 10);
+  const [blue, red] = await t(page, 'left');
+  assert.ok(await t(page, 'volleys') >= 2, 'sixteen archers shoot volleys');
+  assert.ok(red <= 26 && blue === 16, `the spearmen, out of reach, lose men and the archers none (${blue} archers, ${red} spearmen left)`);
+  const [co] = (await t(page, 'companies')).filter(c => c.team === 0);
+  await page.mouse.move(co.member.x, co.member.y);
+  await page.keyboard.down('Shift');
+  assert.match(await page.$eval('#inspect', e => e.hidden ? '' : e.textContent), /Archer company.*volley every 4 s/, 'Shift over the company tells of its volleys');
+  await page.keyboard.up('Shift');
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test('volleys play out the same in two copies, as two players\' browsers must', async () => {
+  const pages = await Promise.all([{ width: 1200, height: 800 }, { width: 390, height: 844, isMobile: true, hasTouch: true }].map(v => openGame(v, RANDOM)));
+  const [a, b] = await Promise.all(pages.map(page => page.evaluate((board, match) => {
+    __t.freeze(); __t.board(board); __t.match(match); __t.newMap('open', 100); __t.start();
+    __t.standoff([0, 1], 32, [0, 2], 30, 150);
+    __t.run(20);
+    return { volleys: __t.volleys(), left: __t.left(), parts: __t.snapshot().parts };
+  }, BOARD, MATCH)));
+  assert.ok(a.volleys >= 2, `volleys were shot (${a.volleys})`);
+  assert.deepEqual(a, b);
+  for (const page of pages) { assert.deepEqual(page.errors, []); await page.close(); }
 });
 
 test('battles, captures and attacks on your capital', async () => {
