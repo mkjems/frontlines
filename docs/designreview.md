@@ -24,7 +24,7 @@ sometimes says what should come before it (fix the troop counters before adding 
 | Weekly reinforcement cards | Simplify | Mostly the same five buildings the tray sells. Offer only things gold can't buy. |
 | Gold: farms and mines | Keep, tune | Check that farms pay back before the game ends. |
 | Watchtower, barracks, bridge | Keep | Each has a clear job. |
-| Fort | Cut or replace | No job (already in ideas.md). |
+| Fort | Cut or replace | No job (already in ideas.md). Removed 24 October 2026. |
 | Terrain effects | Simplify | Too many invisible percentages; hills have three separate rules. |
 | The enemy growing stronger each week | Keep, show it | Good pressure, but the player can't see it happen. |
 | The computer redirecting armies already marching | Done | It plays by the player's rules since 24 October. |
@@ -253,7 +253,7 @@ the numbers and in play, cutting it is fine: The Old Forest and Open Plains were
    into numbers, and checks every later change.
 2. **Fix the troop counters** (automatic charge for cavalry only, stronger counter bonuses), measured with 1.
 3. **Remove route ink** and the Surveyors card.
-4. **Remove the fort** (or replace it with a healing post).
+4. **Remove the fort** (or replace it with a healing post). Done 24 October 2026: removed.
 5. **Weekly cards offer only what gold can't buy.**
 6. **Hills: archer range only.** Show the ring around towns.
 7. **Formations**, as planned in ideas.md.

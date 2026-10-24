@@ -113,27 +113,6 @@ There are ten landscapes, random but mirrored layouts with map numbers, and a Cl
   half of River Valley), so difficulty differs from map to map. Worth playing whole campaigns on each.
 - **Watch The Greenwood's performance:** about 2,000 trees, the most the game draws. Thin it if phones struggle.
 
-## The fort needs a real job
-
-From play (23 October 2026) the fort doesn't seem to be of any use, and the code agrees. Its only effect
-is that soldiers of its side inside its 80 px circle take 55% less damage (`defense()`), plus a bit of
-territory tint, the same as a watchtower's. Why that rarely matters:
-- Nothing brings soldiers into it. They fight where routes and armies meet, so you'd have to park a group
-  there on purpose.
-- The enemy doesn't need to go through it: the AI walks to a target town and passes a fort by.
-- Near your own towns soldiers already take 40% less damage, so a fort there only adds 0.6× → 0.45×.
-- The watchtower (40 gold) shoots by itself, needs no soldiers and reaches across the river; the fort
-  costs 60 and does nothing without a garrison.
-- An empty fort changes sides when 8 enemies crowd it, and then protects them at your bridgehead.
-- The wording disagrees: the upgrade card says "half damage", the info box "55% less damage", the
-  Rules sheet "55% tougher".
-
-Lighter options discussed, none chosen yet:
-- **Healing post:** your soldiers inside slowly get hit points back. Nothing heals today, so it becomes the
-  place to pull a worn army back to.
-- **Rally point:** idle soldiers nearby walk into it by themselves, so it's manned and harder to take.
-- **Remove it:** fold the protection into the watchtower, or replace the fort with another building.
-
 ## The enemy
 
 - **Smarter on open maps:** its planning was written around bridges. On Open Border and The Steppe it could
@@ -191,6 +170,12 @@ module-level variables are reassigned across sections (`towns`, `units`, `W`, `H
   decision. The project keeps the one dark board.
 - **Peek on the start screen:** replaced by the three-step start, whose map step shows the board anyway.
 - **Old Forest and Open Plains landscapes:** removed. The Greenwood and The Steppe cover them better.
+- **The fort:** removed on 24 October 2026. Its only effect was 55% less damage for its side's soldiers inside
+  its circle, and nothing brought soldiers there; giving it a real job (a healing post, a rally point that
+  draws idle soldiers in) would have made it another town. Holding ground is now the companies' job: a gathered
+  army forms up and fights as one, and archers volley. On Normal and Easy the computer's free building every few
+  weeks had in fact always been a fort (it came on odd weeks), so it now gets none; on Hard it still gets a
+  watchtower every other week. Its gold buys farms, towers and barracks in turn.
 - **The fort as a gate:** a fort that snaps to the end of a bridge, ford or pass and blocks enemies until
   they break it (hit points), so they must break through or use another crossing. Not to be built in that
   form (23 October 2026).

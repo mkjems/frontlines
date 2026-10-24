@@ -148,7 +148,7 @@ Exit: the determinism test passes reliably; single player plays as before.
       Charge, weekly reward, reinforcement. Orders are queued for a tick and applied inside `step()`.
       The section "orders" in `frontlines.html`. Order types: `route` (a drawn route, a target town or point,
       or none to clear it, with `recall` to send marching soldiers home), `group`, `train`, `charge`, `build`
-      (bridge, barracks, farm, watchtower, fort) and `reward` (the weekly reinforcement). Orders are plain
+      (bridge, barracks, farm, watchtower) and `reward` (the weekly reinforcement). Orders are plain
       data: towns by name, soldiers by id, bridges by index, points as x/y. While the battle stands still
       (paused, or the weekly choice) the player's orders are carried out at once, which gives the same result,
       since no step comes between. `build` checks the player's order again when it's carried out.
