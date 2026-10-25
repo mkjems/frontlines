@@ -2509,8 +2509,19 @@ import * as THREE from 'three';
       };
       box.appendChild(b);
     });
+    if (inHand() || performance.now() - lastPress < 300) upgradeHeld = true; else showUpgrade();
+  }
+  // The week ends on the same step in both browsers, but its dialog waits for what the player has in hand (a route,
+  // drag or pinch, or something from the tray still to place) and for a click just made: the move carries on over
+  // the frozen board, and the dialog opens a moment after it is finished (see frame).
+  let upgradeHeld = false, lastPress = -1e9;
+  const inHand = () => drawing || pan || pinch || armed;
+  const acting = () => state === 'play' || upgradeHeld;
+  function showUpgrade() {
+    upgradeHeld = false;
+    if (state !== 'upgrade') return;
     $('upgrade').hidden = false;
-    box.firstChild.focus();
+    $('choices').firstChild.focus();
   }
 
   // A fingerprint of the game state, part by part. Two copies of the same game (two players' browsers) must
@@ -3134,7 +3145,8 @@ import * as THREE from 'three';
   });
   cvs.addEventListener('pointerdown', e => {
     if (menuTown) closeMenu();
-    if (state !== 'play') return;
+    lastPress = performance.now();
+    if (state !== 'play' && !(upgradeHeld && armed)) return;   // a week just ended: only what's in hand can be placed
     if (e.pointerType === 'touch') {
       touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (touches.size === 2) {   // a second finger turns any drag into a pinch
@@ -4453,7 +4465,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
   }
   function syncPlaceGhost(nowS) {
     const dt = placeGhost ? Math.min(0.1, nowS - placeGhost.t) : 0, kind = armed;
-    if ((kind !== 'barracks' && kind !== 'tower') || !ghost || state !== 'play') { if (placeGhost) { dyn.remove(placeGhost.g); placeGhost = null; } return; }
+    if ((kind !== 'barracks' && kind !== 'tower') || !ghost || !acting()) { if (placeGhost) { dyn.remove(placeGhost.g); placeGhost = null; } return; }
     const t = kind === 'barracks' ? barracksTown(ghost) : null;
     const ok = kind === 'barracks' ? !!t : !placeCheck(me, kind, ghost), team = ok ? me : 1 - me;
     if (!placeGhost || placeGhost.team !== team || placeGhost.kind !== kind) {
@@ -4971,12 +4983,12 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       ctx.fillStyle = lockColor(L); rr(ctx, p.x - w / 2, p.y - 13, w, 24, 12); ctx.fill();
       ctx.fillStyle = '#fff'; ctx.fillText(text, p.x, p.y);
     }
-    if (armed === 'tower' && ghost && state === 'play') {
+    if (armed === 'tower' && ghost && acting()) {
       const R = 130, p = toScreen(ghost.x, ghost.y + R + 9, 0), ok = !placeCheck(me, armed, ghost);
       label(!ok ? placeCheck(me, armed, ghost) : 'Shoots enemies inside this circle',
         p.x, p.y, 12, 700, ok ? LIGHTC[me] : LIGHTC[1 - me], 4);
     }
-    if (armed === 'barracks' && ghost && state === 'play') {
+    if (armed === 'barracks' && ghost && acting()) {
       const t = barracksTown(ghost), p = t ? toScreen(t.x, t.y + townRing(t) + 52, 0) : toScreen(ghost.x, ghost.y, groundAt(ghost.x, ghost.y) + 34);
       label(t ? `${t.name}: trains 50% faster, holds 10 more` : 'Barracks go on one of your towns', p.x, p.y, 12, 700, t ? LIGHTC[me] : LIGHTC[1 - me], 4);
     }
@@ -5038,7 +5050,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
   }
   function drawStructs() {
     for (const s of structs) drawTower(s.x, s.y, COL.team[s.team], 1);
-    if (!armed || !ghost || state !== 'play') return;
+    if (!armed || !ghost || !acting()) return;
     const ok = !placeCheck(me, armed, ghost), col = ok ? COL.team[me] : COL.team[1 - me];
     if (armed === 'tower') {
       const R = 130, nowS = performance.now() / 1000;
@@ -5159,6 +5171,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     strikes = 0;
     Sound.clash(running() && !paused ? clashLevel : 0);
     Sound.ambient(clashLevel, running() && !paused);
+    if (upgradeHeld && !inHand()) { upgradeHeld = false; setTimeout(showUpgrade, 250); }
     if (!LITE || ++liteFrame % 8 === 0) render();
     updateHud();
     requestAnimationFrame(frame);

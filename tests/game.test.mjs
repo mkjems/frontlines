@@ -109,6 +109,42 @@ test('drawing routes', async () => {
   await page.close();
 });
 
+test('the weekly dialog waits for a route being drawn', async () => {
+  const page = await openGame();
+  await t(page, 'start');
+  await dragTo(page, await t(page, 'pos', 'Brindle'), await t(page, 'pos', 'Millbrook'));
+  await t(page, 'offer');   // the week ends mid-drag
+  await sleep(400);
+  assert.equal(await t(page, 'state'), 'upgrade', 'the battle freezes on time');
+  assert.ok(await page.$eval('#upgrade', e => e.hidden), 'but the dialog waits while the route is in hand');
+  await page.mouse.up();
+  await sleep(100);
+  assert.equal(await t(page, 'route', 'Brindle'), 'Millbrook', 'the route still takes');
+  await sleep(400);
+  assert.ok(!(await page.$eval('#upgrade', e => e.hidden)), 'and the dialog opens once it is let go');
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test('the weekly dialog waits for a watchtower being placed', async () => {
+  const page = await openGame();
+  await t(page, 'start');
+  await page.click('#tray-tower');
+  const spot = await t(page, 'pos', 'Ashford', 70, 40);
+  await page.mouse.move(spot.x, spot.y);
+  await sleep(400);
+  await t(page, 'offer');   // the week ends while the tower is in hand
+  await sleep(400);
+  assert.ok(await page.$eval('#upgrade', e => e.hidden), 'the dialog waits while the tower is in hand');
+  await page.mouse.click(spot.x, spot.y);
+  await sleep(100);
+  assert.equal(await t(page, 'buildings'), 1, 'the tower can still be placed on the frozen board');
+  await sleep(400);
+  assert.ok(!(await page.$eval('#upgrade', e => e.hidden)), 'and the dialog opens once it is down');
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
 test('an army sent into the enemy capital takes it', async () => {
   // Regression: a route released inside Redmarsh's city wall but away from the keep used to end on open
   // ground, so the army camped inside the walls and the capital could never fall.
