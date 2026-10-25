@@ -213,6 +213,41 @@ in three steps, each worth having on its own:
 
 The computer has to play by the player's rules first (done 24 October: no turning armies on the march, the
 same building checks; route ink has since been removed), or the numbers from 1 won't describe the real game.
+It must also play at a person's speed (agreed 25 October): no drawing many routes, or buying and placing,
+faster than a player could.
+
+**Done (25 October 2026): step 1, the balance runner** (`makeAI`, `match.ai` 2, `match.buys`, `BUY_ORDERS`,
+`__t.war()`, [tests/balance.mjs](../tests/balance.mjs)). Each side gets its own computer player (`makeAI(team)`,
+with its own plan, buying rotation and timer); `match.ai` 2 means both. With no person playing, weeks pass
+without the weekly choice (both sides grow as the computer does), and a fallen capital ends the game without the
+end dialog. `cd tests && npm run balance` plays every landscape at full speed, 4 games at once (about 200 games
+a minute), and prints wins per side, timeouts, game length, lead changes and comebacks; `--a farms --b even`
+plays two ways of spending gold against each other, each map from both sides.
+
+**Done the same day: the computer plays at a person's pace** (`ACT_T`, `todo`, `want`, `carryOutNext`). The first
+runs showed it giving about 55 orders a minute that changed something (a route, a troop type, an army sent on, a
+purchase), up to 12 at once each time it thought, and once 41. Now every 2 s it decides what it wants done, as a
+list by urgency (saving a town, a bridge, armies, routes, buying, troop types), and carries out one order every
+1.5 s, the most urgent first; orders that would change nothing take no time, and each decision replaces the list.
+It now gives about 30 a minute, never more than 7 within 10 s. The weekly free watchtower on hard is still placed
+at once. `match.fast` (`--a even+fast` in the runner) lifts the limit for one side, for comparison. A test checks
+the pace.
+- Speed was worth a lot: the unlimited computer beat the paced one 60% to 39% over 800 games, mostly on river
+  maps where quick re-routing at bridges pays (Two Rivers 78%, Highlands 73%, River Valley 69%), and not at all
+  on open ground (Open Border, The Steppe, The Plateau, The Greenwood: about even).
+- So the single-player opponent is weaker than it was; the difficulty levels may want retuning.
+
+Results at the person's pace, on hard:
+- **Sides:** 1,000 games of the usual computer against itself: 51% blue, 49% red. River Valley leans blue (63% of
+  100, and 61% before the pace limit), more than chance; worth a look.
+- **Games snowball:** the median game ends in week 8, after 5.5 minutes (before the pace limit: week 6, 4
+  minutes). The side ahead in towns changes only 0.6 times a game, and 4% of games are won by a side that was
+  ever 3 towns behind. Whoever gets ahead stays ahead; the loser has no soldiers left when its capital falls.
+- **Buying matters, but not by much:** a side that buys nothing still wins 22% against the usual rotation.
+  Leaning on farms (47%) or barracks (43%) is about even with the rotation, or slightly worse; leaning on
+  watchtowers loses (35%). The same within a few points before the pace limit.
+- Not yet: troop mixes and attack timing as styles, Charge for the computer, and the weekly choice for a
+  computer side (it grows by the computer's rules instead).
 
 ## Visitor analytics
 

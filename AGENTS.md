@@ -16,6 +16,8 @@ Ideas:
   Don't edit `site/`; it's rebuilt every time.
 - **Tests:** `cd tests && npm test` builds the page and runs the browser tests in headless Chrome. Run them
   after every change, and check the exit code before committing.
+- **Balance:** `cd tests && npm run balance` plays the computer against itself on every landscape and prints
+  win rates and game length (options in [tests/balance.mjs](tests/balance.mjs)). Use it to check balance changes.
 - **Test addresses:** `?test` exposes `window.__t`, the hook the tests use, and draws the board small and
   rarely to keep tests quick; add `&lite=0` for the full picture (for screenshots). Other switches:
   `?land=highlands` picks a landscape, `&map=4821` a map number, `&layout=classic` the hand-made town layout.

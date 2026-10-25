@@ -601,6 +601,25 @@ test('playing red by hand while the computer plays blue: the view turns and red 
   await page.close();
 });
 
+test('the computer against the computer (tests/balance.mjs): both sides play, weeks pass by themselves, a capital falls', async () => {
+  const pages = await Promise.all([{ width: 1200, height: 800 }, { width: 390, height: 844, isMobile: true, hasTouch: true }].map(v => openGame(v, RANDOM)));
+  const [a, b] = await Promise.all(pages.map(page => page.evaluate(board => {
+    __t.freeze(); __t.board(board); __t.match({ ai: 2, difficulty: 'hard', classic: false, grace: 6, buys: ['farms', 'even'] });
+    __t.newMap('valley', 1); __t.start();
+    const states = new Set();
+    while (__t.war().winner < 0 && __t.war().time < 1200) { __t.run(10); states.add(__t.state()); }
+    return { war: __t.war(), states: [...states], dialog: !document.getElementById('over').hidden, parts: __t.snapshot().parts };
+  }, BOARD)));
+  const { war } = a, [blue, red] = war.sides;
+  assert.ok(war.winner >= 0, 'one side took the other\'s capital');
+  assert.ok(war.week > 2, `weeks went by without a weekly choice (week ${war.week})`);
+  assert.ok(!a.states.includes('upgrade') && !a.dialog, 'no weekly choice and no end dialog, as no one plays');
+  assert.ok(blue.bought.farm > red.bought.farm && red.bought.tower > 0, `each side buys in its own way (farms ${blue.bought.farm} and ${red.bought.farm})`);
+  assert.ok(blue.burst <= 7 && red.burst <= 7, `at a person's pace: one order every 1.5 s at most (${blue.burst} and ${red.burst} within 10 s)`);
+  assert.deepEqual(a, b, 'the same game in two copies');
+  for (const page of pages) { assert.deepEqual(page.errors, []); await page.close(); }
+});
+
 test('team colours are always looked up by team or by me, never as a literal 0 or 1', async () => {
   // the palettes swap for the red player (paintTeams), so COL.team[0] is red on their screen: "mine" is [me]
   const src = readFileSync(fileURLToPath(new URL('../frontlines.html', import.meta.url)), 'utf8');

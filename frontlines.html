@@ -801,16 +801,16 @@ import * as THREE from 'three';
   let lines = [], bridges, towns, units, companies = [], volleys = [], deaths, puffs, trees, patches;
   let scars = [], waves = [], ripples = [], fields = [], hills = [], roads = [], rocks = [], crags = [], compass = { x: 0, y: 0 };
   // me: the team this browser plays. Gold, purchases, tray items and Charge are kept per team.
-  let me = 0, state = 'intro', paused = false, speed = 1, time = 0, week = 1, weekT = 0, aiT = 6;
+  let me = 0, state = 'intro', paused = false, speed = 1, time = 0, week = 1, weekT = 0;
   let uid = 0, routeSeq = 0, frameNo = 0, routesDrawn = 0;
-  let stats, structs = [], tracers = [], inventory = [{}, {}], armed = null, ghost = null, plan = null, hintBase = '';
+  let stats, structs = [], tracers = [], inventory = [{}, {}], armed = null, ghost = null, hintBase = '';
   const ITEM = { farm: 'Farm', tower: 'Watchtower', barracks: 'Barracks', bridge: 'Bridge' };
   // Gold comes from each town you hold (TOWN_RATE, more for a capital) and from gold mines on land you control.
   // Farms grow food (see stepFarms).
   const PRICE = { farm: 30, tower: 40, barracks: 70, bridge: 80 };
   const TOWN_RATE = 0.3, CAPITAL_RATE = 0.45, MINE_RATE = 0.6;   // gold per second
   const townRate = t => t.capital ? CAPITAL_RATE : TOWN_RATE;
-  let gold = [0, 0], bought = [{}, {}], mines = [], coins = [], redBuys = 0;
+  let gold = [0, 0], bought = [{}, {}], mines = [], coins = [];
   const priceOf = (team, k) => Math.round(PRICE[k] * 1.5 ** (bought[team][k] || 0));
   // Troop types: 0 spearmen, 1 archers, 2 cavalry
   const KIND = ['Spearmen', 'Archers', 'Cavalry'];
@@ -820,7 +820,7 @@ import * as THREE from 'three';
   const START_KIND = { Ashford: 0, Brindle: 1, Coldwater: 2, Redmarsh: 0, Thornby: 1, Vexley: 2, Millbrook: 2, Oakhollow: 1, Fennick: 1, Larkspur: 2 };
   const CHARGE_CD = 25;
   let chargeCd = [0, 0], menuTown = null, alerts = [], strikes = 0, clashLevel = 0;
-  let tally = { trained: 0, lost: 0, killed: 0, captured: 0, fallen: 0 };
+  let tally = { trained: 0, lost: 0, killed: 0, captured: 0, fallen: 0 }, winner = -1;   // winner: the team that took a capital
   // Enemy scaling per difficulty. Hard is the original balance.
   const DIFF = {
     easy:   { blueTrain: 1.15, redTrain: 0.75, redGrowth: 0.03, hpEvery: 0, buildEvery: 0, counter: 0.2, gather: 22, redIncome: 0.25 },
@@ -830,13 +830,15 @@ import * as THREE from 'three';
   let difficulty = 'normal';
   try { const d = localStorage.getItem('frontlines-difficulty'); if (DIFF[d]) difficulty = d; } catch (e) {}
   // The match: everything that changes the battle besides the map, the same in every copy of a game. ai is the team
-  // the computer plays (-1: none, two players), grace the seconds before its first push. In single player it comes
-  // from this browser's settings when a game is made; a test, a replay or (later) the host can fix it instead.
-  let match = { ai: 1, difficulty, classic: false, grace: 6 }, presetMatch = null, aiTeam = 1, aiFoe = 0;
+  // the computer plays (-1: none, two players; 2: both, the computer against itself, see tests/balance.mjs), grace
+  // the seconds before its first push. In single player it comes from this browser's settings when a game is made;
+  // a test, a replay or (later) the host can fix it instead.
+  let match = { ai: 1, difficulty, classic: false, grace: 6 }, presetMatch = null;
   const D = () => DIFF[match.difficulty];
+  const byComputer = team => match.ai === team || match.ai === 2;
   // a side's training speed before the weekly growth: the computer's is set by the difficulty, and so is the
   // player's against it; two players train alike
-  const baseTrain = team => team === match.ai ? D().redTrain : match.ai >= 0 ? D().blueTrain : 1;
+  const baseTrain = team => byComputer(team) ? D().redTrain : match.ai >= 0 ? D().blueTrain : 1;
 
   // a = axis between the two kingdoms, b = axis along the river
   const A = (x, y) => P ? y : x;
@@ -1062,7 +1064,6 @@ import * as THREE from 'three';
     pickLand(force);
     mapSeed = seed > 0 ? seed | 0 : 1 + (Math.random() * 9999 | 0);
     match = presetMatch ? { ...presetMatch } : { ai: 1, difficulty, classic };
-    aiTeam = match.ai; aiFoe = 1 - match.ai;
     if (me === match.ai) me = 1 - me;   // this browser plays a side the computer doesn't
     paintTeams();
     $('mapNo').textContent = match.classic ? `Map ${mapSeed} · classic towns` : `Map ${mapSeed}`;
@@ -1218,16 +1219,16 @@ import * as THREE from 'three';
     structs = [];
     initTerritory();
     stats = { train: [baseTrain(0), baseTrain(1)], hp: [3, 3], cap: [0, 0], holdMult: [1, 1] };
-    time = 0; week = 1; weekT = 0; aiT = 6; chargeCd = [0, 0]; closeMenu(); routesDrawn = 0; drawing = null;
+    time = 0; week = 1; weekT = 0; chargeCd = [0, 0]; closeMenu(); routesDrawn = 0; drawing = null;
     uid = 0; routeSeq = 0; frameNo = 0; structT = 0; orderQueue = []; orderLog = []; offers = [null, null];   // counters the battle depends on start afresh, so a game never depends on the one before
-    alerts = []; tally = { trained: 0, lost: 0, killed: 0, captured: 0, fallen: 0 };
-    structs = []; tracers = []; inventory = [0, 1].map(t => ({ ...(t === match.ai ? {} : { tower: 1 }), ...(land.freeBridge ? { bridge: 1 } : {}) })); armed = null; plan = null;
-    gold = [0, 0]; bought = [{}, {}]; coins = []; redBuys = 0; carts = []; deliveries = []; harvests = 0;
+    alerts = []; tally = { trained: 0, lost: 0, killed: 0, captured: 0, fallen: 0 }; winner = -1;
+    structs = []; tracers = []; inventory = [0, 1].map(t => ({ ...(byComputer(t) ? {} : { tower: 1 }), ...(land.freeBridge ? { bridge: 1 } : {}) })); armed = null;
+    gold = [0, 0]; bought = [{}, {}]; coins = []; carts = []; deliveries = []; harvests = 0;
     setHint(land.freeBridge ? 'No bridge crosses the river. Your bridge is in the tray: build it where you want to cross.'
       : 'Drag from a blue town to draw a march route. Your first watchtower is in the tray.');
     startTutorial();
     match.grace ??= tut ? 25 : 6;   // a new player gets a moment before the computer's first push
-    aiT = match.grace;
+    ais = [0, 1].filter(byComputer).map(makeAI);
     renderTray();
     view.z = 1; view.x = view.y = 0;
     FX.clear();
@@ -1474,7 +1475,7 @@ import * as THREE from 'three';
   function terrAt(x, y) { const i = clamp(x / TC | 0, 0, tw - 1), j = clamp(y / TC | 0, 0, th - 1); return terr[i + j * tw]; }
   // a farm or mine pays its holder; the computer's income is scaled by the difficulty
   function earn(src, rate, dt, team) {
-    src.acc += dt * rate * (team === match.ai ? D().redIncome : 1);
+    src.acc += dt * rate * (byComputer(team) ? D().redIncome : 1);
     if (src.acc >= 1) {
       src.acc -= 1; gold[team]++;
       if (team === me && coins.length < 60) coins.push({ x: src.x + fxRand(-6, 6), y: src.y - 6, t: 0 });
@@ -1938,11 +1939,11 @@ import * as THREE from 'three';
     if (menuTown === t) closeMenu();
     if (team === me) tally.captured++;
     if (prev === me) tally.fallen++;
-    if (t.capital && state === 'play') { endGame(team === me); return; }
+    if (t.capital && state === 'play') { winner = team; if (match.ai === 2) state = 'over'; else endGame(team === me); return; }
     if (team === me) Sound.good(); else if (prev === me) Sound.bad();
     if (team === me) toast(`${t.name} captured${towns.some(o => o.owner === me && o.route && o.route.target === t) ? '. Its attackers now guard it' : ''}`, 'good');
     else if (prev === me) toast(`${t.name} has fallen`, 'bad');
-    aiT = Math.min(aiT, 0.5);
+    for (const ai of ais) ai.hurry();
   }
 
   // Volleys: a company with VOLLEY_MIN or more archers also shoots together. Every VOLLEY_T seconds its archers (those not fighting hand to hand) each loose two
@@ -2185,177 +2186,15 @@ import * as THREE from 'three';
   }
 
   // ---------- the computer: gathers at a bridge, hunts weak towns, sometimes feints ----------
-  // It plays aiTeam (match.ai: red in single player) against aiFoe; "red" below means its towns.
-  const redSide = () => sideOfTeam(aiTeam);
-  function stagingPoint(br) { return XY(lineA(br.line, br.b) + redSide() * (hwAt(br.line, br.b) + 70), br.b); }
-  function pickTarget(from) {
-    let best = null, bs = Infinity;
-    for (const o of towns) {
-      if (o.owner === aiTeam) continue;
-      const d = hypot(o.x - from.x, o.y - from.y);
-      const guards = o.owner === aiFoe ? countNear(aiFoe, o.x, o.y, 120) : 0;
-      const s = d * (0.6 + o.hold / o.holdMax) * (1 + guards / 8) * (o.capital ? 1.25 : 1) * rand(0.85, 1.15);
-      if (s < bs) { bs = s; best = o; }
-    }
-    return best;
-  }
-  function chooseRedKinds(red) {
-    const n = [0, 0, 0];
-    for (const u of units) if (u.team === aiFoe && !u.dead) n[u.kind]++;
-    const common = n.indexOf(Math.max(...n));
-    const counter = [1, 2, 0][common];   // archers vs spears, cavalry vs archers, spears vs cavalry
-    for (const t of red) carryOut(aiTeam, { type: 'train', town: t.name, kind: rng() < D().counter ? counter : (rng() * 3 | 0) });
-  }
-  // A bridge of its own: where a river stands between the enemy and its target with no way across (or while it
-  // still has the free bridge some maps give), it builds one where it best links home and target.
-  function aiBridge(L, from, to) {
-    if (L.kind !== 'water' || (!(inventory[aiTeam].bridge > 0) && gold[aiTeam] < priceOf(aiTeam, 'bridge'))) return null;
-    let best = null, bs = Infinity;
-    for (let bn = 0.1; bn <= 0.9; bn += 0.02) {
-      const b = bn * LB;
-      if (hwAt(L, b) > L.hw * 1.25 || bridges.some(br => br.line === L && Math.abs(br.b - b) < 90)) continue;
-      const br = { line: L, b, span: 20 }, s = sideOfLine(L, from.x, from.y), en = bridgeEnd(br, s), ex = bridgeEnd(br, -s);
-      const d = hypot(en.x - from.x, en.y - from.y) + hypot(to.x - ex.x, to.y - ex.y);
-      if (d < bs) { bs = d; best = br; }
-    }
-    if (!best) return null;
-    const c = XY(lineA(L, best.b), best.b);   // the middle of the river there, where a player would click
-    return carryOut(aiTeam, { type: 'build', kind: 'bridge', line: lines.indexOf(L), b: best.b, x: c.x, y: c.y }, true);
-  }
-  function newPlan() {
-    const red = towns.filter(t => t.owner === aiTeam);
-    plan = null;
-    if (!red.length) return;
-    chooseRedKinds(red);
-    const home = red.find(t => t.capital) || red[0];
-    const target = pickTarget(home);
-    if (!target) return;
-    // mass at the last barrier before the target, at its best crossing
-    const rt = regionOf(target.x, target.y), rh = regionOf(home.x, home.y), L = rt === rh ? null : lines[rh > rt ? rt : rt - 1];
-    let main = L ? bestBridge(home.x, home.y, target.x, target.y, L) : null;
-    if (L && (!main || inventory[aiTeam].bridge > 0)) main = aiBridge(L, home, target) || main;
-    let decoy = null, decoyTarget = null;
-    const others = main ? bridges.filter(b => b !== main && b.line === main.line) : [];
-    if (others.length && red.length >= 3 && rng() < 0.45) {
-      decoy = others[rng() * others.length | 0];
-      const ex = bridgeEnd(decoy, sideOfTeam(aiFoe));
-      let bd = Infinity;
-      for (const o of towns) if (o.owner !== aiTeam) { const d = hypot(o.x - ex.x, o.y - ex.y); if (d < bd) { bd = d; decoyTarget = o; } }
-    }
-    plan = { target, main, decoy, decoyTarget, phase: main ? 'mass' : 'strike', t: time, t2: time };
-  }
-  // the computer's march orders: to a town (over a given crossing), to a point, or none (with recall, its soldiers
-  // still on the march head home). A route returns whether the town got it.
-  const aiRoute = (t, target, via) => carryOut(aiTeam, { type: 'route', town: t.name, target: target.name, via: bridges.indexOf(via) });
-  const aiPoint = (t, p) => carryOut(aiTeam, { type: 'route', town: t.name, point: { x: p.x, y: p.y } });
-  const aiHold = (t, recall) => carryOut(aiTeam, { type: 'route', town: t.name, recall });
   // the route a town would get for the computer's orders: its current one if that already goes there
+  const goesTo = (t, target, via) => t.route && t.route.target === target && t.route.via === via;
+  const endsAt = (t, p) => { const r = t.route, end = r && r.pts[r.pts.length - 1]; return r && !r.target && hypot(end.x - p.x, end.y - p.y) < 4; };
   function routeTo(t, target, via) {
-    if (t.route && t.route.target === target && t.route.via === via) return t.route;
+    if (goesTo(t, target, via)) return t.route;
     const r = makeRoute(t, target, null, via); r.via = via;
     return r;
   }
-  function routeToPoint(t, p) {
-    const r = t.route, end = r && r.pts[r.pts.length - 1];
-    if (r && !r.target && hypot(end.x - p.x, end.y - p.y) < 4) return r;
-    return makeRoute(t, null, p);
-  }
-  function aiStep(dt) {
-    if (match.ai < 0) return;
-    aiT -= dt;
-    if (aiT > 0) return;
-    aiT = 2;
-    const red = towns.filter(t => t.owner === aiTeam);
-    if (!red.length) return;
-    // a free bridge goes up once there's nothing left to take on the enemy's own bank, or after half a minute
-    if (inventory[aiTeam].bridge > 0) {
-      const home = red.find(t => t.capital) || red[0], rh = regionOf(home.x, home.y);
-      const across = towns.filter(t => t.owner !== aiTeam && regionOf(t.x, t.y) !== rh);
-      if (across.length && (time > 30 || !towns.some(t => t.owner !== aiTeam && regionOf(t.x, t.y) === rh))) {
-        const to = across.reduce((a, t) => hypot(t.x - home.x, t.y - home.y) < hypot(a.x - home.x, a.y - home.y) ? t : a);
-        if (aiBridge(nextLine(home.x, home.y, to.x, to.y), home, to)) newPlan();
-      }
-    }
-    if (!plan || plan.target.owner === aiTeam || time - plan.t > 75) newPlan();
-    if (!plan) return;
-
-    if (plan.phase === 'mass') {
-      const st = stagingPoint(plan.main), need = Math.min(50, D().gather + week * 3);
-      const massed = countNear(aiTeam, st.x, st.y, 80);
-      if (!plan.warned && massed >= need / 2) { plan.warned = true; alertAt(bridgeEnd(plan.main, redSide()), `Enemy army gathering at the ${bridgeName(plan.main)}`, false); }
-      if (massed >= need || time - plan.t > 40) {
-        plan.phase = plan.decoy ? 'decoy' : 'strike'; plan.t2 = time;
-        const br = plan.decoy || plan.main;
-        alertAt(bridgeEnd(br, sideOfTeam(aiFoe)), `Attack incoming at the ${bridgeName(br)}!`, true);
-      }
-    } else if (plan.phase === 'decoy' && time - plan.t2 > 7) {
-      plan.phase = 'strike'; plan.t2 = time;
-      alertAt(bridgeEnd(plan.main, sideOfTeam(aiFoe)), `Main attack at the ${bridgeName(plan.main)}!`, true);
-    }
-    else if (plan.phase === 'strike' && time - plan.t2 > 24) { newPlan(); if (!plan) return; }
-
-    const threat = new Map();
-    for (const u of units) {
-      if (u.team !== aiFoe || u.dead) continue;
-      for (const t of red) if ((t.x - u.x) ** 2 + (t.y - u.y) ** 2 < 170 * 170) threat.set(t, (threat.get(t) || 0) + 1);
-    }
-    aiSpend();
-    // send one town's troops to camp on a gold mine on the enemy's side that it doesn't hold yet
-    let minerTown = null, minerSpot = null;
-    const wanted = mines.filter(m => m.owner !== aiTeam && sideOf(m.x, m.y) === redSide());
-    if (wanted.length && red.filter(t => !t.capital).length >= 2) {
-      let bd = Infinity;
-      for (const m of wanted) for (const t of red) {
-        if (t.capital) continue;
-        const d = hypot(t.x - m.x, t.y - m.y);
-        if (d < bd) { bd = d; minerTown = t; minerSpot = m; }
-      }
-    }
-    let decoyTown = null;
-    if (plan.decoy) {
-      let bd = Infinity; const st = stagingPoint(plan.decoy);
-      for (const t of red) if (!t.capital) { const d = hypot(t.x - st.x, t.y - st.y); if (d < bd) { bd = d; decoyTown = t; } }
-    }
-    // each town's orders: a town under threat calls home its soldiers on the march, as a player would
-    const wants = [];
-    for (const t of red) {
-      if ((threat.get(t) || 0) > 4) { aiHold(t, true); continue; }
-      let helping = null;
-      for (const [o, n] of threat) if (o !== t && n > 6) { helping = o; break; }
-      if (helping && rng() < 0.5) { wants.push({ t, target: helping }); continue; }
-      if (t.capital && red.length < 4 && week < 3) { aiHold(t); continue; }
-      const onRedSide = sideOf(t.x, t.y) === redSide();
-      if (t === minerTown && t !== decoyTown && plan.phase === 'mass') { wants.push({ t, point: minerSpot }); continue; }
-      if (t === decoyTown && plan.decoyTarget) {
-        wants.push(plan.phase === 'mass' ? { t, point: stagingPoint(plan.decoy) } : { t, target: plan.decoyTarget, via: plan.decoy });
-        continue;
-      }
-      wants.push(!onRedSide || !plan.main || plan.phase === 'strike' ? { t, target: plan.target, via: plan.main } : { t, point: stagingPoint(plan.main) });
-    }
-    for (const w of wants) w.target ? aiRoute(w.t, w.target, w.via) : aiPoint(w.t, w.point);
-    aiGroups(threat);
-  }
-  // Its gathered armies wait where they gathered until the plan needs them, then march on as a group: to help a
-  // town under attack nearby, from the decoy's crossing to the decoy target, or to the main target in the strike.
-  // A group gathered somewhere the plan no longer uses moves to the main crossing.
-  function aiGroups(threat) {
-    const groups = new Map();
-    for (const u of units) if (u.team === aiTeam && gathered(u)) { const g = groups.get(u.route); if (g) g.push(u); else groups.set(u.route, [u]); }
-    for (const [r, g] of groups) {
-      const e = r.pts[r.pts.length - 1], near = (p, R = 80) => hypot(p.x - e.x, p.y - e.y) < R;
-      let to = null, via = null;
-      for (const [o, n] of threat) if (n > 6 && near(o, 300)) { to = o; break; }
-      if (to);
-      else if (plan.decoy && near(stagingPoint(plan.decoy))) { if (plan.phase === 'mass') continue; to = plan.decoyTarget; via = plan.decoy; }
-      else if (plan.phase === 'strike' || !plan.main) { to = plan.target; via = plan.main; }
-      else if (near(stagingPoint(plan.main)) || (plan.phase === 'mass' && mines.some(m => near(m)))) continue;   // massing, or holding a mine
-      else to = stagingPoint(plan.main);
-      if (!to) continue;
-      const pts = pathPts(e.x, e.y, to.x, to.y, via);
-      carryOut(aiTeam, { type: 'group', units: g.map(u => u.id), pts, target: to.name, len: routeLen(pts) });
-    }
-  }
-
+  const routeToPoint = (t, p) => endsAt(t, p) ? t.route : makeRoute(t, null, p);
   function bridgeName(br) {
     const f = br.b / LB;
     const where = P ? (f < 0.4 ? 'west' : f > 0.6 ? 'east' : 'middle') : (f < 0.4 ? 'north' : f > 0.6 ? 'south' : 'middle');
@@ -2369,63 +2208,288 @@ import * as THREE from 'three';
     if (loud) Sound.alarm();
   }
 
-  // The enemy buys with gold from its own farms and mines, in a fixed rotation, and places by the player's rules.
-  const RED_ORDER = ['farm', 'tower', 'barracks', 'farm', 'tower', 'barracks'];
-  function aiSpotOk(k, p, side) {
-    if (placeCheck(aiTeam, k, p)) return false;
-    if (p.x < 30 || p.y < 30 || p.x > W - 30 || p.y > H - 30) return false;
-    if (riverGap(p.x, p.y) < 14) return false;
-    if (towns.some(t => hypot(t.x - p.x, t.y - p.y) < 55) || structs.some(st => hypot(st.x - p.x, st.y - p.y) < 40)) return false;
-    if (fields.some(f => hypot(f.x - p.x, f.y - p.y) < 40) || mines.some(m => hypot(m.x - p.x, m.y - p.y) < 34)) return false;
-    return sideOf(p.x, p.y) === side || towns.some(t => t.owner === aiTeam && hypot(t.x - p.x, t.y - p.y) < 160);
-  }
-  function aiSpot(k) {
-    const red = towns.filter(t => t.owner === aiTeam);
-    if (!red.length) return null;
-    if (k === 'barracks') {
-      const t = red.filter(t => t.barracks < 2).sort((a, b) => (b.capital - a.capital) || (b.n - a.n))[0];
-      return t ? { x: t.x, y: t.y, town: t } : null;
+  // makeAI(team) plays one side against the other: red in single player (match.ai), or each side in a game of the
+  // computer against the computer (match.ai 2). "red" below means its own towns. Each keeps its own plan, its place
+  // in the buying rotation and its timer.
+  // It plays at a person's pace: every 2 s it decides what it wants done, a list of orders by urgency, and carries
+  // out one every ACT_T seconds, the most urgent first. Orders that would change nothing take no time, and each
+  // decision replaces the list. match.fast (by team, for tests/balance.mjs) lifts the limit.
+  let ais = [];
+  const ACT_T = 1.5;
+  // what it spends its gold on, in turn: the usual rotation, one leaning on a kind, or nothing (to measure what buying is worth)
+  const BUY_ORDERS = {
+    even: ['farm', 'tower', 'barracks'],
+    farms: ['farm', 'farm', 'tower', 'farm', 'barracks'],
+    towers: ['tower', 'tower', 'farm', 'tower', 'barracks'],
+    barracks: ['barracks', 'farm', 'barracks', 'tower'],
+    none: [],
+  };
+  function makeAI(aiTeam) {
+    const aiFoe = 1 - aiTeam;
+    let plan = null, buys = 0, wait = match.grace, kinds = new Map();
+    // warnings of its moves are for the person playing against it
+    const warn = (p, msg, loud) => { if (match.ai !== 2) alertAt(p, msg, loud); };
+    // the orders it wants carried out, and how urgent each is: 0 saving a town, 1 a bridge, 2 an army sent on,
+    // 3 a town's route, 4 a purchase, 5 a troop type; then, if given, runs once the order is carried out
+    let todo = [], cool = 0;
+    const actT = match.fast && match.fast[aiTeam] ? 0 : ACT_T;
+    const want = (urgency, o, then) => { todo.push({ urgency, o, then }); };
+    function changes(o) {
+      const t = o.town && townNamed(o.town);
+      if (o.type === 'train') return !!t && t.owner === aiTeam && t.kind !== o.kind;
+      if (o.type !== 'route') return true;
+      if (!t || t.owner !== aiTeam) return false;
+      return o.target ? !goesTo(t, townNamed(o.target), bridges[o.via]) : o.point ? !endsAt(t, o.point) : !!t.route;
     }
-    if (k === 'farm') {
+    // its pace, to compare with a person's: acts, the orders carried out, and burst, the most within 10 s
+    let acts = 0, burst = 0, recent = [];
+    function carryOutNext(dt) {
+      cool = Math.max(0, cool - dt);
+      while (cool <= 0 && todo.length) {
+        const { o, then } = todo.shift();
+        if (!changes(o)) continue;
+        carryOut(aiTeam, o, true);
+        acts++; cool = actT;
+        recent.push(time); while (recent[0] < time - 10) recent.shift();
+        burst = Math.max(burst, recent.length);
+        if (then) then();
+      }
+    }
+    const redSide = () => sideOfTeam(aiTeam);
+    function stagingPoint(br) { return XY(lineA(br.line, br.b) + redSide() * (hwAt(br.line, br.b) + 70), br.b); }
+    function pickTarget(from) {
+      let best = null, bs = Infinity;
+      for (const o of towns) {
+        if (o.owner === aiTeam) continue;
+        const d = hypot(o.x - from.x, o.y - from.y);
+        const guards = o.owner === aiFoe ? countNear(aiFoe, o.x, o.y, 120) : 0;
+        const s = d * (0.6 + o.hold / o.holdMax) * (1 + guards / 8) * (o.capital ? 1.25 : 1) * rand(0.85, 1.15);
+        if (s < bs) { bs = s; best = o; }
+      }
+      return best;
+    }
+    function chooseRedKinds(red) {
+      const n = [0, 0, 0];
+      for (const u of units) if (u.team === aiFoe && !u.dead) n[u.kind]++;
+      const common = n.indexOf(Math.max(...n));
+      const counter = [1, 2, 0][common];   // archers vs spears, cavalry vs archers, spears vs cavalry
+      kinds.clear();
+      for (const t of red) kinds.set(t, rng() < D().counter ? counter : (rng() * 3 | 0));
+    }
+    // A bridge of its own: where a river stands between the enemy and its target with no way across (or while it
+    // still has the free bridge some maps give), it builds one where it best links home and target, and plans anew.
+    function aiBridge(L, from, to) {
+      if (L.kind !== 'water' || (!(inventory[aiTeam].bridge > 0) && gold[aiTeam] < priceOf(aiTeam, 'bridge'))) return;
+      if (todo.some(w => w.o.kind === 'bridge')) return;
+      let best = null, bs = Infinity;
+      for (let bn = 0.1; bn <= 0.9; bn += 0.02) {
+        const b = bn * LB;
+        if (hwAt(L, b) > L.hw * 1.25 || bridges.some(br => br.line === L && Math.abs(br.b - b) < 90)) continue;
+        const br = { line: L, b, span: 20 }, s = sideOfLine(L, from.x, from.y), en = bridgeEnd(br, s), ex = bridgeEnd(br, -s);
+        const d = hypot(en.x - from.x, en.y - from.y) + hypot(to.x - ex.x, to.y - ex.y);
+        if (d < bs) { bs = d; best = br; }
+      }
+      if (!best) return;
+      const c = XY(lineA(L, best.b), best.b);   // the middle of the river there, where a player would click
+      want(1, { type: 'build', kind: 'bridge', line: lines.indexOf(L), b: best.b, x: c.x, y: c.y }, newPlan);
+    }
+    function newPlan() {
+      const red = towns.filter(t => t.owner === aiTeam);
+      plan = null;
+      if (!red.length) return;
+      chooseRedKinds(red);
+      const home = red.find(t => t.capital) || red[0];
+      const target = pickTarget(home);
+      if (!target) return;
+      // mass at the last barrier before the target, at its best crossing
+      const rt = regionOf(target.x, target.y), rh = regionOf(home.x, home.y), L = rt === rh ? null : lines[rh > rt ? rt : rt - 1];
+      const main = L ? bestBridge(home.x, home.y, target.x, target.y, L) : null;
+      if (L && (!main || inventory[aiTeam].bridge > 0)) aiBridge(L, home, target);
+      let decoy = null, decoyTarget = null;
+      const others = main ? bridges.filter(b => b !== main && b.line === main.line) : [];
+      if (others.length && red.length >= 3 && rng() < 0.45) {
+        decoy = others[rng() * others.length | 0];
+        const ex = bridgeEnd(decoy, sideOfTeam(aiFoe));
+        let bd = Infinity;
+        for (const o of towns) if (o.owner !== aiTeam) { const d = hypot(o.x - ex.x, o.y - ex.y); if (d < bd) { bd = d; decoyTarget = o; } }
+      }
+      plan = { target, main, decoy, decoyTarget, phase: main ? 'mass' : 'strike', t: time, t2: time };
+    }
+    // the computer's march orders: to a town (over a given crossing), to a point, or none (with recall, its soldiers
+    // still on the march head home)
+    const aiRoute = (u, t, target, via) => want(u, { type: 'route', town: t.name, target: target.name, via: bridges.indexOf(via) });
+    const aiPoint = (u, t, p) => want(u, { type: 'route', town: t.name, point: { x: p.x, y: p.y } });
+    const aiHold = (u, t, recall) => want(u, { type: 'route', town: t.name, recall });
+    function aiStep(dt) {
+      wait -= dt;
+      if (wait <= 0) { wait = 2; todo = []; decide(); todo.sort((a, b) => a.urgency - b.urgency); }
+      carryOutNext(dt);
+    }
+    function decide() {
+      const red = towns.filter(t => t.owner === aiTeam);
+      if (!red.length) return;
+      // a free bridge goes up once there's nothing left to take on the enemy's own bank, or after half a minute
+      if (inventory[aiTeam].bridge > 0) {
+        const home = red.find(t => t.capital) || red[0], rh = regionOf(home.x, home.y);
+        const across = towns.filter(t => t.owner !== aiTeam && regionOf(t.x, t.y) !== rh);
+        if (across.length && (time > 30 || !towns.some(t => t.owner !== aiTeam && regionOf(t.x, t.y) === rh))) {
+          const to = across.reduce((a, t) => hypot(t.x - home.x, t.y - home.y) < hypot(a.x - home.x, a.y - home.y) ? t : a);
+          aiBridge(nextLine(home.x, home.y, to.x, to.y), home, to);
+        }
+      }
+      if (!plan || plan.target.owner === aiTeam || time - plan.t > 75) newPlan();
+      if (!plan) return;
+
+      if (plan.phase === 'mass') {
+        const st = stagingPoint(plan.main), need = Math.min(50, D().gather + week * 3);
+        const massed = countNear(aiTeam, st.x, st.y, 80);
+        if (!plan.warned && massed >= need / 2) { plan.warned = true; warn(bridgeEnd(plan.main, redSide()), `Enemy army gathering at the ${bridgeName(plan.main)}`, false); }
+        if (massed >= need || time - plan.t > 40) {
+          plan.phase = plan.decoy ? 'decoy' : 'strike'; plan.t2 = time;
+          const br = plan.decoy || plan.main;
+          warn(bridgeEnd(br, sideOfTeam(aiFoe)), `Attack incoming at the ${bridgeName(br)}!`, true);
+        }
+      } else if (plan.phase === 'decoy' && time - plan.t2 > 7) {
+        plan.phase = 'strike'; plan.t2 = time;
+        warn(bridgeEnd(plan.main, sideOfTeam(aiFoe)), `Main attack at the ${bridgeName(plan.main)}!`, true);
+      }
+      else if (plan.phase === 'strike' && time - plan.t2 > 24) { newPlan(); if (!plan) return; }
+
+      const threat = new Map();
+      for (const u of units) {
+        if (u.team !== aiFoe || u.dead) continue;
+        for (const t of red) if ((t.x - u.x) ** 2 + (t.y - u.y) ** 2 < 170 * 170) threat.set(t, (threat.get(t) || 0) + 1);
+      }
+      aiSpend();
+      // send one town's troops to camp on a gold mine on the enemy's side that it doesn't hold yet
+      let minerTown = null, minerSpot = null;
+      const wanted = mines.filter(m => m.owner !== aiTeam && sideOf(m.x, m.y) === redSide());
+      if (wanted.length && red.filter(t => !t.capital).length >= 2) {
+        let bd = Infinity;
+        for (const m of wanted) for (const t of red) {
+          if (t.capital) continue;
+          const d = hypot(t.x - m.x, t.y - m.y);
+          if (d < bd) { bd = d; minerTown = t; minerSpot = m; }
+        }
+      }
+      let decoyTown = null;
+      if (plan.decoy) {
+        let bd = Infinity; const st = stagingPoint(plan.decoy);
+        for (const t of red) if (!t.capital) { const d = hypot(t.x - st.x, t.y - st.y); if (d < bd) { bd = d; decoyTown = t; } }
+      }
+      // each town's orders: a town under threat calls home its soldiers on the march, as a player would
+      const wants = [];
+      for (const t of red) {
+        if ((threat.get(t) || 0) > 4) { aiHold(0, t, true); continue; }
+        let helping = null;
+        for (const [o, n] of threat) if (o !== t && n > 6) { helping = o; break; }
+        if (helping && rng() < 0.5) { wants.push({ t, target: helping, urgency: 0 }); continue; }
+        if (t.capital && red.length < 4 && week < 3) { aiHold(3, t); continue; }
+        const onRedSide = sideOf(t.x, t.y) === redSide();
+        if (t === minerTown && t !== decoyTown && plan.phase === 'mass') { wants.push({ t, point: minerSpot }); continue; }
+        if (t === decoyTown && plan.decoyTarget) {
+          wants.push(plan.phase === 'mass' ? { t, point: stagingPoint(plan.decoy) } : { t, target: plan.decoyTarget, via: plan.decoy });
+          continue;
+        }
+        wants.push(!onRedSide || !plan.main || plan.phase === 'strike' ? { t, target: plan.target, via: plan.main } : { t, point: stagingPoint(plan.main) });
+      }
+      for (const w of wants) w.target ? aiRoute(w.urgency ?? 3, w.t, w.target, w.via) : aiPoint(3, w.t, w.point);
+      aiGroups(threat);
+      for (const [t, kind] of kinds) if (t.owner === aiTeam) want(5, { type: 'train', town: t.name, kind });
+    }
+    // Its gathered armies wait where they gathered until the plan needs them, then march on as a group: to help a
+    // town under attack nearby, from the decoy's crossing to the decoy target, or to the main target in the strike.
+    // A group gathered somewhere the plan no longer uses moves to the main crossing.
+    function aiGroups(threat) {
+      const groups = new Map();
+      for (const u of units) if (u.team === aiTeam && gathered(u)) { const g = groups.get(u.route); if (g) g.push(u); else groups.set(u.route, [u]); }
+      for (const [r, g] of groups) {
+        const e = r.pts[r.pts.length - 1], near = (p, R = 80) => hypot(p.x - e.x, p.y - e.y) < R;
+        let to = null, via = null, urgency = 2;
+        for (const [o, n] of threat) if (n > 6 && near(o, 300)) { to = o; urgency = 0; break; }
+        if (to);
+        else if (plan.decoy && near(stagingPoint(plan.decoy))) { if (plan.phase === 'mass') continue; to = plan.decoyTarget; via = plan.decoy; }
+        else if (plan.phase === 'strike' || !plan.main) { to = plan.target; via = plan.main; }
+        else if (near(stagingPoint(plan.main)) || (plan.phase === 'mass' && mines.some(m => near(m)))) continue;   // massing, or holding a mine
+        else to = stagingPoint(plan.main);
+        if (!to) continue;
+        const pts = pathPts(e.x, e.y, to.x, to.y, via);
+        want(urgency, { type: 'group', units: g.map(u => u.id), pts, target: to.name, len: routeLen(pts) });
+      }
+    }
+
+    // The enemy buys with gold from its own farms and mines, in a fixed rotation, and places by the player's rules.
+    // A computer-against-computer game can give a side another rotation (match.buys, see BUY_ORDERS).
+    const RED_ORDER = BUY_ORDERS[match.buys && match.buys[aiTeam] || 'even'];
+    function aiSpotOk(k, p, side) {
+      if (placeCheck(aiTeam, k, p)) return false;
+      if (p.x < 30 || p.y < 30 || p.x > W - 30 || p.y > H - 30) return false;
+      if (riverGap(p.x, p.y) < 14) return false;
+      if (towns.some(t => hypot(t.x - p.x, t.y - p.y) < 55) || structs.some(st => hypot(st.x - p.x, st.y - p.y) < 40)) return false;
+      if (fields.some(f => hypot(f.x - p.x, f.y - p.y) < 40) || mines.some(m => hypot(m.x - p.x, m.y - p.y) < 34)) return false;
+      return sideOf(p.x, p.y) === side || towns.some(t => t.owner === aiTeam && hypot(t.x - p.x, t.y - p.y) < 160);
+    }
+    function aiSpot(k) {
+      const red = towns.filter(t => t.owner === aiTeam);
+      if (!red.length) return null;
+      if (k === 'barracks') {
+        const t = red.filter(t => t.barracks < 2).sort((a, b) => (b.capital - a.capital) || (b.n - a.n))[0];
+        return t ? { x: t.x, y: t.y, town: t } : null;
+      }
+      if (k === 'farm') {
+        for (let tries = 0; tries < 40; tries++) {
+          const t = red[rng() * red.length | 0], a = rand(0, Math.PI * 2), r = rand(80, 120);
+          const p = { x: t.x + cos(a) * r, y: t.y + sin(a) * r };
+          if (aiSpotOk(k, p, sideOf(t.x, t.y))) return { ...p, town: t };
+        }
+        return null;
+      }
+      const anchors = bridges.map(br => stagingPoint(br)).concat(mines.filter(m => m.owner === aiTeam));
+      if (!anchors.length) anchors.push(...red);
+      if (plan && plan.main) anchors.unshift(stagingPoint(plan.main), stagingPoint(plan.main));
       for (let tries = 0; tries < 40; tries++) {
-        const t = red[rng() * red.length | 0], a = rand(0, Math.PI * 2), r = rand(80, 120);
-        const p = { x: t.x + cos(a) * r, y: t.y + sin(a) * r };
-        if (aiSpotOk(k, p, sideOf(t.x, t.y))) return { ...p, town: t };
+        const a = anchors[rng() * anchors.length | 0];
+        const p = { x: a.x + rand(-60, 60), y: a.y + rand(-60, 60) };
+        if (aiSpotOk(k, p, redSide())) return p;
       }
       return null;
     }
-    const anchors = bridges.map(br => stagingPoint(br)).concat(mines.filter(m => m.owner === aiTeam));
-    if (!anchors.length) anchors.push(...red);
-    if (plan && plan.main) anchors.unshift(stagingPoint(plan.main), stagingPoint(plan.main));
-    for (let tries = 0; tries < 40; tries++) {
-      const a = anchors[rng() * anchors.length | 0];
-      const p = { x: a.x + rand(-60, 60), y: a.y + rand(-60, 60) };
-      if (aiSpotOk(k, p, redSide())) return p;
+    function aiSpend() {
+      if (!RED_ORDER.length) return;
+      const k = RED_ORDER[buys % RED_ORDER.length];
+      if (gold[aiTeam] < priceOf(aiTeam, k)) return;
+      const spot = aiSpot(k);
+      if (!spot) { buys++; return; }   // nowhere to put it: on to the next in the rotation
+      want(4, { type: 'build', kind: k, x: spot.x, y: spot.y, town: spot.town && spot.town.name }, () => buys++);
     }
-    return null;
-  }
-  function aiSpend() {
-    const k = RED_ORDER[redBuys % RED_ORDER.length];
-    if (gold[aiTeam] < priceOf(aiTeam, k)) return;
-    const spot = aiSpot(k);
-    redBuys++;
-    if (!spot) return;
-    carryOut(aiTeam, { type: 'build', kind: k, x: spot.x, y: spot.y, town: spot.town && spot.town.name }, true);
-  }
 
-  // On hard, every other week the enemy also puts a free watchtower at one of its bridgeheads.
-  function aiBuild() {
-    for (let tries = 0; tries < 20; tries++) {
-      const br = bridges[rng() * bridges.length | 0], t = !br && towns.filter(o => o.owner === aiTeam)[0];
-      const p = br ? XY(lineA(br.line, br.b) + redSide() * (hwAt(br.line, br.b) + rand(80, 140)), br.b + rand(-60, 60))
-        : t ? XY(A(t.x, t.y) - redSide() * rand(60, 140), B(t.x, t.y) + rand(-80, 80)) : null;   // no crossings: guard the front of a town
-      if (!p) return;
-      if (p.x < 20 || p.y < 20 || p.x > W - 20 || p.y > H - 20) continue;
-      if (riverGap(p.x, p.y) < 10) continue;
-      if (towns.some(t => hypot(t.x - p.x, t.y - p.y) < 40) || structs.some(s => hypot(s.x - p.x, s.y - p.y) < 40)) continue;
-      carryOut(aiTeam, { type: 'build', kind: 'tower', x: p.x, y: p.y, free: true });
-      return;
+    // On hard, every other week the enemy also puts a free watchtower at one of its bridgeheads (a gift, placed at once).
+    function aiBuild() {
+      for (let tries = 0; tries < 20; tries++) {
+        const br = bridges[rng() * bridges.length | 0], t = !br && towns.filter(o => o.owner === aiTeam)[0];
+        const p = br ? XY(lineA(br.line, br.b) + redSide() * (hwAt(br.line, br.b) + rand(80, 140)), br.b + rand(-60, 60))
+          : t ? XY(A(t.x, t.y) - redSide() * rand(60, 140), B(t.x, t.y) + rand(-80, 80)) : null;   // no crossings: guard the front of a town
+        if (!p) return;
+        if (p.x < 20 || p.y < 20 || p.x > W - 20 || p.y > H - 20) continue;
+        if (riverGap(p.x, p.y) < 10) continue;
+        if (towns.some(t => hypot(t.x - p.x, t.y - p.y) < 40) || structs.some(s => hypot(s.x - p.x, s.y - p.y) < 40)) continue;
+        carryOut(aiTeam, { type: 'build', kind: 'tower', x: p.x, y: p.y, free: true });
+        return;
+      }
     }
+    return {
+      team: aiTeam,
+      step: aiStep,
+      pace: () => ({ acts, burst }),
+      hurry: () => { wait = Math.min(wait, 0.5); },   // a town changed hands: look again soon
+      // the week begins: it grows stronger, and on hard sometimes gets a free watchtower
+      grow() {
+        stats.train[aiTeam] = D().redTrain + D().redGrowth * (week - 1);
+        stats.hp[aiTeam] = 3 + (D().hpEvery ? Math.floor((week - 1) / D().hpEvery) : 0);
+        if (D().buildEvery && week % D().buildEvery === 0) aiBuild();
+      },
+      sum: () => [buys, ...(plan ? [plan.phase, plan.target.name, plan.main ? plan.main.b : -1, plan.decoy ? plan.decoy.b : -1] : [])],
+    };
   }
 
   // ---------- game flow ----------
@@ -2440,11 +2504,17 @@ import * as THREE from 'three';
   // At the end of each week every side played by a person is offered two rewards (keys of UPGRADES); offers[team]
   // is null once that side has chosen, and the next week begins when all have.
   let offers = [null, null];
+  function nextWeek() {
+    week++;
+    for (const ai of ais) ai.grow();   // the computer grows stronger each week
+    state = 'play';
+  }
   function offerUpgrades() {
+    if (match.ai === 2) { nextWeek(); return; }   // no one to choose
     state = 'upgrade';
     Sound.week(); Sound.clash(0);
     for (const team of [0, 1]) {
-      if (team === match.ai) continue;
+      if (byComputer(team)) continue;
       // a Fisher-Yates shuffle: sorting by a random comparison comes out differently in different browsers
       const shuffled = UPGRADES.filter(u => u.key !== 'bridge' || hasRiver());
       for (let i = shuffled.length - 1; i > 0; i--) { const j = rng() * (i + 1) | 0; [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
@@ -2499,9 +2569,9 @@ import * as THREE from 'three';
       towns: hash(towns.flatMap(t => [t.name, t.owner, t.hold, t.kind, t.barracks || 0, t.spawnT, t.food])),
       units: hash(units.flatMap(u => [u.team, u.kind, u.x, u.y, u.hp])),
       farms: hash(fields.flatMap(f => [f.grow ?? -1, f.cut || 0]).concat(carts.flatMap(c => [c.x, c.y]))),
-      economy: hash([...gold, ...chargeCd, redBuys, ...stats.train, ...stats.hp, ...inventory.flatMap(i => Object.entries(i).flat())]),
+      economy: hash([...gold, ...chargeCd, ...stats.train, ...stats.hp, ...inventory.flatMap(i => Object.entries(i).flat())]),
       buildings: hash(structs.flatMap(s => [s.type, s.team, s.x, s.y]).concat(bridges.map(b => b.b))),
-      enemyPlan: hash(plan ? [plan.phase, plan.target.name, plan.main ? plan.main.b : -1, plan.decoy ? plan.decoy.b : -1] : []),
+      enemyPlan: hash(ais.flatMap(ai => ai.sum())),
     };
   }
 
@@ -2626,7 +2696,7 @@ import * as THREE from 'three';
     if (!running()) return;
     updateTowns(dt);
     updateStructs(dt);
-    aiStep(dt);
+    for (const ai of ais) ai.step(dt);
     units = units.filter(u => !u.dead);
     for (const d of deaths) d.t += dt;
     deaths = deaths.filter(d => d.t < 0.5);
@@ -2710,7 +2780,7 @@ import * as THREE from 'three';
     // Checked against the placing rules (a player's again, since a step may have passed since it was placed),
     // except the computer's free one. Returns what was built.
     build(o, team, check) {
-      const k = o.kind, p = { x: o.x, y: o.y }, free = o.free && team === match.ai;
+      const k = o.kind, p = { x: o.x, y: o.y }, free = o.free && byComputer(team);
       if (check && (placeCheck(team, k, p) || (!free && !(inventory[team][k] > 0) && gold[team] < priceOf(team, k)))) return null;
       if (free);
       else if (inventory[team][k] > 0) inventory[team][k]--;
@@ -2748,13 +2818,7 @@ import * as THREE from 'three';
       const up = UPGRADES.find(u => u.key === o.key);
       if (up.place) inventory[team][up.key] = (inventory[team][up.key] || 0) + 1; else up.apply(team);
       if (offers.some(Boolean)) return;   // the other player hasn't chosen yet
-      week++;
-      if (match.ai >= 0) {   // the computer grows stronger each week
-        stats.train[match.ai] = D().redTrain + D().redGrowth * (week - 1);
-        stats.hp[match.ai] = 3 + (D().hpEvery ? Math.floor((week - 1) / D().hpEvery) : 0);
-        if (D().buildEvery && week % D().buildEvery === 0) aiBuild();
-      }
-      state = 'play';
+      nextWeek();
     },
   };
 
@@ -5150,6 +5214,16 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       zoom: (x, y, z) => zoomTo(z, x, y),
       barracks: (n, k) => { town(n).barracks = k; },
       run: secs => { for (let i = 0; i < secs * 40 && running(); i++) step(STEP); },
+      // for tests/balance.mjs, the computer against the computer: who has won (-1: no one yet) and how each side stands
+      war: () => ({ winner, time, week, sides: [0, 1].map(team => {
+        const held = towns.filter(t => t.owner === team), us = units.filter(u => u.team === team && !u.dead);
+        return {
+          towns: held.length, soldiers: us.length, kinds: [0, 1, 2].map(k => us.filter(u => u.kind === k).length),
+          gold: Math.round(gold[team]), bought: { ...bought[team] }, food: Math.round(held.reduce((n, t) => n + t.food, 0)),
+          farms: fields.filter(f => f.town && f.town.owner === team).length, towers: structs.filter(st => st.team === team && st.type === 'tower').length,
+          ...ais.find(ai => ai.team === team)?.pace(),
+        };
+      }) }),
       alive: () => units.filter(u => !u.dead).length,
       smouldering: () => towns.filter(t => t.smokeUntil > performance.now() / 1000).map(t => t.name),
       // 40 blue against 40 red just east of Millbrook; returns the screen point of the fight
