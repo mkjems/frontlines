@@ -336,7 +336,8 @@ Exit: a friend who has never seen the game can join from a link on a phone and f
       walkover. The rejoin key is in sessionStorage already.
       Fixed: both players' addresses get `#CODE` once they have a room. A reload while the host is still
       inviting brings back the invitation (or the guest's welcome card): the catch-up now carries the lobby.
-- [ ] Smaller: after a walkover the winner's hint still reads "Waiting for Ann…".
+- [x] Smaller: after a walkover the winner's hint still reads "Waiting for Ann…". Also after the other player leaves at the
+      end of a battle (reported by the user, 25 October). No waiting note once the battle is over.
       - Safari later: real Safari through `safaridriver` (as [tests/safari.mjs](../tests/safari.mjs) does for the
         twins; the iPhone's engine, but macOS only, a visible window, one at a time), or Playwright's WebKit
         (headless and parallel, also on GitHub's machines, but not Safari itself, and a new dependency).

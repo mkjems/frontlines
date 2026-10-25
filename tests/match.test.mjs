@@ -176,6 +176,8 @@ test('a player who stays away loses by walkover', async () => {
   await until(host, () => !document.getElementById('over').hidden, 'the walkover', 10000);
   assert.equal(await host.$eval('#overTitle', e => e.textContent), 'Bo left the battle');
   assert.match(await host.$eval('#overLabel', e => e.textContent), /Victory/);
+  await sleep(2000);   // the battle plays on behind the dialog, without the guest's turns
+  assert.doesNotMatch(await host.$eval('#hint', e => e.textContent), /Waiting/, 'no one to wait for once the battle is over');
   await t(guest, 'netRejoin');
   await until(guest, () => /over/.test(document.getElementById('toast').textContent), 'the late guest to hear the game is over');
   await close(host, guest);

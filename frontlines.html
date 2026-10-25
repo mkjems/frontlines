@@ -3047,7 +3047,8 @@ import * as THREE from 'three';
     // a player who dropped out has 30 seconds to come back; after that the other wins by walkover
     const away = net.awayAt ? Math.max(0, AWAY_S - (now - net.awayAt) / 1000) : -1;
     if (away === 0 && state === 'play') { netSend({ t: 'over' }); net.awayAt = 0; endGame(true, `${oppName()} left the battle`); }
-    const note = away > 0 ? `${oppName()} lost the connection. Waiting ${Math.ceil(away)} s…` : net.ws.readyState !== 1 && net.key ? 'Lost the connection. Reconnecting…'
+    // once the battle is over, the other player may have left: there's no one to wait for
+    const note = state === 'over' ? '' : away > 0 ? `${oppName()} lost the connection. Waiting ${Math.ceil(away)} s…` : net.ws.readyState !== 1 && net.key ? 'Lost the connection. Reconnecting…'
       : net.waitT > 1 ? `Waiting for ${oppName()}…` : '';
     if (note) { $('hint').textContent = note; $('hint').style.opacity = 1; } else if ($('hint').textContent.includes('Waiting')) setHint(hintBase);
     if (now - net.pingAt > 2000) { net.pingAt = now; netSend({ t: 'ping', at: now }); }
