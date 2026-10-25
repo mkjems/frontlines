@@ -5,7 +5,8 @@ in order. Single player against the computer must keep working, and feel the sam
 
 **Current phase:** 6, trying it out. Phases 4 and 5 are deployed (23 October): matches work on frontlines.mkjems.dk,
 checked with two browsers through the VPS (about 60 ms round trip). The user is playing and reporting bugs; the
-first, the guest's route drawn red while dragging, is fixed. More to come.
+first, the guest's route drawn red while dragging, is fixed. More to come. Next: bots playing real matches
+(phase 6), to find sync, stall and dropout bugs in whole games.
 
 How to keep this plan up to date:
 - Tick a step (`- [ ]` → `- [x]`) in the same commit as the work, once its tests pass.
@@ -282,6 +283,35 @@ Exit: a friend who has never seen the game can join from a link on a phone and f
 
 ### Phase 6: try it out
 - [ ] Browser tests with two pages against a local relay, including an artificial delay and a dropped connection.
+      Done in part: [tests/match.test.mjs](../tests/match.test.mjs) has six short, scripted matches (join, a few
+      route drags, 120 ms round trip, a slow phone, drop and rejoin, the weekly choice and its limit, walkover,
+      rematch). What's missing is whole games with both sides busy; see the next step.
+- [ ] **Bots playing real matches** (agreed 25 October 2026, not started). Each browser runs a computer player for
+      its own side that sends its orders through the relay like a person's clicks, so whole matches can be played
+      many at a time and checked: in sync to the end (checksums), the same winner on both screens, no stalls, no
+      page errors.
+      - Start from the stand-in (`match.standin`, `makeAI` in frontlines.html, built for tests/balance.mjs): it
+        already plays the person's side by the person's rules, at a person's pace (one order every 1.5 s).
+      - The catch: `makeAI` draws from the battle's shared stream (`rng`, and `rand`, which uses it; about 11 calls:
+        `pickTarget`, `chooseRedKinds`, `aiSpot`, the 50% "help a threatened town" roll). A bot runs in only one
+        browser, so it must have its own stream (a `seeded(...)` of its own, or `fxRand`), or the two browsers
+        drift apart at once. The computer in single player must keep using `rng`, so single player is unchanged.
+      - Its orders must go through `order(team, o)` (sent to both browsers for a turn ahead) instead of
+        `carryOut` in `carryOutNext`, and its weekly choice through `order(me, { type: 'reward', key })` instead
+        of the direct `ORDERS.reward` call in `offerUpgrades`. Orders land `DELAY` turns (about 150 ms) later, so
+        `changes()` may see an order as not yet done; the 1.5 s pace covers it, but check it isn't sent twice.
+      - Harness: reuse `player()`, `match()`, `until()` and the relay's `start({ port, site, delay })` from
+        match.test.mjs. Matches run in real time (turns of 50 ms), so run several side by side (say 8 pairs, on
+        different maps) for 5 to 10 minutes. A separate command, `npm run matches`, prints per match: in sync or
+        the turn it diverged, the winner on each side, the game length, stalls, errors. A short version (one bot
+        match for about a minute) goes into `npm test`.
+      - Rough conditions on top: delay and jitter on the relay, a player dropping out and rejoining mid-game, CPU
+        throttling (a slow phone), a hidden tab, a slow weekly choice, a rematch at the end.
+      - Bots won't find bugs in mouse and touch handling (like the guest's route drawn red), since they send
+        orders directly; those stay with scripted-input tests.
+      - Safari later: real Safari through `safaridriver` (as [tests/safari.mjs](../tests/safari.mjs) does for the
+        twins; the iPhone's engine, but macOS only, a visible window, one at a time), or Playwright's WebKit
+        (headless and parallel, also on GitHub's machines, but not Safari itself, and a new dependency).
 - [ ] Real matches between two people in different places; note the delay and anything that feels laggy.
 - [ ] Rules sheet, tips and README updated.
 

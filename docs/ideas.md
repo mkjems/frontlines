@@ -47,6 +47,74 @@ tip appears when one of your towns runs out. `__t.food`, `__t.trained` help test
   40 and a quarter speed when hungry feel right.
 - Later: upkeep (soldiers alive eating), and cavalry raids that burn farms.
 
+## Open: battles that sway back and forth
+
+Discussed on 25 October 2026, after the balance runner (see The computer against the computer) showed that games
+snowball: the side ahead in towns changes about 0.6 times a game, and only about 4% are won by a side that was
+ever 3 towns behind. A town taken pays at once and compounds (its gold, training and food, and its attackers
+stay as its garrison); nothing makes being ahead harder. (The computer defends poorly and never changes course,
+so games against people may swing a little more; the snowball is still real.)
+
+What we want:
+- A losing position that can be turned round: a small army keeps real advantages over a big one, and battles
+  sway back and forth.
+- Whatever does it must be visible on the board, not hidden numbers.
+- Games stay short and intense, 5 to 10 minutes, where you have to focus.
+- Not wanted: catch-up rewards (the side behind gets better weekly choices). It works, but it is rubber-banding.
+
+### Ideas (none chosen yet)
+Each is something you see happen, and each changes a decision about gold, routes or watchtowers.
+1. **Supply carts and hunger.** An army away from its towns is fed by ox carts along its route (the farm carts
+   exist). Cut the line (soldiers on the road, a watchtower, later a cavalry raid) and the army starves: its
+   soldiers lose their glow, walk hunched and slow down, and its banner shows a red sheaf. A small army at home is
+   fed on the spot; a big one deep in enemy land hangs on a thread you can see and cut. Liked.
+2. **Idle camps go soft.** A big army left gathered too long lights campfires, sits down, and some wander home.
+   Use it or lose it.
+3. **Looting after a capture.** The attackers scatter among the houses for about 20 s, carry sacks out and stagger
+   back drunk, out of formation and fighting worse. Every capture opens a window to strike back. Liked.
+4. **Morale and rout.** A company that loses many quickly, or is hit in the flank or rear, breaks: its banner
+   falls, its soldiers run for home, a horn sounds, and the panic spreads to neighbours. A small army that hits
+   hard in the right place (with Charge) can break a big one. Liked; thought to matter most.
+5. **Veterans.** Soldiers who survive fights get tougher and show a gold trim. A small seasoned band against a big
+   green army: quality against quantity.
+6. **The countryside rises.** Enemy soldiers deep in your land make your towns arm their villagers: dim figures
+   with pitchforks pour out of the houses; at the capital the bells ring.
+7. **Scorched earth.** A side falling back burns its own fields so the invader finds nothing to eat (with 1).
+8. **Ambush in the woods.** Soldiers in woods are hidden from the enemy until they strike. Needs fog of war, a big
+   change, also for the computer.
+Earlier, quieter versions of the same aims: captured towns in unrest for a while (train slowly, pay little);
+upkeep (soldiers alive eat food, see Food); a last stand at the capital; long supply lines weakening attackers.
+
+### One system tying them together: discipline
+- Formed soldiers hold, loose soldiers run (4): a stream of soldiers and stragglers break easily and the panic
+  spreads; a formed company is steady while its banner stands, unless hit in the flank or rear.
+- Formations that attack: a company keeps formation on the march, as a block at its slowest soldiers' pace, and
+  Charge with a formed company sends the whole block in; hitting a loose crowd almost always routs it.
+- Big, overstretched armies can't form: hungry soldiers (1) and drunk looters (3) form slowly or not at all, and a
+  company might hold at most about 40, so a huge stack is mostly a loose crowd.
+- The swing: the winner pushes deeper, its supply thins, its soldiers get hungry and drunk on loot and can't hold
+  formation; the loser, near home, fed and formed, charges and breaks them, and the rout sends them running home.
+- Possible order: morale and rout; formations on the march and Charge with a company; looting; supply and hunger.
+
+Open questions: routed soldiers run home and rejoin later (gentler), rather than die? Should the stream stay good
+for reinforcing but bad at attacking a formed enemy? One company of up to about 40, or several side by side (a
+rout can then spread from one to the next)? How does the computer learn when to charge?
+
+**Agreed first step (25 October 2026): make formations worth using in attack.** Today they are a waste of a
+player's time: forming takes too many clicks and too long, and a company breaks up as soon as it is sent on (its
+soldiers march at their own speeds and arrive spread out), so chains of routes from town to town that stream
+soldiers to the front get more out of the same troops. Formations need a small, powerful set of clicks and a real
+advantage for an attacker who uses them. The swaying ideas above build on that.
+- Aim: a formed attack takes no more clicks than a stream (one drag) and hits harder.
+- Proposed, not decided: (A) a route to an enemy town musters by itself just outside the fight, a ring round the
+  banner fills as the company grows, and it advances as a block when full; (B) the banner is the handle: drag it
+  to march the company as a block (at its slowest soldiers' pace, keeping its shape), tap it to charge with the
+  whole company, and the route's next company forms at the same spot; (C) both. Leaning towards C.
+- The formed attacker's edge: arriving together, volleys and the shield wall working on the move, a company
+  charge, and later steadiness against rout.
+- First, measure today's gap: 40 soldiers streaming against 40 formed, attacking a town and a formed defender.
+- Open: advance when full or on a tap; company size; banner charge instead of, or beside, the tray's Charge.
+
 ## Then: formations for the three troop types
 
 The three types differ mostly in numbers today, so a big army of archers fights much like a big army of
