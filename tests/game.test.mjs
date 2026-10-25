@@ -638,6 +638,26 @@ test('a stand-in for the player (tests/balance.mjs --player): the computer plays
   await page.close();
 });
 
+test('a town holds up to 4 barracks: a fifth is refused', async () => {
+  const page = await openGame();
+  await t(page, 'start');
+  await t(page, 'barracks', 'Ashford', 3);
+  const place = async () => {
+    await t(page, 'give', 'barracks');
+    await page.click('#tray-barracks');
+    const a = await t(page, 'pos', 'Ashford');
+    await page.mouse.move(a.x, a.y); await page.mouse.click(a.x, a.y);
+    await sleep(300);
+  };
+  await place();
+  assert.equal(await t(page, 'barracks', 'Ashford'), 4, 'the fourth goes up');
+  await place();
+  assert.equal(await t(page, 'barracks', 'Ashford'), 4, 'a fifth is refused');
+  assert.match(await page.$eval('#toast', e => e.textContent), /Ashford has all the barracks it can hold/);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
 test('team colours are always looked up by team or by me, never as a literal 0 or 1', async () => {
   // the palettes swap for the red player (paintTeams), so COL.team[0] is red on their screen: "mine" is [me]
   const src = readFileSync(fileURLToPath(new URL('../frontlines.html', import.meta.url)), 'utf8');

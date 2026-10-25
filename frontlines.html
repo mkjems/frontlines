@@ -558,6 +558,7 @@
         <li><span class="k">Farms</span> grow food: about every 36 s a cart brings 5 to the farm's town (it stores up to 40). Each soldier trained eats 1; a town out of food trains at a quarter of its speed.</li>
         <li><span class="k">Gold mines</span> earn 27 a week for whoever holds the land around them.</li>
         <li>Buy in the tray: farm 30, watchtower 40, barracks 70, bridge 80. Each repeat costs 50% more.</li>
+        <li><span class="k">Barracks</span>: each makes its town train 50% faster and hold 10 more soldiers, up to 4 per town.</li>
         <li>Each week: one free reinforcement, and the enemy grows stronger.</li>
       </ul></div>
     </div>
@@ -808,6 +809,7 @@ import * as THREE from 'three';
   // Gold comes from each town you hold (TOWN_RATE, more for a capital) and from gold mines on land you control.
   // Farms grow food (see stepFarms).
   const PRICE = { farm: 30, tower: 40, barracks: 70, bridge: 80 };
+  const MAX_BARRACKS = 4;   // per town: one hall for each beside the keep
   const TOWN_RATE = 0.3, CAPITAL_RATE = 0.45, MINE_RATE = 0.6;   // gold per second
   const townRate = t => t.capital ? CAPITAL_RATE : TOWN_RATE;
   let gold = [0, 0], bought = [{}, {}], mines = [], coins = [];
@@ -2509,7 +2511,7 @@ import * as THREE from 'three';
     { key: 'tower', name: 'Watchtower', desc: 'Archers shoot enemies in range, even across the river.', place: true },
     { key: 'bridge', name: 'Bridge', desc: 'A new crossing anywhere on the river. The enemy can use it too.', place: true },
     { key: 'farm', name: 'Farm', desc: 'New fields beside one of your towns. Their harvests feed the town, so it trains at full speed.', place: true },
-    { key: 'barracks', name: 'Barracks', desc: 'Put it on one town: it trains 50% faster and fields 10 more soldiers.', place: true },
+    { key: 'barracks', name: 'Barracks', desc: 'Put it on one town: it trains 50% faster and fields 10 more soldiers. Up to 4 per town.', place: true },
     { key: 'drill', name: 'Drill sergeants', desc: 'All your towns train 15% faster.', apply: team => { stats.train[team] += 0.15; } },
   ];
 
@@ -2602,7 +2604,10 @@ import * as THREE from 'three';
       if (hwAt(L, b) > L.hw * 1.25) return 'Too wide to bridge here';
       return null;
     }
-    if (kind === 'barracks') return townAt(p.x, p.y, 30, team) ? null : 'Barracks go on one of your towns';
+    if (kind === 'barracks') {
+      const t = townAt(p.x, p.y, 30, team);
+      return !t ? 'Barracks go on one of your towns' : t.barracks >= MAX_BARRACKS ? `${t.name} has all the barracks it can hold` : null;
+    }
     if (kind === 'farm') {
       if (riverGap(p.x, p.y) < 24) return 'Too close to the water';
       if (!towns.some(t => t.owner === team && hypot(t.x - p.x, t.y - p.y) < 150)) return 'Farms go next to one of your towns';
@@ -3345,7 +3350,7 @@ import * as THREE from 'three';
         lines.push(`${strength} · ${here} soldier${plural(here)} here`);
         lines.push(`Trains ${KIND[t.kind].toLowerCase()} · 1 every ${trainSeconds(t).toFixed(1)}s · ${t.n} of its ${townCap(t)} alive`);
       } else lines.push(strength, 'Capture it by marching soldiers into it.');
-      if (t.barracks) lines.push(`${t.barracks} barracks: trains faster, holds more`);
+      if (t.barracks) lines.push(`${t.barracks} of ${MAX_BARRACKS} barracks: trains faster, holds more`);
       const farms = fields.filter(f => f.town === t).length;
       if (t.owner >= 0) lines.push(`Food ${Math.floor(t.food)} of ${FOOD_CAP} · ${farms} farm${plural(farms)} · ${fed(t) ? `each soldier eats ${FOOD_SOLDIER}` : 'out of food: trains at a quarter of its speed'}`);
       if (t.capital) lines.push(t.owner === me ? 'Your capital. Lose it and the war is over.' : 'Enemy capital. Take it to win.');
@@ -4384,7 +4389,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
   }
   // houses give way to the barracks halls
   function underHall(t, h) {
-    for (let i = 0; i < Math.min(4, t.barracks); i++) { const q = hallSpot(t, i); if (hypot(q.x - h.x, q.z - h.y) < 21) return true; }
+    for (let i = 0; i < Math.min(MAX_BARRACKS, t.barracks); i++) { const q = hallSpot(t, i); if (hypot(q.x - h.x, q.z - h.y) < 21) return true; }
     return false;
   }
   function townRing(t) { return townSize(t) * 1.42 + 6; }
@@ -4438,7 +4443,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       put(g, GEO.gable, mat(roof), h.x, hy + 4.6, h.y, h.s + 1.2, 3.8, h.s * 0.85 + 1, ry);
       for (const e of [-1, 1]) { const d = e * (h.s * 0.425 + 0.1); put(g, GEO.box, LIT(), h.x + Math.sin(ry) * d, hy + 1.4, h.y + Math.cos(ry) * d, 1.4, 1.8, 0.5, ry); }
     }
-    for (let i = 0; i < Math.min(4, t.barracks); i++) {
+    for (let i = 0; i < Math.min(MAX_BARRACKS, t.barracks); i++) {
       const q = hallSpot(t, i), hall = buildHall(col);
       hall.position.set(q.x, groundAt(q.x, q.z), q.z); hall.rotation.y = q.ry;
       g.add(hall);
@@ -4544,7 +4549,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     const dt = placeGhost ? Math.min(0.1, nowS - placeGhost.t) : 0, kind = armed;
     if ((kind !== 'barracks' && kind !== 'tower') || !ghost || !acting()) { if (placeGhost) { dyn.remove(placeGhost.g); placeGhost = null; } return; }
     const t = kind === 'barracks' ? barracksTown(ghost) : null;
-    const ok = kind === 'barracks' ? !!t : !placeCheck(me, kind, ghost), team = ok ? me : 1 - me;
+    const ok = kind === 'barracks' ? !!t && t.barracks < MAX_BARRACKS : !placeCheck(me, kind, ghost), team = ok ? me : 1 - me;
     if (!placeGhost || placeGhost.team !== team || placeGhost.kind !== kind) {
       const g = ghostModel(kind, team), lift = kind === 'barracks' ? 12 : 4;
       if (placeGhost && placeGhost.kind === kind) { g.position.copy(placeGhost.g.position); g.rotation.y = placeGhost.g.rotation.y; }
@@ -4558,7 +4563,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     else {
       if (t !== h.town) { h.town = t; if (t) { Sound.lock(); h.pop = 1; } }
       y = groundAt(x, z) + 12 + Math.sin(nowS * 3) * 1.5;
-      if (t && t.barracks < 4) { const q = hallSpot(t, t.barracks, t.barracks + 1); x = q.x; z = q.z; y = groundAt(x, z); ry = q.ry; }
+      if (t && t.barracks < MAX_BARRACKS) { const q = hallSpot(t, t.barracks, t.barracks + 1); x = q.x; z = q.z; y = groundAt(x, z); ry = q.ry; }
       else if (t) { x = t.x; z = t.y; y = groundAt(x, z) + keepH(t) + 10; }
     }
     const k = 1 - Math.exp(-dt * speed);
@@ -5041,7 +5046,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
         ctx.textAlign = 'left'; label(String(Math.floor(t.food)), fx + 6 * k, ny + 0.5 * k, Math.round(10.5 * k), 700, col); ctx.textAlign = 'center';
       }
       if (t.barracks > 0) {   // barracks: a rank insignia, one chevron per barracks, beside the label
-        const by = p.y + (t.capital ? 29 : 14) * k, fill = t.owner < 0 ? INK : LIGHTC[t.owner], n = Math.min(3, t.barracks);
+        const by = p.y + (t.capital ? 29 : 14) * k, fill = t.owner < 0 ? INK : LIGHTC[t.owner], n = t.barracks;
         label('Barracks', p.x + 7 * k, by, Math.round(9.5 * k), 700, fill);
         const cx = p.x + 7 * k - ctx.measureText('Barracks').width / 2 - 8 * k, cw = 4.5 * k, ch = 3 * k, gap = 3.2 * k;
         ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -5163,11 +5168,11 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       const pick = barracksTown(ghost), nowS = performance.now() / 1000;
       ctx.strokeStyle = COL.team[me];
       for (const t of towns) {
-        if (t.owner !== me) continue;
+        if (t.owner !== me || t.barracks >= MAX_BARRACKS) continue;   // a town with all its barracks takes no more
         const on = t === pick;
         ctx.globalAlpha = on ? 0.95 : 0.5; ctx.lineWidth = on ? 3 : 1.5; ctx.setLineDash(on ? [] : [5, 6]);
         ctx.beginPath(); ctx.arc(t.x, t.y, townRing(t) + 10 + (on ? Math.sin(nowS * 6) * 1.5 : 0), 0, Math.PI * 2); ctx.stroke();
-        if (on && t.barracks < 4) {
+        if (on) {
           const q = hallSpot(t, t.barracks, t.barracks + 1);
           ctx.save(); ctx.translate(q.x, q.z); ctx.rotate(-q.ry);
           ctx.globalAlpha = 0.28; ctx.fillStyle = COL.team[me]; ctx.setLineDash([]); rr(ctx, -18, -10, 36, 28, 3); ctx.fill();
@@ -5280,7 +5285,8 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       view: () => ({ ...view }),
       resetView: () => { view.z = 1; view.x = view.y = 0; placeCamera(); },
       zoom: (x, y, z) => zoomTo(z, x, y),
-      barracks: (n, k) => { town(n).barracks = k; },
+      barracks: (n, k) => { if (k !== undefined) town(n).barracks = k; return town(n).barracks; },
+      give: k => { inventory[me][k] = (inventory[me][k] || 0) + 1; renderTray(); },   // an item into this player's tray
       run: secs => { for (let i = 0; i < secs * 40 && running(); i++) step(STEP); },
       // for tests/balance.mjs, the computer against the computer: who has won (-1: no one yet) and how each side stands
       war: () => ({ winner, time, week, sides: [0, 1].map(team => {
