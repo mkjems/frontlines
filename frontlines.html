@@ -59,9 +59,6 @@
   #balance .split { display: flex; width: 160px; max-width: 32vw; height: 8px; border-radius: 8px; overflow: hidden; background: var(--line); }
   #balance .split i { display: block; height: 100%; transition: width .4s ease; }
   #balance .counts { display: flex; justify-content: space-between; width: 100%; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  #ink { text-align: right; }
-  #ink .bar { margin-left: auto; }
-  #ink .bar i { background: var(--blue); }
 
   .controls {
     position: fixed; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
@@ -396,11 +393,6 @@
     <div class="big"><i class="coin"></i><span id="goldv">0</span></div>
     <span id="goldRate">+0 per week</span>
   </div>
-  <div class="panel" id="ink" data-inspect="ink">
-    <span class="label">Route ink</span>
-    <div class="big"><span id="inkv">0</span></div>
-    <div class="bar"><i id="inkbar"></i></div>
-  </div>
   </div>
 </div>
 
@@ -440,7 +432,7 @@
           <div class="legend"><span><i class="shape k0"></i>Spearmen beat cavalry</span><span><i class="shape k2"></i>Cavalry beat archers</span><span><i class="shape k1"></i>Archers beat spearmen</span></div></div>
         <div class="slide"><span class="kicker">Gold and building</span><p>Your towns and gold mines earn gold. Farms grow food, and towns need food to train soldiers quickly. Spend gold in the tray on farms, watchtowers, bridges and barracks. A mine works for whoever holds the land around it.</p></div>
         <div class="slide"><span class="kicker">Terrain matters</span><p>Roads are 40% faster. Archers on hills shoot further, and attacking uphill is weaker. Forests slow troops but shelter them from arrows. Fords let anyone wade across, slowly.</p></div>
-        <div class="slide"><span class="kicker">Learn as you play</span><p>Hold Shift and point at anything to see what it does and how it works: towns and ground, gold and route ink, every button in the tray. Press Space to pause first.</p></div>
+        <div class="slide"><span class="kicker">Learn as you play</span><p>Hold Shift and point at anything to see what it does and how it works: towns and ground, gold, every button in the tray. Press Space to pause first.</p></div>
         <div class="slide r"><span class="kicker">Know your enemy</span><p>The enemy gathers at the bridges and sometimes fakes an attack. Take Redmarsh to win; lose Ashford and the war is over.</p></div>
       </div>
       <div class="cnav">
@@ -535,7 +527,7 @@
       <div><h3>Orders</h3><ul>
         <li><span class="k">Drag from a town</span> to draw its march route. New soldiers follow it. The line snaps to roads; hold <span class="k">Shift</span> to draw freehand.</li>
         <li><span class="k">End on a town</span> to attack it, or <span class="k">on open ground</span> to gather an army there.</li>
-        <li><span class="k">Drag from a gathered army</span> to send it on. Free, costs no ink.</li>
+        <li><span class="k">Drag from a gathered army</span> to send it on.</li>
         <li><span class="k">Tap a town</span> to pick its troops or clear its route.</li>
         <li><span class="k">Charge</span> (first in the tray, or press C; every 25s): your troops in the circle run at the enemy where you click, sprinting, and their first blow hits two to three times as hard.</li>
         <li><span class="k">Space</span> pauses, <span class="k">Esc</span> cancels. Hold <span class="k">Shift</span> and hover to inspect anything.</li>
@@ -566,7 +558,6 @@
         <li><span class="k">Farms</span> grow food: about every 36 s a cart brings 5 to the farm's town (it stores up to 40). Each soldier trained eats 1; a town out of food trains at a quarter of its speed.</li>
         <li><span class="k">Gold mines</span> earn 27 a week for whoever holds the land around them.</li>
         <li>Buy in the tray: farm 30, watchtower 40, barracks 70, bridge 80. Each repeat costs 50% more.</li>
-        <li>Route ink: 600 plus 300 per town you hold.</li>
         <li>Each week: one free reinforcement, and the enemy grows stronger.</li>
       </ul></div>
     </div>
@@ -780,7 +771,6 @@ import * as THREE from 'three';
     bridge: '<path d="M2 14h20"/><path d="M4 18c2-6 14-6 16 0"/><path d="M7 14v-3M12 14v-3M17 14v-3"/>',
     barracks: '<path d="M4 11l8-6 8 6v9H4z"/><path d="M10 20v-5h4v5"/><path d="M12 5V1.5l4 1.5-4 1.5"/>',
     farm: '<path d="M12 21V8"/><path d="M12 8c-3 0-4.5-2.5-4.5-5 2.5 0 4.5 1.5 4.5 5zM12 8c3 0 4.5-2.5 4.5-5-2.5 0-4.5 1.5-4.5 5zM12 14c-3 0-4.5-2.5-4.5-5 2.5 0 4.5 1.5 4.5 5zM12 14c3 0 4.5-2.5 4.5-5-2.5 0-4.5 1.5-4.5 5z"/>',
-    ink: '<circle cx="12" cy="12" r="8.5"/><path d="M12 6.5l2 5.5-2 5.5-2-5.5z"/>',
     charge: '<path d="M5 6l6 6-6 6"/><path d="M12 6l6 6-6 6"/>',
     drill: '<ellipse cx="12" cy="9" rx="7" ry="2.8"/><path d="M5 9v7c0 1.6 3.1 2.8 7 2.8s7-1.2 7-2.8V9"/><path d="M6 3l5 4M18 3l-5 4"/>',
   };
@@ -810,8 +800,8 @@ import * as THREE from 'three';
   let W, H, P, LA, LB, dpr = 1, bg = null;
   let lines = [], bridges, towns, units, companies = [], volleys = [], deaths, puffs, trees, patches;
   let scars = [], waves = [], ripples = [], fields = [], hills = [], roads = [], rocks = [], crags = [], compass = { x: 0, y: 0 };
-  // me: the team this browser plays. Gold, purchases, tray items, extra route ink and Charge are kept per team.
-  let me = 0, state = 'intro', paused = false, speed = 1, time = 0, week = 1, weekT = 0, aiT = 6, ink = [0, 0];
+  // me: the team this browser plays. Gold, purchases, tray items and Charge are kept per team.
+  let me = 0, state = 'intro', paused = false, speed = 1, time = 0, week = 1, weekT = 0, aiT = 6;
   let uid = 0, routeSeq = 0, frameNo = 0, routesDrawn = 0;
   let stats, structs = [], tracers = [], inventory = [{}, {}], armed = null, ghost = null, plan = null, hintBase = '';
   const ITEM = { farm: 'Farm', tower: 'Watchtower', barracks: 'Barracks', bridge: 'Bridge' };
@@ -847,9 +837,6 @@ import * as THREE from 'three';
   // a side's training speed before the weekly growth: the computer's is set by the difficulty, and so is the
   // player's against it; two players train alike
   const baseTrain = team => team === match.ai ? D().redTrain : match.ai >= 0 ? D().blueTrain : 1;
-  // Route ink grows with the towns a side holds (ink[team]: extra from Surveyors).
-  const INK_BASE = 600, INK_TOWN = 300;
-  function inkCap(team) { return INK_BASE + INK_TOWN * towns.filter(t => t.owner === team).length + ink[team]; }
 
   // a = axis between the two kingdoms, b = axis along the river
   const A = (x, y) => P ? y : x;
@@ -1231,7 +1218,7 @@ import * as THREE from 'three';
     structs = [];
     initTerritory();
     stats = { train: [baseTrain(0), baseTrain(1)], hp: [3, 3], cap: [0, 0], holdMult: [1, 1] };
-    time = 0; week = 1; weekT = 0; aiT = 6; ink = [0, 0]; chargeCd = [0, 0]; closeMenu(); routesDrawn = 0; drawing = null;
+    time = 0; week = 1; weekT = 0; aiT = 6; chargeCd = [0, 0]; closeMenu(); routesDrawn = 0; drawing = null;
     uid = 0; routeSeq = 0; frameNo = 0; structT = 0; orderQueue = []; orderLog = []; offers = [null, null];   // counters the battle depends on start afresh, so a game never depends on the one before
     alerts = []; tally = { trained: 0, lost: 0, killed: 0, captured: 0, fallen: 0 };
     structs = []; tracers = []; inventory = [0, 1].map(t => ({ ...(t === match.ai ? {} : { tower: 1 }), ...(land.freeBridge ? { bridge: 1 } : {}) })); armed = null; plan = null;
@@ -1658,9 +1645,6 @@ import * as THREE from 'three';
     for (let i = 0; i < pts.length; i++) { const d = (pts[i].x - x) ** 2 + (pts[i].y - y) ** 2; if (d < bd) { bd = d; bi = i; } }
     return bi;
   }
-  function inkUsed(team, except) {
-    let s = 0; for (const t of towns) if (t.owner === team && t.route && t !== except) s += t.route.len; return s;
-  }
 
   // ---------- units ----------
   function spawn(t) {
@@ -1956,8 +1940,8 @@ import * as THREE from 'three';
     if (prev === me) tally.fallen++;
     if (t.capital && state === 'play') { endGame(team === me); return; }
     if (team === me) Sound.good(); else if (prev === me) Sound.bad();
-    if (team === me) toast(`${t.name} captured${towns.some(o => o.owner === me && o.route && o.route.target === t) ? '. Its attackers now guard it' : ''}. +${INK_TOWN} route ink`, 'good');
-    else if (prev === me) toast(`${t.name} has fallen. −${INK_TOWN} route ink`, 'bad');
+    if (team === me) toast(`${t.name} captured${towns.some(o => o.owner === me && o.route && o.route.target === t) ? '. Its attackers now guard it' : ''}`, 'good');
+    else if (prev === me) toast(`${t.name} has fallen`, 'bad');
     aiT = Math.min(aiT, 0.5);
   }
 
@@ -2348,34 +2332,8 @@ import * as THREE from 'three';
       }
       wants.push(!onRedSide || !plan.main || plan.phase === 'strike' ? { t, target: plan.target, via: plan.main } : { t, point: stagingPoint(plan.main) });
     }
-    // the routes share the route ink: changed ones are cleared first, then the towns nearest where they're going
-    // get theirs first
-    for (const w of wants) if (!aiHas(w)) aiHold(w.t);
-    const goal = w => w.target || w.point;
-    wants.sort((a, b) => hypot(a.t.x - goal(a).x, a.t.y - goal(a).y) - hypot(b.t.x - goal(b).x, b.t.y - goal(b).y));
-    for (const w of wants) aiSend(w);
+    for (const w of wants) w.target ? aiRoute(w.t, w.target, w.via) : aiPoint(w.t, w.point);
     aiGroups(threat);
-  }
-  // whether a town already has the route it wants
-  function aiHas(w) {
-    const r = w.t.route;
-    if (!r) return false;
-    if (w.target) return r.target === w.target && (r.via || null) === (w.via || null);
-    const end = r.pts[r.pts.length - 1];
-    return !r.target && hypot(end.x - w.point.x, end.y - w.point.y) < 4;
-  }
-  // A route that doesn't fit in the ink goes to the nearest of its towns that is closer to where it's going
-  // instead: the soldiers join that town and follow its orders from there.
-  function aiSend(w) {
-    const { t } = w, to = w.target || w.point;
-    if (w.target ? aiRoute(t, w.target, w.via) : aiPoint(t, w.point)) return;
-    let relay = null, bd = Infinity;
-    for (const o of towns) {
-      if (o.owner !== aiTeam || o === t || hypot(o.x - to.x, o.y - to.y) >= hypot(t.x - to.x, t.y - to.y)) continue;
-      const d = hypot(o.x - t.x, o.y - t.y);
-      if (d < bd) { bd = d; relay = o; }
-    }
-    if (!relay || !aiRoute(t, relay)) aiHold(t);
   }
   // Its gathered armies wait where they gathered until the plan needs them, then march on as a group: to help a
   // town under attack nearby, from the decoy's crossing to the decoy target, or to the main target in the strike.
@@ -2476,7 +2434,6 @@ import * as THREE from 'three';
     { key: 'bridge', name: 'Bridge', desc: 'A new crossing anywhere on the river. The enemy can use it too.', place: true },
     { key: 'farm', name: 'Farm', desc: 'New fields beside one of your towns. Their harvests feed the town, so it trains at full speed.', place: true },
     { key: 'barracks', name: 'Barracks', desc: 'Put it on one town: it trains 50% faster and fields 10 more soldiers.', place: true },
-    { key: 'ink', name: 'Surveyors', desc: '+400 route ink for longer or more routes.', apply: team => { ink[team] += 400; } },
     { key: 'drill', name: 'Drill sergeants', desc: 'All your towns train 15% faster.', apply: team => { stats.train[team] += 0.15; } },
   ];
 
@@ -2542,7 +2499,7 @@ import * as THREE from 'three';
       towns: hash(towns.flatMap(t => [t.name, t.owner, t.hold, t.kind, t.barracks || 0, t.spawnT, t.food])),
       units: hash(units.flatMap(u => [u.team, u.kind, u.x, u.y, u.hp])),
       farms: hash(fields.flatMap(f => [f.grow ?? -1, f.cut || 0]).concat(carts.flatMap(c => [c.x, c.y]))),
-      economy: hash([...gold, ...ink, ...chargeCd, redBuys, ...stats.train, ...stats.hp, ...inventory.flatMap(i => Object.entries(i).flat())]),
+      economy: hash([...gold, ...chargeCd, redBuys, ...stats.train, ...stats.hp, ...inventory.flatMap(i => Object.entries(i).flat())]),
       buildings: hash(structs.flatMap(s => [s.type, s.team, s.x, s.y]).concat(bridges.map(b => b.b))),
       enemyPlan: hash(plan ? [plan.phase, plan.target.name, plan.main ? plan.main.b : -1, plan.decoy ? plan.decoy.b : -1] : []),
     };
@@ -2709,15 +2666,14 @@ import * as THREE from 'three';
   function carryOut(team, o, check) { return ORDERS[o.type](o, team, check); }
   const ORDERS = {
     // a town's march route: drawn points (the player), a target town or a point (the computer), or none, which
-    // clears it; with recall, soldiers still marching on the old route head home. A route must fit in the side's
-    // route ink. Returns whether the town now has the route.
+    // clears it; with recall, soldiers still marching on the old route head home. Returns whether the town now
+    // has the route.
     route(o, team) {
       const t = townNamed(o.town);
       if (!t || t.owner !== team) return false;
       const target = o.target ? townNamed(o.target) : null;
       if (o.pts || target || o.point) {
         const r = o.pts ? { id: ++routeSeq, pts: o.pts, target, len: o.len } : target ? routeTo(t, target, bridges[o.via]) : routeToPoint(t, o.point);
-        if (r !== t.route && r.len > inkCap(team) - inkUsed(team, t)) { if (team === me) toast('Not enough route ink', 'bad'); return false; }
         t.route = r;
         return true;
       }
@@ -3014,13 +2970,11 @@ import * as THREE from 'three';
       if ((d.pts[i].x - p.x) ** 2 + (d.pts[i].y - p.y) ** 2 < 81) { d.pts.length = i + 1; d.len = routeLen(d.pts); break; }
     }
     d.blocked = null; d.snap = null;
-    const avail = d.town ? inkCap(me) - inkUsed(me, d.town) : Infinity;   // group orders are free
     let last = d.pts[d.pts.length - 1];
     const push = (nx, ny) => {
       const bk = blockedAt(nx, ny) || blockedAt((nx + last.x) / 2, (ny + last.y) / 2);
       if (bk) { d.blocked = bk; d.tip = { x: nx, y: ny }; return false; }
       const step = Math.hypot(nx - last.x, ny - last.y);
-      if (d.len + step > avail) { d.blocked = 'ink'; d.tip = { x: nx, y: ny }; return false; }
       if (nx < 6 || ny < 6 || nx > W - 6 || ny > H - 6) return false;
       last = { x: nx, y: ny }; d.pts.push(last); d.len += step;
       Sound.click();
@@ -3351,15 +3305,6 @@ import * as THREE from 'three';
         `${nm} gold mine${plural(nm)}: +${Math.round(nm * MINE_RATE * WEEK)} a week. A mine pays while your colour covers the land around it.`,
         'Spend it in the tray at the bottom right.'] };
     },
-    ink: () => {
-      const cap = inkCap(me), used = Math.round(inkUsed(me)), n = towns.filter(t => t.owner === me).length;
-      const lines = [`${Math.max(0, cap - used)} of ${cap} left. Your routes use ${used}.`,
-        'Each town’s march route uses ink for its length. Clearing a route gives it back. Sending a gathered army on is free.',
-        `You get ${INK_BASE}, plus ${INK_TOWN} for each town you hold (${n} now)${ink[me] ? `, plus ${ink[me]} from Surveyors` : ''}.`,
-        'Take towns to get more. A town you lose takes its ink with it.'];
-      if (used > cap) lines.push('Over the limit: your routes stay, but you can’t draw a new one until you clear one.');
-      return { title: 'Route ink', lines };
-    },
     pause: () => ({ title: `${paused || held ? 'Resume' : 'Pause'} (Space)`, lines: [net && net.live ? 'Stops both players’ battles, until either of you resumes.'
       : 'Stops the battle. While it stands still you can still draw routes, buy from the tray, and hold Shift to inspect anything.'] }),
     speed: () => ({ title: 'Game speed', lines: ['Click to run the battle at 1×, 2× or 3×.'] }),
@@ -3489,7 +3434,7 @@ import * as THREE from 'three';
     easy: {
       intro: 'Your towns train faster than the enemy\'s. It hardly builds, its soldiers never get tougher, and it waits for a big army before it attacks.',
       list: [
-        'Grab the grey towns on your side first. Every town adds soldiers and 300 route ink.',
+        'Grab the grey towns on your side first. Every town adds soldiers and gold.',
         'Camp an army next to a gold mine until the land turns blue. It pays for your next watchtower.',
         'The first attack comes late but big. Have a watchtower at the bridge it gathers at.',
         'Gather 15–20 soldiers on open ground, then drag the group across the bridge in one push.',
@@ -5126,10 +5071,6 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     $('goldv').textContent = gold[me];
     $('goldRate').textContent = `+${Math.round(goldPerSecond(me) * WEEK)} per week`;
     refreshTray();
-    const used = inkUsed(me, drawing && drawing.town) + (drawing && drawing.town ? drawing.len : 0);
-    const cap = inkCap(me);
-    $('inkv').textContent = `${Math.max(0, Math.round(cap - used))}`;
-    $('inkbar').style.width = clamp((1 - used / cap) * 100, 0, 100) + '%';
     renderCharge();
   }
 

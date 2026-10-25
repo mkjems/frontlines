@@ -22,7 +22,7 @@ How to keep this plan up to date:
   never runs a game. This replaces the earlier host-authoritative idea (one player's browser runs the game and
   streams state): lockstep is fair (both players get the same delay), needs almost no bandwidth, and keeps the
   server tiny.
-- **The mouse never waits for the network.** Drawing routes, ink, snapping, building ghosts, hover highlights,
+- **The mouse never waits for the network.** Drawing routes, snapping, building ghosts, hover highlights,
   info boxes, town menus, camera and click sounds all stay local. Only the finished action (an *order*, sent
   when the mouse is released or a choice is made) goes over the wire.
 - **Orders take effect a few ticks ahead**, about 100–150 ms, on the same tick in both browsers. The route
@@ -167,10 +167,10 @@ Exit: the determinism test passes reliably; single player plays as before.
 Exit: no input handler or AI routine changes the game state directly.
 
 ### Phase 3: both sides are equal
-- [x] Per-team economy: gold, purchases, inventory, route ink and weekly rewards per team. Today blue's
+- [x] Per-team economy: gold, purchases, inventory and weekly rewards per team. Today blue's
       and red's are separate variables (`gold`/`redGold`, `bought`/`redBought` and so on).
-      Now `gold`, `bought`, `inventory`, `ink` (extra, from Surveyors) and `chargeCd` are arrays by team, with
-      `priceOf(team, k)`, `inkCap(team)`, `goldPerSecond(team)` and `placeCheck(team, kind, p)`. The enemy's free
+      Now `gold`, `bought`, `inventory` and `chargeCd` are arrays by team, with
+      `priceOf(team, k)`, `goldPerSecond(team)` and `placeCheck(team, kind, p)`. The enemy's free
       bridge on Broken Bridges is an ordinary bridge in its tray. Orders follow the same rules for either team;
       a player's are checked again when carried out (`carryOut(team, o, check)`), the computer's aren't, as it
       only picks allowed moves. Weekly rewards: every side played by a person gets its own two offers

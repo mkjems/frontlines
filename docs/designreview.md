@@ -20,7 +20,7 @@ sometimes says what should come before it (fix the troop counters before adding 
 | Mirrored random maps, landscapes | Keep | Fair and varied. Measure balance per landscape. |
 | The three troop types and their counters | Done | Measured backwards in two of three pairings; fixed 24 October. |
 | The automatic charge vs the Charge button | Simplify | Every soldier but archers already charges by itself; the button mostly adds a sprint. |
-| Route ink | **Cut** | A third resource with little gain. (The computer obeys it since 24 October.) |
+| Route ink | Done | A third resource with little gain. Removed 25 October 2026, with the Surveyors card. |
 | Weekly reinforcement cards | Simplify | Mostly the same five buildings the tray sells. Offer only things gold can't buy. |
 | Gold: farms and mines | Keep, tune | Check that farms pay back before the game ends. |
 | Watchtower, barracks, bridge | Keep | Each has a clear job. |
@@ -114,7 +114,10 @@ to three times as hard" mostly describes something that happens anyway.
 every type a real charge bonus. Then the button's promise is true, and cavalry are the type that charge
 without it.
 
-## Cut: route ink
+## Done: route ink
+
+**Done on 25 October 2026:** route ink and the Surveyors card are gone, for both sides. Each town still has
+one route.
 
 Route ink limits how much route a side may draw: 600, plus 300 per town held, plus 400 for each Surveyors
 card. Moving a gathered army is free.
@@ -252,7 +255,7 @@ the numbers and in play, cutting it is fine: The Old Forest and Open Plains were
 1. **Computer against computer**, as a test tool first (see below). It turns most of the *to check* items
    into numbers, and checks every later change.
 2. **Fix the troop counters** (automatic charge for cavalry only, stronger counter bonuses), measured with 1.
-3. **Remove route ink** and the Surveyors card.
+3. **Remove route ink** and the Surveyors card. Done 25 October 2026: removed.
 4. **Remove the fort** (or replace it with a healing post). Done 24 October 2026: removed.
 5. **Weekly cards offer only what gold can't buy.**
 6. **Hills: archer range only.** Show the ring around towns.

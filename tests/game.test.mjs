@@ -261,17 +261,17 @@ test('Charge sends the soldiers in the circle running at the spot', async () => 
   await page.close();
 });
 
-test('paused, Shift over the panels, tray and towns explains them; taking a town shows the route ink it brings', async () => {
+test('paused, Shift over the panels, tray and towns explains them; taking a town says so', async () => {
   const page = await openGame();
   await t(page, 'start');
   await page.keyboard.press('Space');
   const centre = sel => page.$eval(sel, e => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
   const box = () => page.$eval('#inspect', e => e.hidden ? null : e.textContent);
-  let p = await centre('#ink');
+  let p = await centre('#gold');
   await page.mouse.move(p.x, p.y);
   assert.equal(await box(), null, 'nothing without Shift');
   await page.keyboard.down('Shift');
-  assert.match(await box(), /Route ink.*left.*plus 300 for each town you hold/, 'the route ink: how much is left and how to get more');
+  assert.match(await box(), /Gold.*earning \d+ a week/, 'the gold: how much and what it earns');
   p = await centre('#tray-farm');
   await page.mouse.move(p.x, p.y);
   assert.match(await box(), /Farm.*Costs 30 gold/, 'a tray item: what it does and what it costs');
@@ -286,7 +286,7 @@ test('paused, Shift over the panels, tray and towns explains them; taking a town
   assert.match(await box(), /^Yours\s*Ashford\s*Strength 100% of \d+ · \d+ soldiers? here\s*Trains spearmen · 1 every [\d.]+s · \d+ of its \d+ alive/, 'a town: its strength first');
   await page.keyboard.up('Shift');
   await t(page, 'capture', 'Millbrook', 0);
-  assert.match(await page.$eval('#toast', e => e.textContent), /Millbrook captured.*\+300 route ink/);
+  assert.match(await page.$eval('#toast', e => e.textContent), /Millbrook captured/);
   assert.deepEqual(page.errors, []);
   await page.close();
 });

@@ -211,8 +211,8 @@ in three steps, each worth having on its own:
    time, so it needs personalities (aggressive, economic, turtling), a camera that follows the biggest fight,
    and a speed control. The personalities are the real work.
 
-The computer has to play by the player's rules first (done 24 October: no turning armies on the march, route
-ink, the same building checks), or the numbers from 1 won't describe the real game.
+The computer has to play by the player's rules first (done 24 October: no turning armies on the march, the
+same building checks; route ink has since been removed), or the numbers from 1 won't describe the real game.
 
 ## Visitor analytics
 
