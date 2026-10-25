@@ -641,7 +641,7 @@ test('a stand-in for the player (tests/balance.mjs --player): the computer plays
 test('team colours are always looked up by team or by me, never as a literal 0 or 1', async () => {
   // the palettes swap for the red player (paintTeams), so COL.team[0] is red on their screen: "mine" is [me]
   const src = readFileSync(fileURLToPath(new URL('../frontlines.html', import.meta.url)), 'utf8');
-  const hits = src.split('\n').map((l, i) => [i + 1, l]).filter(([, l]) => /(ROUTE|CHEVRON|KEEPC|TEAMC|LIGHTC|COL\.(team|light|mid))\[[01]\]/.test(l));
+  const hits = src.split('\n').map((l, i) => [i + 1, l]).filter(([, l]) => /(ROUTE|CHEVRON|KEEPC|TEAMC|LIGHTC|COL\.(team|light|mid))\[[01]\]|drawRoute\([^()]*,\s*[01]\)/.test(l));   // drawRoute(r, team) colours by team
   assert.deepEqual(hits.map(([n, l]) => `${n}: ${l.trim()}`), []);
 });
 

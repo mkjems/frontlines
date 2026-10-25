@@ -4887,7 +4887,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     for (const u of units) if (u.team === me && !u.dead && u.route && !u.arrived) live.add(u.route);   // only routes someone is still walking
     for (const t of towns) if (t.route) live.delete(t.route);
     ctx.globalAlpha = 0.55;
-    for (const r of live) drawRoute(r, 0);
+    for (const r of live) drawRoute(r, me);
     ctx.globalAlpha = 1;
     if (hoverGroup && !drawing) {
       ctx.strokeStyle = COL.team[me]; ctx.lineWidth = 2; ctx.setLineDash([3, 4]);
