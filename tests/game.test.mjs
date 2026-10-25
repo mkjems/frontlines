@@ -361,6 +361,8 @@ test('each company keeps its own banner, even when another marches off', async (
 });
 
 // a week can end while the board runs on: take the first reward so the board takes input again
+// this player's formations (the computer forms up too)
+const ours = async page => (await t(page, 'forms')).filter(f => f.team === 0);
 async function carryOn(page) {
   if (await t(page, 'state') === 'upgrade') { await page.click('#choices button'); await sleep(200); }
 }
@@ -372,32 +374,32 @@ test('a formation moves and its routes follow; another town reinforces it; its m
   await dragTo(page, await t(page, 'pos', 'Brindle'), await t(page, 'pos', 'Brindle', 80, 70));
   await page.mouse.up();
   await sleep(100);
-  let fs = await t(page, 'forms');
+  let fs = await ours(page);
   assert.equal(fs.length, 1, 'a route ending on open ground ends on a formation');
   assert.deepEqual(fs[0].fed, ['Brindle']);
   await t(page, 'run', 15);
   await carryOn(page);
-  const [f] = await t(page, 'forms');
+  const [f] = await ours(page);
   assert.ok(f.n >= 3, `Brindle's soldiers stand in it (${f.n})`);
   await dragTo(page, f.at, await t(page, 'pos', 'Brindle', 80, 170));   // moved 100 on
   await page.mouse.up();
   await sleep(100);
-  fs = await t(page, 'forms');
+  fs = await ours(page);
   assert.equal(fs.length, 1, 'moving it doesn\'t split it in two');
   assert.equal(fs[0].id, f.id);
   assert.ok(Math.hypot(fs[0].x - f.x, fs[0].y - f.y) > 60, 'it stands somewhere new');
   assert.deepEqual(fs[0].fed, ['Brindle'], 'and Brindle\'s route still feeds it');
   await t(page, 'run', 20);
   await carryOn(page);
-  const [g] = await t(page, 'forms');
+  const [g] = await ours(page);
   assert.ok(g.n > f.n, `everyone gathers at the new spot (${f.n} then ${g.n})`);
-  assert.equal((await t(page, 'forms')).length, 1, 'nobody forms up at the old one (its route passes through it)');
+  assert.equal((await ours(page)).length, 1, 'nobody forms up at the old one (its route passes through it)');
 
   // a route dragged from another town onto it snaps to it and feeds it
   await dragTo(page, await t(page, 'pos', 'Coldwater'), { x: g.at.x + 12, y: g.at.y + 8 });
   await page.mouse.up();
   await sleep(100);
-  fs = await t(page, 'forms');
+  fs = await ours(page);
   assert.equal(fs.length, 1, 'Coldwater joins it rather than forming another');
   assert.deepEqual(fs[0].fed.sort(), ['Brindle', 'Coldwater']);
   await page.mouse.click(g.at.x, g.at.y);
@@ -406,7 +408,7 @@ test('a formation moves and its routes follow; another town reinforces it; its m
   await page.click('#fmStop');
   await sleep(100);
   assert.deepEqual([await t(page, 'route', 'Brindle'), await t(page, 'route', 'Coldwater')], [null, null], 'Stop all incoming routes clears both');
-  assert.equal((await t(page, 'forms')).length, 1, 'the formation itself stays');
+  assert.equal((await ours(page)).length, 1, 'the formation itself stays');
   assert.deepEqual(page.errors, []);
   await page.close();
 });
@@ -421,16 +423,16 @@ test('formations join up, attack with everyone and fill up again where they stoo
   await page.mouse.up();
   await t(page, 'run', 15);
   await carryOn(page);
-  const [a, b] = await t(page, 'forms');
+  const [a, b] = await ours(page);
   await dragTo(page, a.at, b.at);
   await page.mouse.up();
   await sleep(100);
-  let fs = await t(page, 'forms');
+  let fs = await ours(page);
   assert.equal(fs.length, 1, 'dragged onto the other, the two become one');
   assert.deepEqual(fs[0].fed.sort(), ['Brindle', 'Coldwater'], 'fed by both towns');
   await t(page, 'run', 15);
   await carryOn(page);
-  fs = await t(page, 'forms');
+  fs = await ours(page);
   const n = fs[0].n;
   assert.ok(n > a.n + b.n, `both armies stand in it (${a.n} + ${b.n}, then ${n})`);
 
@@ -438,25 +440,25 @@ test('formations join up, attack with everyone and fill up again where they stoo
   await dragTo(page, home.at, await t(page, 'pos', 'Millbrook'));
   await page.mouse.up();
   await sleep(100);
-  fs = await t(page, 'forms');
+  fs = await ours(page);
   const stays = fs.find(f => f.id === home.id), block = fs.find(f => f.id !== home.id);
   assert.ok(stays, 'attacking, it stays where it stood');
   assert.equal(stays.n, 0, 'but everyone in it goes');
   assert.deepEqual(stays.fed.sort(), ['Brindle', 'Coldwater'], 'and the routes feed it still');
   assert.ok(block && block.marching && block.n === n, 'everyone marches on Millbrook as one block');
   await t(page, 'run', 2);
-  fs = await t(page, 'forms');
+  fs = await ours(page);
   assert.ok(fs.find(f => f.id === block.id).spread < 75, `keeping together on the way (${Math.round(fs.find(f => f.id === block.id).spread)} from its middle at most)`);
   for (let i = 0; i < 6 && await t(page, 'owner', 'Millbrook') !== 0; i++) { await t(page, 'run', 5); await carryOn(page); }
   assert.equal(await t(page, 'owner', 'Millbrook'), 0, 'the attack takes Millbrook');
-  fs = (await t(page, 'forms')).filter(f => f.team === 0);
+  fs = await ours(page);
   assert.deepEqual(fs.map(f => f.id), [home.id], 'the block went in at the town, and only the old formation is left');
   assert.ok(fs[0].n > 0, 'new soldiers fill it up again');
 
   await dragTo(page, fs[0].at, await t(page, 'pos', 'Ashford'));
   await page.mouse.up();
   await sleep(100);
-  assert.equal((await t(page, 'forms')).filter(f => f.team === 0).length, 0, 'dragged into a town of ours, it joins the garrison');
+  assert.equal((await ours(page)).length, 0, 'dragged into a town of ours, it joins the garrison');
   assert.deepEqual([await t(page, 'route', 'Brindle'), await t(page, 'route', 'Coldwater')], ['Ashford', 'Ashford'], 'and its routes now lead there');
   assert.deepEqual(page.errors, []);
   await page.close();
@@ -573,6 +575,7 @@ test('towns need food to train at full speed: a fed town trains far faster than 
   const fed = await grow(40), starving = await grow(0);
   assert.ok(fed >= 3 && starving <= fed / 2, `in 10 s Brindle trains ${fed} with food, ${starving} without`);
   const b = await t(page, 'pos', 'Brindle');
+  await t(page, 'food', 'Brindle', 0);   // a farm's cart may have brought a harvest since
   await page.mouse.move(b.x, b.y);
   await page.keyboard.down('Shift');
   assert.match(await page.$eval('#inspect', e => e.hidden ? '' : e.textContent), /Food 0 of 40.*out of food/, 'Shift over a town shows its food');
