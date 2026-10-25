@@ -115,6 +115,24 @@ advantage for an attacker who uses them. The swaying ideas above build on that.
 - First, measure today's gap: 40 soldiers streaming against 40 formed, attacking a town and a formed defender.
 - Open: advance when full or on a tap; company size; banner charge instead of, or beside, the tray's Charge.
 
+**Done (25 October 2026): formations that move, like a town on legs** (`forms`, `ORDERS.form`, `ORDERS.unfeed`).
+Agreed with the user instead of A/B/C above: a formation has some of a town's behaviour but can be moved.
+- A route ending on open ground ends on a formation, an object of its own (`newForm`); soldiers who reach it join
+  it (`u.form`) and stand in it. Formations replace "gathered groups": companies are now counted by formation.
+- Drag from it to open ground: it moves, and every route feeding it (towns' routes and those soldiers on the way
+  follow) is extended along the drag, loops cut out (`unloop`), so it no longer splits in two.
+- Drag a town's route onto it: it snaps ("Reinforce") and feeds it. Drag it onto another of yours: they join up,
+  routes and all. Into a town of yours: it joins the garrison, and its routes lead to that town.
+- Drag it onto an enemy town: everyone in it attacks, and the formation stays where it was, fed by its routes, so
+  the next one fills up there. Onto an enemy formation: they form up anew where it stands (no chasing yet).
+- Tap it: a menu with its size, the towns feeding it and **Stop all incoming routes**; soldiers already on the
+  way go on and join it.
+- The computer uses it too: its armies are formations, and one order sends a whole formation on.
+- Learned: this made the computer's strikes from the bridges stronger, since one order now sends all of its
+  massed army instead of one order per route. Over 200 games, games where it masses at bridges got shorter (median
+  5.7 to 4.5 minutes; valley 6.2 to 4.0, mountains 6.0 to 3.8), and lead changes 0.5 to 0.4. Open maps unchanged.
+- Next: march as a block (at the slowest soldiers' pace, keeping its shape), then measure stream against formation.
+
 ## Then: formations for the three troop types
 
 The three types differ mostly in numbers today, so a big army of archers fights much like a big army of

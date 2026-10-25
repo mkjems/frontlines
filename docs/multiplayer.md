@@ -148,9 +148,10 @@ Exit: the determinism test passes reliably; single player plays as before.
 - [x] One function, `order(team, o)`, for every action: route, troop type, purchase, placing a building,
       Charge, weekly reward, reinforcement. Orders are queued for a tick and applied inside `step()`.
       The section "orders" in `frontlines.html`. Order types: `route` (a drawn route, a target town or point,
-      or none to clear it, with `recall` to send marching soldiers home), `group`, `train`, `charge`, `build`
+      or none to clear it, with `recall` to send marching soldiers home), `form` (a formation sent on: moved,
+      joined to another or a town, or attacking), `unfeed` (a formation's incoming routes stopped), `train`, `charge`, `build`
       (bridge, barracks, farm, watchtower) and `reward` (the weekly reinforcement). Orders are plain
-      data: towns by name, soldiers by id, bridges by index, points as x/y. While the battle stands still
+      data: towns by name, formations and soldiers by id, bridges by index, points as x/y. While the battle stands still
       (paused, or the weekly choice) the player's orders are carried out at once, which gives the same result,
       since no step comes between. `build` checks the player's order again when it's carried out.
 - [x] The mouse and the computer opponent both go through it. In single player orders run on the next tick,
@@ -179,7 +180,7 @@ Exit: no input handler or AI routine changes the game state directly.
 - [x] "Me" is a setting (team 0 or 1), not assumed to be team 0. The HUD, tray, hints, toasts and sounds
       follow "me".
       `me` is the team this browser plays. The interface, tips, hover info, toasts, sounds, the end of the game
-      and the end-of-game stats compare with `me`; so do gathered groups you can drag. The capitals' names are
+      and the end-of-game stats compare with `me`; so do the formations you can drag. The capitals' names are
       fixed per side (`CAPITAL`). The one rule that differed by team now depends on who plays it: the computer's
       soldiers follow their town's current orders, a person's keep the route they set out on.
 - [x] Drawing mirrored for team 1 so that player also sees their kingdom as blue on the near side.

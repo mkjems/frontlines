@@ -107,6 +107,7 @@
   .townmenu button b { font-weight: 600; font-size: 13px; }
   .townmenu button small { grid-column: 2; color: var(--muted); font-size: 11px; font-weight: 300; }
   .townmenu .clear { display: block; text-align: center; color: var(--red-ink); font-weight: 600; }
+  .townmenu button:disabled { opacity: 0.45; cursor: default; background: transparent; border-color: transparent; }
   .shape { display: block; width: 12px; height: 12px; background: var(--blue-ink); justify-self: center; }
   .shape.k0 { clip-path: polygon(50% 0, 100% 100%, 0 100%); }
   .shape.k1 { border-radius: 50%; width: 11px; height: 11px; }
@@ -412,6 +413,11 @@
   <button type="button" id="tmK2" data-k="2"><i class="shape k2"></i><b>Cavalry</b><small>Fast, brutal charge. Beat archers. Train slowly.</small></button>
   <button type="button" id="tmClear" class="clear">Clear route</button>
 </div>
+<div class="townmenu" id="formMenu" hidden>
+  <span class="label">Formation</span>
+  <span id="fmInfo" class="tminfo"></span>
+  <button type="button" id="fmStop" class="clear">Stop all incoming routes</button>
+</div>
 <div class="tray" id="tray"></div>
 <div id="hint">Drag from a blue town to draw a march route.</div>
 <div id="toast"></div>
@@ -426,7 +432,7 @@
     <div class="carousel" id="carousel" aria-roledescription="carousel" aria-label="How to play">
       <div class="slides" aria-live="polite">
         <div class="slide"><span class="kicker">Draw the march</span><p>Drag from a blue town to draw a march route. Tap a town to choose its troops or clear its route.</p></div>
-        <div class="slide n"><span class="kicker">Attack or gather</span><p>End a route on an enemy or grey town to attack it, or on open ground to gather an army. Drag from a gathered army to send it on.</p></div>
+        <div class="slide n"><span class="kicker">Attack or gather</span><p>End a route on an enemy or grey town to attack it, or on open ground to form up an army there. Drag from the formation to move it or strike.</p></div>
         <div class="slide"><span class="kicker">Strength in numbers</span><p>Big groups hit harder, troops arriving at a run hit hardest, and everyone fights better near home.</p></div>
         <div class="slide"><span class="kicker">Spearmen, archers, cavalry</span>
           <div class="legend"><span><i class="shape k0"></i>Spearmen beat cavalry</span><span><i class="shape k2"></i>Cavalry beat archers</span><span><i class="shape k1"></i>Archers beat spearmen</span></div></div>
@@ -527,7 +533,7 @@
       <div><h3>Orders</h3><ul>
         <li><span class="k">Drag from a town</span> to draw its march route. New soldiers follow it. The line snaps to roads; hold <span class="k">Shift</span> to draw freehand.</li>
         <li><span class="k">End on a town</span> to attack it, or <span class="k">on open ground</span> to gather an army there.</li>
-        <li><span class="k">Drag from a gathered army</span> to send it on.</li>
+        <li><span class="k">End a route on open ground</span> to form up an army there. Drag from the formation to move it: the routes feeding it follow. Drag it onto another formation to join them, into your town to join its garrison, or onto an enemy to attack with all of it; its routes then form up a new one where it stood. Drag a town's route onto a formation to reinforce it. Tap a formation to stop all routes into it.</li>
         <li><span class="k">Tap a town</span> to pick its troops or clear its route.</li>
         <li><span class="k">Charge</span> (first in the tray, or press C; every 25s): your troops in the circle run at the enemy where you click, sprinting, and their first blow hits two to three times as hard.</li>
         <li><span class="k">Space</span> pauses, <span class="k">Esc</span> cancels. Hold <span class="k">Shift</span> and hover to inspect anything.</li>
@@ -537,7 +543,7 @@
         <li><span class="k">Spearmen ▲</span> tough, stop cavalry charges. Beat cavalry.</li>
         <li><span class="k">Archers ●</span> shoot from range, fragile up close. Beat spearmen.</li>
         <li><span class="k">Cavalry ■</span> fast, triple charge damage, train slowly. Beat archers.</li>
-        <li><span class="k">Companies</span>: 6 or more gathered together form up under a banner, facing the enemy: spearmen in front, archers behind, cavalry on the wings. When any of them fights, they all join in.</li>
+        <li><span class="k">Companies</span>: 6 or more in a formation stand under a banner, facing the enemy: spearmen in front, archers behind, cavalry on the wings. When any of them fights, they all join in.</li>
         <li><span class="k">Volleys</span>: a company with 8 or more archers shoots together every 4 s, a rain of arrows on the thickest crowd of enemies, far beyond one archer's reach. Close-packed blocks suffer most; charging cavalry mostly outrun it.</li>
         <li><span class="k">Shield wall</span>: a company with 8 or more spearmen holds its ground. They fight two ranks deep, take 35% less in hand-to-hand fighting, and cavalry charging them get hurt. Arrows still break it.</li>
         <li><span class="k">Riding out</span>: a company with 6 or more riders rides out at enemy archers and cavalry attacking your troops nearby, wheels off to charge again, and comes back to its place.</li>
@@ -799,11 +805,11 @@ import * as THREE from 'three';
 
   // ---------- world ----------
   let W, H, P, LA, LB, dpr = 1, bg = null;
-  let lines = [], bridges, towns, units, companies = [], volleys = [], deaths, puffs, trees, patches;
+  let lines = [], bridges, towns, units, forms = [], companies = [], volleys = [], deaths, puffs, trees, patches;
   let scars = [], waves = [], ripples = [], fields = [], hills = [], roads = [], rocks = [], crags = [], compass = { x: 0, y: 0 };
   // me: the team this browser plays. Gold, purchases, tray items and Charge are kept per team.
   let me = 0, state = 'intro', paused = false, speed = 1, time = 0, week = 1, weekT = 0;
-  let uid = 0, routeSeq = 0, frameNo = 0, routesDrawn = 0;
+  let uid = 0, routeSeq = 0, formSeq = 0, frameNo = 0, routesDrawn = 0;
   let stats, structs = [], tracers = [], inventory = [{}, {}], armed = null, ghost = null, hintBase = '';
   const ITEM = { farm: 'Farm', tower: 'Watchtower', barracks: 'Barracks', bridge: 'Bridge' };
   // Gold comes from each town you hold (TOWN_RATE, more for a capital) and from gold mines on land you control.
@@ -821,7 +827,7 @@ import * as THREE from 'three';
   const K_MULT = [[1, 1, 1.4], [1.6, 1, 0.6], [1, 1.8, 1]];
   const START_KIND = { Ashford: 0, Brindle: 1, Coldwater: 2, Redmarsh: 0, Thornby: 1, Vexley: 2, Millbrook: 2, Oakhollow: 1, Fennick: 1, Larkspur: 2 };
   const CHARGE_CD = 25;
-  let chargeCd = [0, 0], menuTown = null, alerts = [], strikes = 0, clashLevel = 0;
+  let chargeCd = [0, 0], menuTown = null, menuForm = null, alerts = [], strikes = 0, clashLevel = 0;
   let tally = { trained: 0, lost: 0, killed: 0, captured: 0, fallen: 0 }, winner = -1;   // winner: the team that took a capital
   // Enemy scaling per difficulty. Hard is the original balance.
   const DIFF = {
@@ -1205,7 +1211,7 @@ import * as THREE from 'three';
 
     buildRoadGrid();
     buildForestGrid();
-    units = []; companies = []; volleys = []; volleyCount = 0; deaths = []; puffs = []; scars = []; waves = [];
+    units = []; forms = []; companies = []; volleys = []; volleyCount = 0; deaths = []; puffs = []; scars = []; waves = [];
     ripples = Array.from({ length: 46 }, () => ({ b: rand(0, LB + 60), off: rand(-0.7, 0.7), len: rand(10, 26), sp: rand(5, 11) }));
     for (const t of towns) {
       // house plots around the town, leaving the space under it free for the name
@@ -1223,7 +1229,7 @@ import * as THREE from 'three';
     initTerritory();
     stats = { train: [baseTrain(0), baseTrain(1)], hp: [3, 3], cap: [0, 0], holdMult: [1, 1] };
     time = 0; week = 1; weekT = 0; chargeCd = [0, 0]; closeMenu(); routesDrawn = 0; drawing = null;
-    uid = 0; routeSeq = 0; frameNo = 0; structT = 0; orderQueue = []; orderLog = []; offers = [null, null];   // counters the battle depends on start afresh, so a game never depends on the one before
+    uid = 0; routeSeq = 0; formSeq = 0; frameNo = 0; structT = 0; orderQueue = []; orderLog = []; offers = [null, null];   // counters the battle depends on start afresh, so a game never depends on the one before
     alerts = []; tally = { trained: 0, lost: 0, killed: 0, captured: 0, fallen: 0 }; winner = -1;
     structs = []; tracers = []; inventory = [0, 1].map(t => ({ ...(byComputer(t) ? {} : { tower: 1 }), ...(land.freeBridge ? { bridge: 1 } : {}) })); armed = null;
     gold = [0, 0]; bought = [{}, {}]; coins = []; carts = []; deliveries = []; harvests = 0;
@@ -1685,8 +1691,10 @@ import * as THREE from 'three';
   }
 
   // Soldiers take their town's route when they leave and keep it, even if the town gets new orders later,
-  // on both sides: an army on the march is turned only as a gathered group, or called home by clearing the route.
+  // on both sides: an army on the march is turned only as a formation, or called home by clearing the route.
+  // A route ends on a town or on a formation (see Formations), and soldiers who reach their formation join it.
   function goalOf(u) {
+    if (u.form) return u.slot ? { x: u.slot.x, y: u.slot.y, hold: true } : { x: u.form.x + u.ox, y: u.form.y + u.oy, hold: true };
     const t = u.town;
     if (!u.route && t && t.owner === u.team && t.route) u.route = t.route;
     const r = u.route;
@@ -1704,7 +1712,11 @@ import * as THREE from 'three';
         u.town = r.target; u.route = null;
         return { x: r.target.x + u.ox, y: r.target.y + u.oy, hold: true };
       }
-      if (u.slot && u.slot.rid === r.id) return { x: u.slot.x, y: u.slot.y, hold: true };   // its place in a company
+      if (r.form) {   // reached its formation: join it, and stay with it from now on
+        let f = r.form;
+        while (f.into) f = f.into;
+        if (!f.gone) { u.form = f; u.route = null; return { x: f.x + u.ox, y: f.y + u.oy, hold: true }; }
+      }
       const e = r.pts[r.pts.length - 1];
       return { x: e.x + u.ox, y: e.y + u.oy, hold: true };
     }
@@ -1715,23 +1727,67 @@ import * as THREE from 'three';
     return best ? { x: best.x, y: best.y, hold: false } : { x: u.x, y: u.y, hold: true };
   }
 
-  // A gathered group: this player's soldiers waiting at the end of a route on open ground.
-  const gathered = u => !u.dead && u.route && u.arrived && !u.route.target;
-  function groupAt(x, y) {
-    let best = null, bd = 45 * 45;
-    for (const u of units) {
-      if (u.team !== me || !gathered(u)) continue;
-      const d = (u.x - x) ** 2 + (u.y - y) ** 2;
-      if (d < bd) { bd = d; best = u; }
+  // Formations: a route that ends on open ground ends on a formation, on either side: an army in the field that
+  // routes feed like a town. Soldiers who reach it join it and stand there. It can be sent on (ORDERS.form): to open
+  // ground it moves, and the routes feeding it follow it there; onto another of its side's formations it joins it;
+  // into one of its side's towns it joins the garrison; onto an enemy it attacks with everyone, and the routes
+  // feeding it start a new formation where it stood. One that is empty with nothing on the way to it is gone.
+  // f: { id, team, x, y, dir: the way its soldiers came, face: the way it looks (see faceOf) }
+  function newForm(team, x, y, dir) {
+    const f = { id: ++formSeq, team, owner: team, x, y, dir, face: null, isForm: true };   // owner: as a town's, for code that handles both
+    forms.push(f);
+    return f;
+  }
+  const formById = id => forms.find(f => f.id === id);
+  // a side's formation standing within R of a point, the nearest; but not skip
+  function formNear(team, x, y, R = 40, skip) {
+    let best = null, bd = R * R;
+    for (const f of forms) if (f.team === team && f !== skip) { const d = (f.x - x) ** 2 + (f.y - y) ** 2; if (d < bd) { bd = d; best = f; } }
+    return best;
+  }
+  const members = f => units.filter(u => u.form === f && !u.dead);
+  // the way a line of points comes in at its end (null if it hardly moves)
+  function lastDir(pts) {
+    const e = pts[pts.length - 1], p = pts[Math.max(0, pts.length - 4)];
+    return hypot(e.x - p.x, e.y - p.y) < 1 ? null : { x: e.x - p.x, y: e.y - p.y };
+  }
+  // a line with its loops cut out: where it comes back within 10 of where it passed, the part between goes
+  function unloop(pts) {
+    const out = [];
+    for (const p of pts) {
+      const i = out.findIndex((q, k) => k < out.length - 3 && (q.x - p.x) ** 2 + (q.y - p.y) ** 2 < 100);
+      if (i >= 0) out.length = i + 1; else out.push(p);
     }
-    if (!best) return null;
-    return units.filter(u => u.team === me && gathered(u) &&
-      (u.route === best.route || (u.x - best.x) ** 2 + (u.y - best.y) ** 2 < 70 * 70));
+    const e = pts[pts.length - 1];
+    if (out[out.length - 1] !== e) out.push(e);
+    return out;
+  }
+  // a route that doesn't end on a town ends on a formation: f, or the side's formation standing at its end, or a new one there
+  function toForm(r, team, f) {
+    const e = r.pts[r.pts.length - 1];
+    f = f || formNear(team, e.x, e.y) || newForm(team, e.x, e.y, lastDir(r.pts));
+    if (f.x !== e.x || f.y !== e.y) { r.pts = r.pts.concat({ x: f.x, y: f.y }); r.len = routeLen(r.pts); }
+    r.form = f; r.target = null;
+    return r;
+  }
+  // the routes ending on a formation: its towns' and those soldiers on the way to it follow
+  function feeding(f) {
+    const rs = new Set();
+    for (const t of towns) if (t.route && t.route.form === f) rs.add(t.route);
+    for (const u of units) if (!u.dead && u.route && u.route.form === f) rs.add(u.route);
+    return rs;
+  }
+  // this player's formation under a point: one of its soldiers, or its ground (where the routes feeding it end)
+  function formAt(x, y) {
+    let best = null, bd = 45 * 45;
+    for (const f of forms) if (f.team === me) { const d = (f.x - x) ** 2 + (f.y - y) ** 2; if (d < bd) { bd = d; best = f; } }
+    for (const u of units) if (u.team === me && u.form && !u.dead) { const d = (u.x - x) ** 2 + (u.y - y) ** 2; if (d < bd) { bd = d; best = u.form; } }
+    return best;
   }
 
-  // Companies: a gathered group of FORM_MIN or more, on either side, stands in formation. Every half second the
-  // gathered soldiers are counted up by route (routes ending close together make one company), the company turns
-  // to face the nearest enemy, or else the way its route came, and each soldier is given a place in it: spearmen
+  // Companies: a formation of FORM_MIN or more soldiers, on either side, stands in ranks. Every half second the
+  // soldiers of each formation are counted up, the company turns to face the nearest enemy, or else the way its
+  // soldiers came, and each soldier is given a place in it: spearmen
   // in close ranks at the front, archers in loose staggered lines behind them, cavalry in wedges on the wings.
   // Soldiers walk to their places like to any other goal, and leave them to fight. A company fights as one: while
   // any of it is fighting, the rest look for enemies across the whole company's width, not just around themselves.
@@ -1764,33 +1820,34 @@ import * as THREE from 'three';
   for (let i = -3; i <= 3; i++) for (let j = -3; j <= 3; j++) SHIFTS.push([i, j]);
   SHIFTS.sort((p, q) => p[0] ** 2 + p[1] ** 2 - q[0] ** 2 - q[1] ** 2 || p[0] - q[0] || p[1] - q[1]);
   function wedgeHalf(n) { let r = 0; for (let s = 0; s < n; s += ++r); return Math.max(0, r - 1) / 2 * GAP[2]; }
-  // where a company looks: at the nearest enemy within 320, else along the last stretch of its route, else at
-  // the nearest town that isn't its own. It keeps its old facing unless the new one is more than 30° off.
+  // where a company looks: at the nearest enemy within 320, else the way its soldiers came, else at the
+  // nearest town that isn't its own. It keeps its old facing unless the new one is more than 30° off.
   function faceOf(g) {
-    const e = nearestEnemy(g.x, g.y, g.team, 320, false), pts = g.route.pts, p = pts[Math.max(0, pts.length - 4)];
-    let tx = e ? e.x - g.x : g.x - p.x, ty = e ? e.y - g.y : g.y - p.y, L = hypot(tx, ty);
+    const e = nearestEnemy(g.x, g.y, g.team, 320, false), dir = g.form.dir;
+    let tx = e ? e.x - g.x : dir ? dir.x : 0, ty = e ? e.y - g.y : dir ? dir.y : 0, L = hypot(tx, ty);
     if (L < 1) {
       let bd = Infinity;
       for (const o of towns) if (o.owner !== g.team) { const d = (o.x - g.x) ** 2 + (o.y - g.y) ** 2; if (d < bd) { bd = d; tx = o.x - g.x; ty = o.y - g.y; } }
       L = hypot(tx, ty);
       if (L < 1) { tx = 0; ty = g.team ? 1 : -1; L = 1; }
     }
-    const f = { x: tx / L, y: ty / L }, old = g.route.face;
-    return (g.route.face = old && old.x * f.x + old.y * f.y > 0.87 ? old : f);
+    const f = { x: tx / L, y: ty / L }, old = g.form.face;
+    return (g.form.face = old && old.x * f.x + old.y * f.y > 0.87 ? old : f);
   }
   function formCompanies() {
     for (const u of units) { u.slot = null; u.co = null; }
-    const byRoute = new Map();
-    for (const u of units) if (gathered(u)) { const g = byRoute.get(u.route); if (g) g.push(u); else byRoute.set(u.route, [u]); }
-    const groups = [];
-    for (const [r, us] of byRoute) {
-      const e = r.pts[r.pts.length - 1], g = groups.find(o => o.team === us[0].team && (o.x - e.x) ** 2 + (o.y - e.y) ** 2 < 50 * 50);
-      if (!g) groups.push({ team: us[0].team, route: r, lead: us.length, x: e.x, y: e.y, units: us.slice() });
-      else { g.units.push(...us); if (us.length > g.lead) Object.assign(g, { route: r, lead: us.length, x: e.x, y: e.y }); }
-    }
+    // formations nobody stands in, marches to or is sent to by a town are gone
+    const held = new Set();
+    for (const t of towns) if (t.route && t.route.form) held.add(t.route.form);
+    for (const u of units) if (!u.dead) { if (u.form) held.add(u.form); if (u.route && u.route.form) held.add(u.route.form); }
+    for (const f of forms) if (!held.has(f)) f.gone = true;
+    forms = forms.filter(f => !f.gone);
+    const byForm = new Map();
+    for (const u of units) if (!u.dead && u.form) { const us = byForm.get(u.form); if (us) us.push(u); else byForm.set(u.form, [u]); }
     companies = [];
-    for (const g of groups) {
-      if (g.units.length < FORM_MIN) continue;
+    for (const [form, us] of byForm) {
+      if (us.length < FORM_MIN) continue;
+      const g = { team: form.team, form, x: form.x, y: form.y, units: us };
       const n = [0, 0, 0], rows = [[], [], []];
       for (const u of g.units) n[u.kind]++;
       let back = 0, width = 0;
@@ -1828,7 +1885,7 @@ import * as THREE from 'three';
       g.x = g.cx; g.y = g.cy;
       let r = 0;
       for (const rs of rows) for (const row of rs) for (const s of row) r = Math.max(r, Math.sqrt(s.a * s.a + (s.d - mid) ** 2));
-      const co = { team: g.team, route: g.route, x: g.x, y: g.y, fx: f.x, fy: f.y, r, fight: -99, n, units: g.units };
+      const co = { team: g.team, form: g.form, x: g.x, y: g.y, fx: f.x, fy: f.y, r, fight: -99, n, units: g.units };
       companies.push(co);
       // places by rows: the soldiers furthest forward take the front row, then left to right along each row
       const dep = new Map(), lat = new Map();
@@ -1842,7 +1899,7 @@ import * as THREE from 'three';
           part.forEach((u, j) => {
             const s = slots[j], x = g.x + rx * s.a + f.x * (s.d - mid), y = g.y + ry * s.a + f.y * (s.d - mid);
             u.co = co;
-            if (standable(x, y, reg)) u.slot = { x, y, rid: u.route.id };   // otherwise it keeps its spot by the route's end
+            if (standable(x, y, reg)) u.slot = { x, y };   // otherwise it keeps its spot by the formation's middle
           });
         }
       }
@@ -1967,8 +2024,8 @@ import * as THREE from 'three';
   // charge, wheel away from the fight for WHEEL_T seconds and charge again, so their charge keeps coming. Archers,
   // whom a charge kills outright, they ride down where they stand; spearmen don't take charges at all.
   const RIDERS_MIN = 6, WHEEL_T = 1.4, WHEEL_C = cos(0.9), WHEEL_S = sin(0.9);   // they veer off about 50°
-  const ofRiders = u => u.kind === 2 && u.co && u.co.n[2] >= RIDERS_MIN && u.slot && u.route && u.arrived && u.slot.rid === u.route.id;
-  const ofWall = u => u.kind === 0 && !u.dead && u.co && u.co.n[0] >= WALL_MIN && u.slot && u.route && u.arrived && u.slot.rid === u.route.id;
+  const ofRiders = u => u.kind === 2 && u.co && u.co.n[2] >= RIDERS_MIN && u.slot && u.form;
+  const ofWall = u => u.kind === 0 && !u.dead && u.co && u.co.n[0] >= WALL_MIN && u.slot && u.form;
   const inWall = u => ofWall(u) && (u.x - u.slot.x) ** 2 + (u.y - u.slot.y) ** 2 < 144;
   let volleyCount = 0;
   // the thickest crowd of enemies within R of (x, y): the middle of the enemies close round the one with most
@@ -2002,7 +2059,7 @@ import * as THREE from 'three';
   function stepVolleys(dt) {
     for (const co of companies) {
       if (co.n[1] < VOLLEY_MIN) continue;
-      const r = co.route;
+      const r = co.form;
       if (r.vt === undefined) r.vt = rand(0.5, 1.5);   // a new company's first volley comes soon
       if ((r.vt -= dt) > 0) continue;
       r.vt = 0.25;   // until there's something to shoot at
@@ -2192,13 +2249,13 @@ import * as THREE from 'three';
   // ---------- the computer: gathers at a bridge, hunts weak towns, sometimes feints ----------
   // the route a town would get for the computer's orders: its current one if that already goes there
   const goesTo = (t, target, via) => t.route && t.route.target === target && t.route.via === via;
-  const endsAt = (t, p) => { const r = t.route, end = r && r.pts[r.pts.length - 1]; return r && !r.target && hypot(end.x - p.x, end.y - p.y) < 4; };
+  const endsAt = (t, p) => { const f = t.route && t.route.form; return !!f && hypot(f.x - p.x, f.y - p.y) < 40; };
   function routeTo(t, target, via) {
     if (goesTo(t, target, via)) return t.route;
     const r = makeRoute(t, target, null, via); r.via = via;
     return r;
   }
-  const routeToPoint = (t, p) => endsAt(t, p) ? t.route : makeRoute(t, null, p);
+  const routeToPoint = (t, p) => endsAt(t, p) ? t.route : toForm(makeRoute(t, null, p), t.owner);
   function bridgeName(br) {
     const f = br.b / LB;
     const where = P ? (f < 0.4 ? 'west' : f > 0.6 ? 'east' : 'middle') : (f < 0.4 ? 'north' : f > 0.6 ? 'south' : 'middle');
@@ -2411,14 +2468,13 @@ import * as THREE from 'three';
       aiGroups(threat);
       for (const [t, kind] of kinds) if (t.owner === aiTeam) want(5, { type: 'train', town: t.name, kind });
     }
-    // Its gathered armies wait where they gathered until the plan needs them, then march on as a group: to help a
-    // town under attack nearby, from the decoy's crossing to the decoy target, or to the main target in the strike.
-    // A group gathered somewhere the plan no longer uses moves to the main crossing.
+    // Its formations wait where they stand until the plan needs them, then march on as one: to help a town under
+    // attack nearby, from the decoy's crossing to the decoy target, or to the main target in the strike. A
+    // formation standing somewhere the plan no longer uses moves to the main crossing.
     function aiGroups(threat) {
-      const groups = new Map();
-      for (const u of units) if (u.team === aiTeam && gathered(u)) { const g = groups.get(u.route); if (g) g.push(u); else groups.set(u.route, [u]); }
-      for (const [r, g] of groups) {
-        const e = r.pts[r.pts.length - 1], near = (p, R = 80) => hypot(p.x - e.x, p.y - e.y) < R;
+      for (const f of forms) {
+        if (f.team !== aiTeam || !units.some(u => u.form === f && !u.dead)) continue;
+        const near = (p, R = 80) => hypot(p.x - f.x, p.y - f.y) < R;
         let to = null, via = null, urgency = 2;
         for (const [o, n] of threat) if (n > 6 && near(o, 300)) { to = o; urgency = 0; break; }
         if (to);
@@ -2427,8 +2483,8 @@ import * as THREE from 'three';
         else if (near(stagingPoint(plan.main)) || (plan.phase === 'mass' && mines.some(m => near(m)))) continue;   // massing, or holding a mine
         else to = stagingPoint(plan.main);
         if (!to) continue;
-        const pts = pathPts(e.x, e.y, to.x, to.y, via);
-        want(urgency, { type: 'group', units: g.map(u => u.id), pts, target: to.name, len: routeLen(pts) });
+        const pts = pathPts(f.x, f.y, to.x, to.y, via);
+        want(urgency, { type: 'form', id: f.id, pts, target: to.name, len: routeLen(pts) });
       }
     }
 
@@ -2759,10 +2815,10 @@ import * as THREE from 'three';
     route(o, team) {
       const t = townNamed(o.town);
       if (!t || t.owner !== team) return false;
-      const target = o.target ? townNamed(o.target) : null;
+      const target = o.target ? townNamed(o.target) : null, f = o.form != null ? formById(o.form) : null;
       if (o.pts || target || o.point) {
         const r = o.pts ? { id: ++routeSeq, pts: o.pts, target, len: o.len } : target ? routeTo(t, target, bridges[o.via]) : routeToPoint(t, o.point);
-        t.route = r;
+        t.route = r.target || r.form ? r : toForm(r, team, f && f.team === team ? f : null);   // ending on open ground, or on one of its formations
         return true;
       }
       if (t.route) {
@@ -2773,10 +2829,39 @@ import * as THREE from 'three';
         if (team === me) toast(recalled ? `${t.name} route cleared. ${recalled} soldiers head home` : `${t.name} route cleared`);
       }
     },
-    // a gathered group of soldiers sent on a drawn route; soldiers still on the march can't be turned
-    group(o, team) {
-      const ids = new Set(o.units), route = { id: ++routeSeq, pts: o.pts, target: o.target ? townNamed(o.target) : null, len: o.len };
-      for (const u of units) if (ids.has(u.id) && u.team === team && gathered(u)) u.route = route;
+    // a formation sent on along drawn points (see Formations), its soldiers in it going together; those still on
+    // the way to it can't be turned. Onto: a formation it was dragged onto, by id.
+    form(o, team) {
+      const f = formById(o.id);
+      if (!f || f.team !== team || !o.pts || o.pts.length < 2) return;
+      const pts = o.pts, e = pts[pts.length - 1], town = o.target ? townNamed(o.target) : null;
+      const onto = town ? null : o.onto != null ? formById(o.onto) : formNear(team, e.x, e.y, 40, f), us = members(f);
+      const send = to => {
+        const r = { id: ++routeSeq, pts, target: to.isForm ? null : to, form: to.isForm ? to : null, len: o.len };
+        for (const u of us) { u.form = null; u.slot = null; u.route = r; }
+      };
+      // an attack: everyone goes, and the routes feeding it fill it up again where it stands
+      if (town && town.owner !== team) return send(town);
+      if (onto && onto.team !== team) return send(newForm(team, onto.x, onto.y, lastDir(pts)));
+      if (onto === f) return;
+      // otherwise its feeding routes follow it: on to where it goes, or to the formation or town it joins
+      const to = town || onto;
+      for (const r of feeding(f)) {
+        r.pts = unloop(r.pts.concat(pts.slice(1))); r.len = routeLen(r.pts); r.id = ++routeSeq;
+        if (to) { r.form = to.isForm ? to : null; r.target = to.isForm ? null : to; }
+      }
+      for (const t of towns) if (t.route && t.route.target === t) t.route = null;   // a town that fed it, which it now joins
+      if (to) { f.gone = true; f.into = onto; forms = forms.filter(o => o !== f); return send(to); }
+      f.x = e.x; f.y = e.y; f.dir = lastDir(pts) || f.dir; f.face = null;
+      send(f);
+    },
+    // a formation's feeding routes, every town's route that ends on it, are cleared; soldiers already on the way go on and join it
+    unfeed(o, team) {
+      const f = formById(o.id);
+      if (!f || f.team !== team) return;
+      let n = 0;
+      for (const t of towns) if (t.owner === team && t.route && t.route.form === f) { t.route = null; n++; }
+      if (team === me) toast(n ? `${n} route${plural(n)} into the formation stopped` : 'No routes lead into it');
     },
     // what a town trains
     train(o, team) { const t = townNamed(o.town); if (t && t.owner === team) t.kind = o.kind; },
@@ -3074,7 +3159,7 @@ import * as THREE from 'three';
   }
 
   // ---------- input ----------
-  let drawing = null, hover = null, hoverGroup = null, pointerId = null;
+  let drawing = null, hover = null, hoverForm = null, pointerId = null;
   function toWorld(e) {
     return pointAt(e.clientX, e.clientY, true);
   }
@@ -3148,14 +3233,20 @@ import * as THREE from 'three';
   // How far from its centre a town counts as hit when a route ends there: what the player sees as the
   // town, which for a capital is everything inside its city wall.
   function townReach(t) { return t.capital ? 76 : townRing(t) + 10; }
-  // The town a route will end on: the pointer is over it and the line has reached its outskirts,
+  // the ring round a town, or round a formation's company (or its ground, while it's small)
+  function lockRing(L) {
+    if (!L.isForm) return townRing(L);
+    const co = companies.find(c => c.form === L);
+    return co ? co.r + 12 : 30;
+  }
+  // The town or formation a route will end on: the pointer is over it and the line has reached its outskirts,
   // or the line itself ends inside it.
   function lockTarget(p) {
     const d = drawing, end = d.pts[d.pts.length - 1];
     let best = null, bd = Infinity;
-    for (const o of towns) {
-      if (o === d.town) continue;
-      const R = townReach(o), dp = Math.hypot(o.x - p.x, o.y - p.y), de = Math.hypot(o.x - end.x, o.y - end.y);
+    for (const o of [...towns, ...forms]) {
+      if (o === d.town || o === d.form) continue;
+      const R = o.isForm ? lockRing(o) + 10 : townReach(o), dp = Math.hypot(o.x - p.x, o.y - p.y), de = Math.hypot(o.x - end.x, o.y - end.y);
       if (((dp < R && de < R + 50) || de < Math.max(40, R - 10)) && dp < bd) { bd = dp; best = o; }
     }
     return best;
@@ -3163,23 +3254,22 @@ import * as THREE from 'three';
   function commit() {
     const d = drawing, t = d.town;
     if (t && t.owner !== me) return;
-    if (d.len < 24 && !d.lock) { if (t) openMenu(t); return; }
-    const target = d.lock || null;
-    const pts = d.pts.slice();
-    if (target) pts.push({ x: target.x, y: target.y });
-    const route = { pts, target: target && target.name, len: d.len };
-    if (!t) {
-      const group = d.group.filter(u => !u.dead);
-      order(me, { type: 'group', units: group.map(u => u.id), ...route });
+    if (d.len < 24 && !d.lock) { if (t) openMenu(t); else openFormMenu(d.form); return; }
+    const L = d.lock || null, pts = d.pts.slice();
+    if (L) pts.push({ x: L.x, y: L.y });
+    const route = { pts, target: L && !L.isForm ? L.name : null, len: d.len };
+    if (!t) {   // a formation sent on: onto a town or formation, or to open ground
+      const n = members(d.form).length;
+      order(me, { type: 'form', id: d.form.id, ...route, onto: L && L.isForm ? L.id : null });
       Sound.commit();
-      toast(`${group.length} soldiers on the move`);
+      toast(!L ? 'The formation moves, and its routes follow it' : L.owner !== me ? `${n} soldiers attack` : L.isForm ? 'The formations join up' : `The formation joins ${L.name}`);
       return;
     }
-    order(me, { type: 'route', town: t.name, ...route });
+    order(me, { type: 'route', town: t.name, ...route, form: L && L.isForm && L.owner === me ? L.id : null });
     routesDrawn++;
     Sound.commit();
     tutorialDid('route');
-    if (routesDrawn === 1 && !tut) setHint('Tip: end a route on open ground to gather an army there, then drag from the group to strike. Tap a town to choose what it trains.');
+    if (routesDrawn === 1 && !tut) setHint('Tip: end a route on open ground to form up an army there, then drag from it to move it or strike. Tap a town to choose what it trains.');
     if (routesDrawn === 4 && !tut) setHint('');
   }
 
@@ -3197,7 +3287,23 @@ import * as THREE from 'three';
     m.style.left = clamp(sx - mw / 2, 12, innerWidth - mw - 12) + 'px';
     m.style.top = (sy + 34 + mh < innerHeight - 8 ? sy + 34 : Math.max(8, sy - 34 - mh)) + 'px';
   }
-  function closeMenu() { menuTown = null; $('townMenu').hidden = true; }
+  function closeMenu() { menuTown = null; menuForm = null; $('townMenu').hidden = true; $('formMenu').hidden = true; }
+  // a formation's menu: how many stand in it, which towns feed it, and stopping them all at once
+  function openFormMenu(f) {
+    menuForm = f;
+    Sound.menu();
+    const m = $('formMenu'), n = members(f).length, from = towns.filter(t => t.owner === me && t.route && t.route.form === f).map(t => t.name);
+    $('fmInfo').textContent = `${n} soldier${plural(n)} · ${from.length ? `fed by ${from.join(', ')}` : 'no routes lead into it'}`;
+    $('fmStop').disabled = !from.length;
+    m.hidden = false;
+    const sp = toScreen(f.x, f.y, 0), mw = m.offsetWidth || 230, mh = m.offsetHeight || 100;
+    m.style.left = clamp(sp.x - mw / 2, 12, innerWidth - mw - 12) + 'px';
+    m.style.top = (sp.y + 34 + mh < innerHeight - 8 ? sp.y + 34 : Math.max(8, sp.y - 34 - mh)) + 'px';
+  }
+  $('fmStop').onclick = () => {
+    if (menuForm) order(me, { type: 'unfeed', id: menuForm.id });
+    closeMenu();
+  };
   for (let k = 0; k < 3; k++) $('tmK' + k).onclick = () => {
     if (menuTown && menuTown.owner === me) { order(me, { type: 'train', town: menuTown.name, kind: k }); Sound.select(); toast(`${menuTown.name} now trains ${KIND[k].toLowerCase()}`); }
     closeMenu();
@@ -3235,7 +3341,7 @@ import * as THREE from 'three';
     else zoomTo(2.4, e.clientX, e.clientY);
   });
   cvs.addEventListener('pointerdown', e => {
-    if (menuTown) closeMenu();
+    if (menuTown || menuForm) closeMenu();
     lastPress = performance.now();
     if (state !== 'play' && !(upgradeHeld && armed)) return;   // a week just ended: only what's in hand can be placed
     if (e.pointerType === 'touch') {
@@ -3259,10 +3365,9 @@ import * as THREE from 'three';
       return;
     }
     const t = townAt(p.x, p.y, 30, me);
-    const group = t ? null : groupAt(p.x, p.y);
-    if (!t && !group) { startPan(e); return; }
-    drawing = t ? { town: t, pts: [{ x: t.x, y: t.y }], len: 0, blocked: null, tip: null }
-      : { town: null, group, pts: [{ x: p.x, y: p.y }], len: 0, blocked: null, tip: null };
+    const f = t ? null : formAt(p.x, p.y), from = t || f;
+    if (!from) { startPan(e); return; }
+    drawing = { town: t, form: f, pts: [{ x: from.x, y: from.y }], len: 0, blocked: null, tip: null };
     pointerId = e.pointerId;
     cvs.setPointerCapture(e.pointerId);
     e.preventDefault();
@@ -3286,8 +3391,8 @@ import * as THREE from 'three';
     showInspect();
     if (!drawing) {
       hover = state === 'play' && !armed ? townAt(p.x, p.y, 30, me) : null;
-      hoverGroup = state === 'play' && !armed && !hover ? groupAt(p.x, p.y) : null;
-      cvs.style.cursor = hover || hoverGroup || armed ? 'pointer' : view.z > 1 ? 'grab' : 'default';
+      hoverForm = state === 'play' && !armed && !hover ? formAt(p.x, p.y) : null;
+      cvs.style.cursor = hover || hoverForm || armed ? 'pointer' : view.z > 1 ? 'grab' : 'default';
       return;
     }
     freehand = e.shiftKey;
@@ -3365,7 +3470,7 @@ import * as THREE from 'three';
       if (n[0] >= WALL_MIN) lines.push('Its spearmen hold a shield wall: they wait for the enemy in their places, take 35% less in hand-to-hand fighting, and hurt cavalry that charge them. Arrows still break it.');
       if (n[2] >= RIDERS_MIN) lines.push(`Its riders ride out at enemy archers and cavalry attacking its side up to ${SALLY_R} away, wheel off to charge again, and come back to their places.`);
       if (n[1] >= VOLLEY_MIN) lines.push(`Its archers shoot a volley every ${VOLLEY_T} s at the thickest crowd of enemies up to ${VOLLEY_R} away.`);
-      if (co.team === me) lines.push('Drag from it to send it on as one army.');
+      if (co.team === me) lines.push('Drag from it to move it (its routes follow), join it to another, or attack with all of it. Tap it to stop the routes into it.');
       return { title: one >= 0 ? `${['Spear', 'Archer', 'Cavalry'][one]} company` : 'Company', own: OWN(co.team), lines };
     }
     for (const m of mines) if (Math.hypot(m.x - x, m.y - y) < 30) {
@@ -4575,7 +4680,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     h.t = nowS;
   }
   // a banner over the middle of each company, in its team's paler colour (lit, not glowing like the soldiers), drifting with it
-  // Each company keeps its own banner, found by the company's lead route, so a banner never flies over to another
+  // Each company keeps its own banner, found by its formation, so a banner never flies over to another
   // company when one forms or breaks up; a company's first banner appears where it stands.
   const banners = new Map(), spareBanners = [[], []];
   let bannerSeq = 0;
@@ -4586,14 +4691,14 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       for (const u of co.units) if (!u.dead && !u.enemy) { x += u.x; y += u.y; n++; }
       if (n < FORM_MIN) continue;
       x /= n; y /= n;
-      let b = banners.get(co.route);
+      let b = banners.get(co.form);
       if (!b) {
         b = spareBanners[co.team].pop();
         if (!b) { b = new THREE.Group(); addFlag(b, 0, 0, 0, 30, COL.mid[co.team], 1.5); b.userData.team = co.team; b.userData.i = bannerSeq++; dyn.add(b); }
-        banners.set(co.route, b);
+        banners.set(co.form, b);
         b.position.set(x, surfaceAt(x, y), y); b.visible = true;
       } else { b.position.x += (x - b.position.x) * 0.06; b.position.z += (y - b.position.z) * 0.06; b.position.y = surfaceAt(b.position.x, b.position.z); }
-      seen.add(co.route);
+      seen.add(co.form);
       // the cloth streams back from the pole, away from where the company faces, lifted by the wind so it shows
       // from above, and stirs
       b.rotation.y = Math.atan2(co.fx, co.fy) + Math.PI / 2;
@@ -4807,7 +4912,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
   function drawRoute(r, team) {
     strokeRoute(r.pts, ROUTE[team], 8);
     chevrons(r.pts, CHEVRON[team]);
-    if (!r.target) {
+    if (r.form) {   // it ends on a formation
       const e = r.pts[r.pts.length - 1];
       ctx.strokeStyle = COL.mid[team]; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
       ctx.beginPath(); ctx.arc(e.x, e.y, 34, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
@@ -4894,9 +4999,10 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     ctx.globalAlpha = 0.55;
     for (const r of live) drawRoute(r, me);
     ctx.globalAlpha = 1;
-    if (hoverGroup && !drawing) {
+    if (hoverForm && !drawing) {
       ctx.strokeStyle = COL.team[me]; ctx.lineWidth = 2; ctx.setLineDash([3, 4]);
-      for (const u of hoverGroup) { ctx.beginPath(); ctx.arc(u.x, u.y, 6, 0, Math.PI * 2); ctx.stroke(); }
+      for (const u of members(hoverForm)) { ctx.beginPath(); ctx.arc(u.x, u.y, 6, 0, Math.PI * 2); ctx.stroke(); }
+      ctx.beginPath(); ctx.arc(hoverForm.x, hoverForm.y, lockRing(hoverForm), 0, Math.PI * 2); ctx.stroke();
       ctx.setLineDash([]);
     }
     for (const t of towns) if (t.route && t.owner === 1 - me) drawRoute(t.route, 1 - me);
@@ -4909,7 +5015,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       if (drawing.lock) {   // locked onto a town: the line runs into it and the town is ringed
         const L = drawing.lock, e = drawing.pts[drawing.pts.length - 1], col = lockColor(L);
         strokeRoute([e, { x: L.x, y: L.y }], ROUTE[me], 8);
-        const age = (performance.now() - drawing.lockT) / 1000, R = (townRing(L) + 18) * (1 + 0.4 * Math.max(0, 1 - age * 5));
+        const age = (performance.now() - drawing.lockT) / 1000, R = (lockRing(L) + 18) * (1 + 0.4 * Math.max(0, 1 - age * 5));
         ctx.globalAlpha = 0.16; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(L.x, L.y, R, 0, Math.PI * 2); ctx.fill();
         ctx.globalAlpha = 1; ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.stroke();
         ctx.lineWidth = 4.5; ctx.lineCap = 'round';
@@ -5058,8 +5164,8 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       }
     }
     if (drawing && drawing.lock) {
-      const L = drawing.lock, p = toScreen(L.x, L.y, groundAt(L.x, L.y) + keepH(L) + 16);
-      const text = L.owner === me ? 'Reinforce' : L.owner >= 0 ? 'Attack' : 'Capture';
+      const L = drawing.lock, p = toScreen(L.x, L.y, groundAt(L.x, L.y) + (L.isForm ? 12 : keepH(L)) + 16);
+      const text = L.owner !== me ? (L.owner >= 0 ? 'Attack' : 'Capture') : !drawing.form ? 'Reinforce' : L.isForm ? 'Join up' : 'Join the garrison';
       ctx.font = '700 13px Lexend, "Avenir Next", system-ui, sans-serif';
       const w = ctx.measureText(text).width + 20;
       ctx.fillStyle = lockColor(L); rr(ctx, p.x - w / 2, p.y - 13, w, 24, 12); ctx.fill();
@@ -5262,7 +5368,7 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     // towns, rivers, woods and hills (null if there's none)
     const stage = () => {
       for (const t of towns) t.owner = -1;
-      units = []; structs = []; companies = []; volleys = [];
+      units = []; forms = []; structs = []; companies = []; volleys = [];
       const open = (x, y) => !blockedAt(x, y) && !inForest(x, y) && !hillLevel(x, y) && riverGap(x, y) > 100;
       for (let i = 0; i < 4000; i++) {
         const x = rand(150, W - 150), y = rand(150, H - 150);
@@ -5272,9 +5378,9 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     };
     // n soldiers of a side at a spot, heading for goal (standing there if it's the same spot); kinds dealt round in turn
     const side = (team, kinds, n, at, goal) => {
-      const route = { id: ++routeSeq, pts: [goal], target: null, len: 0 };
+      const f = newForm(team, goal.x, goal.y, null), route = { id: ++routeSeq, pts: [goal], target: null, form: f, len: 0 };
       for (let i = 0; i < n; i++) units.push({ x: at.x + rand(-16, 16), y: at.y + rand(-24, 24), vx: 0, vy: 0, team, kind: kinds[i % kinds.length], hp: K_HP[kinds[i % kinds.length]], boost: 0,
-        town: null, route, rid: route.id, ri: 0, arrived: at === goal, cd: 0, flash: 0, enemy: null, calm: 0, ox: rand(-16, 16), oy: rand(-24, 24), id: uid++, dead: false });
+        town: null, route: at === goal ? null : route, form: at === goal ? f : null, rid: route.id, ri: 0, arrived: false, cd: 0, flash: 0, enemy: null, calm: 0, ox: rand(-16, 16), oy: rand(-24, 24), id: uid++, dead: false });
     };
     const left = team => units.filter(u => !u.dead && u.team === team).length;
     let staged = null;
@@ -5350,8 +5456,8 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       // a blue army of n gathered just outside a town (as if a route had brought it there); returns its screen point
       army: (name, n, dist) => {
         const T = town(name), home = towns.find(t => t.capital && t.owner === 0), side = T.x > home.x ? -1 : 1;
-        const route = { id: ++routeSeq, pts: [{ x: T.x + side * dist, y: T.y }], target: null, len: 0 };
-        for (let i = 0; i < n; i++) { spawn(home); Object.assign(units[units.length - 1], { x: T.x + side * dist + rand(-12, 12), y: T.y + rand(-12, 12), kind: i % 3, town: null, route, arrived: true, rid: route.id }); }
+        const f = newForm(0, T.x + side * dist, T.y, null);
+        for (let i = 0; i < n; i++) { spawn(home); Object.assign(units[units.length - 1], { x: T.x + side * dist + rand(-12, 12), y: T.y + rand(-12, 12), kind: i % 3, town: null, form: f }); }
         return toScreen(T.x + side * dist, T.y, 0);
       },
       // the companies standing in formation: size by kind, how many stand in their places, and how far forward
@@ -5363,6 +5469,9 @@ vec3 noised(vec2 p) {   // value noise, and its slope
         });
         return { team: co.team, n: co.n, placed: live.filter(u => u.slot && Math.hypot(u.slot.x - u.x, u.slot.y - u.y) < 4).length, depth, member: toScreen(live[0].x, live[0].y, 0) };
       }),
+      // the formations: soldiers standing in each, where it stands (and on screen), and the towns whose routes feed it
+      forms: () => forms.map(f => ({ id: f.id, team: f.team, n: members(f).length, x: f.x, y: f.y, at: toScreen(f.x, f.y, 0),
+        fed: towns.filter(t => t.route && t.route.form === f).map(t => t.name) })),
       banners: () => [...banners.values()].filter(b => b.visible).map(b => ({ x: b.position.x, y: b.position.z })),   // where the company banners stand
       owner: n => town(n).owner,
       land: () => landKey,
