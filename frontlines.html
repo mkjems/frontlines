@@ -2839,7 +2839,9 @@ import * as THREE from 'three';
   // Both browsers run the whole battle and exchange only orders, a turn (TURN_TICKS steps, 50 ms) at a time.
   // Each sends its orders for the turn DELAY turns ahead, an empty list if it has none, and runs a turn only
   // once both players' orders for it are in, team 0's first. Every SUM_EVERY turns they compare checksums.
-  // A player who drops out rejoins with their key: the relay sends every turn so far, and they replay them.
+  // A player who drops out rejoins with their key: the relay sends every turn so far, and they replay them. A
+  // connection lost during a match is opened again by itself; then the battle is still here, so the page takes only
+  // the turns it missed and sends again its own that never reached the relay.
   // In a match, held (set by a pause order) stops both battles on the same turn, and a weekly choice not made
   // within WEEK_PICK turns (15 s) is made for the player: the first reward offered.
   const TESTING = new URLSearchParams(location.search).has('test');
@@ -2849,16 +2851,32 @@ import * as THREE from 'three';
   // (default 2); &speed=n runs turns n times faster than real time, so whole matches fit in a test
   const BOT = TESTING ? new URLSearchParams(location.search).get('bot') : null, NET_SPEED = TESTING && +new URLSearchParams(location.search).get('speed') || 1;
   let held = false, bot = null;
-  let net = null;   // { ws, code, team, key, names, setup, live, turn, sent, acc, inbox: [Map, Map], outbox, sums, peerSums, desync, waitT }
+  let net = null;   // { ws, code, team, key, names, setup, live, turn, sent, acc, inbox: [Map, Map], mine, outbox, sums, peerSums, desync, waitT }
   const relayURL = () => new URLSearchParams(location.search).get('relay') || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
   function netOpen(first) {
-    const ws = new WebSocket(relayURL());
-    net = { ws, code: null, team: -1, key: null, names: ['', ''], setup: null, live: false, turn: 0, sent: DELAY - 1, acc: 0,
-      inbox: [new Map(), new Map()], outbox: [], sums: new Map(), peerSums: new Map(), desync: -1, agreed: 0, waitT: 0,
-      screens: [null, null], lobby: null, rtt: 0, pingAt: 0, awayAt: 0, rematch: [false, false], weekTurns: 0 };
-    ws.onopen = () => ws.send(JSON.stringify(first));
-    ws.onmessage = e => netMessage(JSON.parse(e.data));
-    ws.onclose = () => { if (net && net.ws === ws && net.live) toast('Lost the connection to the game server', 'bad'); };
+    net = { ws: null, code: null, team: -1, key: null, names: ['', ''], setup: null, live: false, turn: 0, sent: DELAY - 1, acc: 0,
+      inbox: [new Map(), new Map()], mine: new Map(), outbox: [], sums: new Map(), peerSums: new Map(), desync: -1, agreed: 0, waitT: 0,
+      screens: [null, null], lobby: null, rtt: 0, pingAt: 0, awayAt: 0, rematch: [false, false], weekTurns: 0, tries: 0 };
+    netConnect(first);
+  }
+  // a connection to the relay for this match; if it closes while this player has a seat, it's opened again (sooner
+  // at first, then every 5 s) and they rejoin. cut: the line is down (tests), so it waits.
+  function netConnect(first) {
+    const n = net, ws = new WebSocket(relayURL());
+    n.ws = ws;
+    ws.onopen = () => { n.tries = 0; ws.send(JSON.stringify(first)); };
+    ws.onmessage = e => { if (net === n && n.ws === ws) netMessage(JSON.parse(e.data)); };
+    ws.onclose = () => {
+      if (net !== n || n.ws !== ws || !n.key) return;
+      if (n.live && !n.tries) toast('Lost the connection to the game server. Reconnecting…', 'bad');
+      const again = () => {
+        if (net !== n || n.ws !== ws) return;
+        if (n.cut) { setTimeout(again, 500); return; }
+        n.rejoining = true;
+        netConnect({ t: 'rejoin', code: n.code, team: n.team, key: n.key });
+      };
+      setTimeout(again, Math.min(5000, 500 * 2 ** n.tries++));
+    };
   }
   const netSend = m => { if (net && net.ws.readyState === 1) net.ws.send(JSON.stringify(m)); };
   const myScreen = () => ({ w: innerWidth, h: innerHeight });
@@ -2878,6 +2896,7 @@ import * as THREE from 'three';
     if (m.t === 'room') {
       Object.assign(net, { code: m.code, team: m.team, key: m.key, names: m.names, screens: m.screens || net.screens });
       try { sessionStorage.setItem('frontlines-match', JSON.stringify({ code: m.code, team: m.team, key: m.key })); } catch (e) {}
+      history.replaceState(null, '', '#' + m.code);   // the host's too, so a reload finds the way back (see fromLink)
       if (myName && m.names[m.team] !== myName) netSend({ t: 'name', name: myName });   // typed before the connection opened
       if (m.team === 0) { sendLobby(); showInvite(); } else { if (m.lobby) previewLobby(m.lobby); showJoined(); }
     }
@@ -2896,8 +2915,22 @@ import * as THREE from 'three';
     else if (m.t === 'left') { if (net.live && state === 'play') { net.awayAt = performance.now(); toast(`${oppName()} lost the connection`, 'bad'); } }
     else if (m.t === 'back') { if (net.awayAt) toast(`${oppName()} is back`, 'good'); net.awayAt = 0; }
     else if (m.t === 'catchup') {
-      Object.assign(net, { code: m.code, team: m.team, names: m.names });
-      if (!m.setup) return;
+      const same = net.rejoining, resumed = same && net.setup && m.setup && m.setup.id === net.setup.id;
+      net.rejoining = false;
+      Object.assign(net, { code: m.code, team: m.team, names: m.names, screens: m.screens || net.screens });
+      if (resumed) {   // the same page, its battle still here: the turns it missed, and its own sent again
+        for (const team of [0, 1]) m.turns[team].forEach((o, n) => { if (o && n >= net.turn && !net.inbox[team].has(n)) net.inbox[team].set(n, o); });
+        for (let n = m.turns[net.team].length; n <= net.sent; n++) netSend({ t: 'turn', id: net.setup.id, n, orders: net.mine.get(n) || [] });
+        toast(`Back in the battle against ${oppName()}`, 'good');
+        return;
+      }
+      if (!m.setup) {   // still choosing the map: after a reload, back to the invitation or the welcome card
+        if (same) { if (m.team === 1 && m.lobby) { previewLobby(m.lobby); showJoined(); } return; }
+        $('intro').hidden = false; $('intro').dataset.mode = 'friend';
+        if (m.team === 0) { if (m.lobby) newGame(m.lobby.land, m.lobby.map); showStep('wait'); showInvite(); }
+        else { if (m.lobby) previewLobby(m.lobby); showStep('join'); showJoined(); }
+        return;
+      }
       net.next = m.setup.id; freshTurns();
       beginMatch(m.setup);
       for (const team of [0, 1]) m.turns[team].forEach((o, n) => { if (o) net.inbox[team].set(n, o); });
@@ -2906,7 +2939,11 @@ import * as THREE from 'three';
       while (haveTurn(net.turn)) runTurn();   // replay the battle so far
       net.replaying = false;
     }
-    else if (m.t === 'error') toast(m.message, 'bad');
+    else if (m.t === 'error') {
+      toast(m.message, 'bad');
+      // back too late: the other player has won by walkover
+      if (m.over && net.setup && state === 'play') { net.key = null; endGame(false, 'You were away too long'); $('againBtn').disabled = $('againBtn2').disabled = true; }
+    }
   }
   function beginMatch(setup) {
     net.setup = setup; board = setup.board; presetMatch = setup.match; me = net.team;
@@ -2964,6 +3001,7 @@ import * as THREE from 'three';
       const mine = JSON.parse(JSON.stringify(net.outbox));
       net.outbox = []; net.sent = n + DELAY;
       net.inbox[net.team].set(n + DELAY, mine);
+      net.mine.set(n + DELAY, mine); net.mine.delete(n - 200);
       netSend({ t: 'turn', id: net.setup.id, n: n + DELAY, orders: mine });
     }
     for (const team of [0, 1]) {
@@ -3009,7 +3047,8 @@ import * as THREE from 'three';
     // a player who dropped out has 30 seconds to come back; after that the other wins by walkover
     const away = net.awayAt ? Math.max(0, AWAY_S - (now - net.awayAt) / 1000) : -1;
     if (away === 0 && state === 'play') { netSend({ t: 'over' }); net.awayAt = 0; endGame(true, `${oppName()} left the battle`); }
-    const note = away > 0 ? `${oppName()} lost the connection. Waiting ${Math.ceil(away)} s…` : net.waitT > 1 ? `Waiting for ${oppName()}…` : '';
+    const note = away > 0 ? `${oppName()} lost the connection. Waiting ${Math.ceil(away)} s…` : net.ws.readyState !== 1 && net.key ? 'Lost the connection. Reconnecting…'
+      : net.waitT > 1 ? `Waiting for ${oppName()}…` : '';
     if (note) { $('hint').textContent = note; $('hint').style.opacity = 1; } else if ($('hint').textContent.includes('Waiting')) setHint(hintBase);
     if (now - net.pingAt > 2000) { net.pingAt = now; netSend({ t: 'ping', at: now }); }
     // the opponent's chip: name, and how quick the connection is
@@ -5351,9 +5390,11 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       netJoin: (code, name) => netJoin(code, name),
       netStart: (land, seed) => netStart(land, seed),
       net: () => net && { code: net.code, team: net.team, live: net.live, turn: net.turn, desync: net.desync, agreed: net.agreed, waiting: net.waitT > 0, held, time,
-        orders: [0, 1].map(team => orderLog.filter(o => o.team === team).length) },   // orders carried out, by team
-      netDrop: () => net.ws.close(),
-      netRejoin: () => netOpen({ t: 'rejoin', ...JSON.parse(sessionStorage.getItem('frontlines-match')) }),
+        orders: [0, 1].map(team => orderLog.filter(o => o.team === team).length), online: net.ws.readyState === 1 },   // orders carried out, by team
+      netDrop: () => { net.cut = true; net.ws.close(); },   // the line goes down, and stays down
+      netBlip: () => net.ws.close(),   // the connection drops; the game reconnects by itself
+      netUp: () => { net.cut = false; },   // the line is back after netDrop
+      netRejoin: () => netOpen({ t: 'rejoin', ...JSON.parse(sessionStorage.getItem('frontlines-match')) }),   // as after a reload
       // for tests/drift.mjs (docs/multiplayer.md, phase 0): stop the real-time loop, so only run() moves the battle
       freeze: () => { paused = true; },
       board: b => { board = b; },

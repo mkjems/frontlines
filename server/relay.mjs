@@ -17,8 +17,8 @@
 //                  (id: the match's, from its setup)
 //                  ping, pong and rematch (passed on as they are)
 //   to a player    room {code, team, key, names, screens, lobby} · joined {names, screens} · names {names}
-//                  lobby/start/turn/sum/ping/pong/rematch (the other's) · catchup {setup, turns} (after a
-//                  rejoin) · left {team} · back {team} · error {message}
+//                  lobby/start/turn/sum/ping/pong/rematch (the other's) · catchup {names, screens, lobby, setup,
+//                  turns} (after a rejoin) · left {team} · back {team} · error {message, over}
 
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
@@ -91,10 +91,10 @@ export function start({ port = 8080, site = fileURLToPath(new URL('../site/', im
         send(r.players[0], { t: 'joined', names: r.names, screens: r.screens });
       } else if (m.t === 'rejoin' && !room) {
         const r = rooms.get(String(m.code || '').toUpperCase()), tm = m.team === 1 ? 1 : 0;
-        if (!r || r.over || r.keys[tm] !== m.key) return send(ws, { t: 'error', message: 'That game is over' });
+        if (!r || r.over || r.keys[tm] !== m.key) return send(ws, { t: 'error', message: 'That game is over', over: true });
         if (r.players[tm]) r.players[tm].close();
         room = r; team = tm; r.players[tm] = ws;
-        send(ws, { t: 'catchup', code: r.code, team, names: r.names, setup: r.setup, turns: r.turns });
+        send(ws, { t: 'catchup', code: r.code, team, names: r.names, screens: r.screens, lobby: r.lobby, setup: r.setup, turns: r.turns });
         send(r.players[1 - tm], { t: 'back', team });
       } else if (m.t === 'name' && room) {
         room.names[team] = String(m.name || '').slice(0, 24);

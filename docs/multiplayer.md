@@ -6,7 +6,7 @@ in order. Single player against the computer must keep working, and feel the sam
 **Current phase:** 6, trying it out. Phases 4 and 5 are deployed (23 October): matches work on frontlines.mkjems.dk,
 checked with two browsers through the VPS (about 60 ms round trip). The user is playing and reporting bugs; the
 first, the guest's route drawn red while dragging, is fixed. More to come. Bots playing real matches are in
-(`npm run matches`, 25 October) and found two dropout bugs; fixing those is next (see phase 6).
+(`npm run matches`, 25 October); the two dropout bugs they found are fixed. Next: real matches between people.
 
 How to keep this plan up to date:
 - Tick a step (`- [ ]` → `- [x]`) in the same commit as the work, once its tests pass.
@@ -313,20 +313,29 @@ Exit: a friend who has never seen the game can join from a link on a phone and f
       browser's side: `makeAI(me, Math.random)`, kept out of `ais` so it isn't in the checksum, run once per turn
       from `runTurn` (`botTurn`), not while a rejoining browser replays. `&speed=3` runs turns 3 times faster than
       real time, so a whole match takes 2–4 minutes. The relay takes `jitter` too (messages stay in order).
-      `npm run matches` plays one match per scenario side by side: plain, lag (40–120 ms), drop (the guest away
-      8 s, twice, rejoining), slow (guest's CPU ×4), hidden (host's tab frozen 10 s), reload (guest, then host,
-      reloads), pick (the guest's weekly choice made for them), rematch. About 4 minutes for all eight.
+      `npm run matches` plays one match per scenario side by side: plain, lag (40–120 ms), drop (the guest's line
+      down 8 s, twice), gone (down 40 s: a walkover), slow (guest's CPU ×4), hidden (host's tab frozen 10 s),
+      reload (guest, then host, reloads), pick (the guest's weekly choice made for them), rematch. About 5 minutes
+      for all nine. "hidden" freezes the page through CDP; headless Chrome then leaves it hidden (no frames) until
+      `Emulation.setFocusEmulationEnabled`, which stands for the player looking at the tab again.
       `npm test` has the short version: 60 game seconds at double speed with a drop and rejoin (34 s).
       Checked that it catches the bot drawing from `rng`: out of sync at turn 140.
       First run: plain, lag, drop, slow, pick and rematch played whole matches in sync, with the same winner on
       both screens, no stalls and no page errors. Two bugs found, both about losing the connection:
-- [ ] **A lost connection never comes back by itself.** Found by "hidden": when a player's socket closes (a frozen
+- [x] **A lost connection never comes back by itself.** Found by "hidden": when a player's socket closes (a frozen
       tab; on a phone, switching apps often does the same), nothing reconnects. Their battle stands still with
       "Lost the connection to the game server", the other player wins by walkover after 30 s, and the stuck player
       is never told. The existing rejoin works, but only the test hook (`netRejoin`) or a reload starts it.
-- [ ] **A host who reloads can't get back in.** Found by "reload": a guest's address has `#CODE` (from the link,
+      Fixed: `netConnect` opens the connection again (after 0.5, 1, 2, 4 s, then every 5 s) and rejoins. The
+      page still has its battle, so it doesn't replay: it takes the turns it missed from the catch-up and sends
+      again its own that never reached the relay (`net.mine`, the last 200 it sent). Back after the walkover, the
+      relay answers `error {over}` and the player sees "You were away too long". Test hooks: `netDrop` (the line
+      stays down until `netUp`), `netBlip` (the connection drops once).
+- [x] **A host who reloads can't get back in.** Found by "reload": a guest's address has `#CODE` (from the link,
       or the code box), so a reload rejoins; the host's has none, so `fromLink` never runs and the host loses by
       walkover. The rejoin key is in sessionStorage already.
+      Fixed: both players' addresses get `#CODE` once they have a room. A reload while the host is still
+      inviting brings back the invitation (or the guest's welcome card): the catch-up now carries the lobby.
 - [ ] Smaller: after a walkover the winner's hint still reads "Waiting for Ann…".
       - Safari later: real Safari through `safaridriver` (as [tests/safari.mjs](../tests/safari.mjs) does for the
         twins; the iPhone's engine, but macOS only, a visible window, one at a time), or Playwright's WebKit

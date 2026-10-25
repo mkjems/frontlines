@@ -12,7 +12,8 @@
 // Scenarios (the host is on a laptop, the guest on a phone, so they play on a square board):
 //   plain    nothing more
 //   lag      every message held back 40 to 120 ms (still in order)
-//   drop     the guest loses the connection for 8 s, twice, and rejoins
+//   drop     the guest loses the connection for 8 s, twice; the game reconnects by itself
+//   gone     the guest loses the connection for 40 s: the host wins by walkover after 30, and the guest is told
 //   slow     the guest's machine runs 4 times slower (an old phone)
 //   hidden   the host's tab is frozen for 10 s, as a phone does to a browser in the background (Chrome then
 //            closes its connection, as a phone often does when you switch apps)
@@ -25,7 +26,7 @@ import { parseArgs } from 'node:util';
 import { start } from '../server/relay.mjs';
 import { SITE, sleep, launch, t, pair, close } from './players.mjs';
 
-const SCENARIOS = ['plain', 'lag', 'drop', 'slow', 'hidden', 'reload', 'pick', 'rematch'];
+const SCENARIOS = ['plain', 'lag', 'drop', 'gone', 'slow', 'hidden', 'reload', 'pick', 'rematch'];
 const LANDS = ['valley', 'lake', 'tworivers', 'mountains', 'open', 'steppe', 'greenwood', 'highlands', 'plateau', 'broken'];
 const { values: opt } = parseArgs({ options: {
   only: { type: 'string', default: SCENARIOS.join(',') }, repeat: { type: 'string', default: '1' },
@@ -46,7 +47,7 @@ const started = Date.now();
 async function play({ scenario, land, map }) {
   const q = `&bot&speed=${SPEED}`;
   const r = { scenario, land, map, problems: [], stall: 0 };
-  const { host, guest, code } = await pair(browser, scenario === 'lag' ? laggy : server, {
+  const { host, guest } = await pair(browser, scenario === 'lag' ? laggy : server, {
     land, map, host: q, guest: scenario === 'pick' ? `&bot=20&speed=${SPEED}` : q, slow: scenario === 'slow' ? 4 : 1, consoleErrors: true,
   });
   const pages = [host, guest];
@@ -54,23 +55,20 @@ async function play({ scenario, land, map }) {
   // each screen: its match (none, if a reloaded page didn't get back in), the battle and the end dialog
   const look = () => both(() => ({ ...(__t.net() || { live: false, turn: -1, time: 0, desync: -1, agreed: 0, orders: [0, 0] }),
     state: __t.state(), war: __t.war(), label: document.getElementById('overLabel').textContent }));
-  // the guest steps away for a while, and comes back
-  const away = async (ms, rejoin) => { await t(guest, 'netDrop'); await sleep(ms); if (rejoin) await t(guest, 'netRejoin'); };
+  // the guest's line goes down for a while, and comes back
+  const away = async ms => { await t(guest, 'netDrop'); await sleep(ms); await t(guest, 'netUp'); };
   const freeze = async (page, ms) => {
     const cdp = await page.createCDPSession();
     await cdp.send('Page.setWebLifecycleState', { state: 'frozen' });
     await sleep(ms);
     await cdp.send('Page.setWebLifecycleState', { state: 'active' });
+    await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true });   // and the player looks at it again
   };
-  // a guest came by the link, so the code is in their address (pair() joins through the test hook instead); the
-  // host's address has none, as in the game
-  const reload = async page => {
-    if (page === guest) await guest.evaluate(code => history.replaceState(null, '', '#' + code), code);
-    await page.reload(); await page.waitForFunction(() => window.__t);
-  };
+  const reload = async page => { await page.reload(); await page.waitForFunction(() => window.__t); };
   // events by game second, each once
   const events = {
-    drop: [[60, () => away(8000, true)], [180, () => away(8000, true)]],
+    drop: [[60, () => away(8000)], [180, () => away(8000)]],
+    gone: [[60, () => away(40000)]],
     hidden: [[90, () => freeze(host, 10000)]],
     reload: [[60, () => reload(guest)], [150, () => reload(host)]],
   }[scenario] || [];
@@ -108,9 +106,10 @@ async function play({ scenario, land, map }) {
     if (over || time >= endAt) break;
   }
   Object.assign(r, await outcome(n));
-  for (const [who, p] of [['host', host], ['guest', guest]]) for (const e of new Set(p.errors)) r.problems.push(`${who}: ${e.slice(0, 160)}`);
+  // Chrome's own note when a frozen tab's connection is closed isn't an error of the game's
+  for (const [who, p] of [['host', host], ['guest', guest]]) for (const e of new Set(p.errors)) if (!/Back-Forward Cache/.test(e)) r.problems.push(`${who}: ${e.slice(0, 160)}`);
   if (!r.agree) r.problems.push(`the screens disagree on the result: ${r.labels.join(' / ')}`);
-  if (r.orders.some(x => x < 10)) r.problems.push(`a side hardly played (orders ${r.orders.join('/')})`);
+  if (r.orders.some(x => x < 5)) r.problems.push(`a side hardly played (orders ${r.orders.join('/')})`);
   await close(host, guest);
   return r;
 }

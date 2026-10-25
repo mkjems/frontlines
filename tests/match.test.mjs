@@ -200,3 +200,52 @@ test('two bots play a busy match through the relay, with a dropout, and stay in 
   assert.deepEqual([...host.errors, ...guest.errors], []);
   await close(host, guest);
 });
+
+test('a lost connection comes back by itself, and a player back too late is told they lost', async () => {
+  const { host, guest } = await match(server, '&bot&speed=2&away=3');
+  for (const p of [host, guest]) await until(p, () => __t.net().time > 10, 'the battle to get going', 60000);
+  // each loses the connection in turn, and the game reconnects and carries on, without replaying the battle
+  for (const p of [guest, host]) {
+    const before = await t(p, 'net');
+    await t(p, 'netBlip');
+    await until(p, () => !__t.net().online, 'the connection to drop');
+    await until(p, () => __t.net().online, 'the game to reconnect by itself', 20000);
+    for (const q of [host, guest]) await until(q, turn => __t.net().turn > turn + 60, 'the battle to carry on', 60000, before.turn);
+    const after = await t(p, 'net');
+    assert.ok(after.agreed > before.agreed, `the same game, not a replay (checksums agreed ${before.agreed}, then ${after.agreed} times)`);
+  }
+  for (const p of [host, guest]) assert.equal((await t(p, 'net')).desync, -1, 'in sync after both reconnected');
+  // the line stays down for longer than the opponent waits: a walkover, and the late player hears so once back
+  await t(guest, 'netDrop');
+  await until(host, () => !document.getElementById('over').hidden, 'the walkover', 20000);
+  assert.equal(await host.$eval('#overTitle', e => e.textContent), 'Bo left the battle');
+  await t(guest, 'netUp');
+  await until(guest, () => !document.getElementById('over').hidden, 'the late player to be told', 20000);
+  assert.equal(await guest.$eval('#overTitle', e => e.textContent), 'You were away too long');
+  assert.match(await guest.$eval('#overLabel', e => e.textContent), /Defeat/);
+  assert.deepEqual([...host.errors, ...guest.errors], []);
+  await close(host, guest);
+});
+
+test('a player who reloads the page gets back in: the host while inviting, then each during the battle', async () => {
+  const host = await player(server, LAPTOP, '&bot&speed=2'), guest = await player(server, LAPTOP, '&bot&speed=2');
+  await t(host, 'netHost', 'Ann');
+  await until(host, () => __t.net().code, 'a room code');
+  const { code } = await t(host, 'net');
+  const reload = async p => { await p.reload(); await p.waitForFunction(() => window.__t); };
+  await reload(host);
+  await until(host, c => document.getElementById('bigCode').textContent === c && !document.getElementById('intro').hidden, 'the invitation again, with the same code', 20000, code);
+  await t(guest, 'netJoin', code, 'Bo');
+  await until(host, () => document.getElementById('waitTitle').textContent === 'Bo has joined', 'the host to see the guest');
+  await t(host, 'netStart', 'valley', 4821);
+  for (const p of [host, guest]) await until(p, () => __t.net()?.live && __t.net().time > 10, 'the battle to get going', 60000);
+  for (const p of [guest, host]) {
+    await reload(p);
+    await until(p, () => __t.net()?.live && __t.net().turn > 0, 'the reloaded page to get back in', 30000);
+    for (const q of [host, guest]) await until(q, () => __t.net().agreed >= 2, 'checksums to be compared again', 60000);
+  }
+  assert.equal(await t(host, 'me'), 0); assert.equal(await t(guest, 'me'), 1);
+  for (const p of [host, guest]) assert.equal((await t(p, 'net')).desync, -1, 'in sync after both reloaded');
+  assert.deepEqual([...host.errors, ...guest.errors], []);
+  await close(host, guest);
+});
