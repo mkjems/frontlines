@@ -4,7 +4,8 @@
 // drops out can rejoin and replay the battle up to now. It never runs a game itself.
 //
 //   node relay.mjs                      serves ../site on port 8080 (PORT and SITE override)
-//   import { start } from './relay.mjs' tests start it on a free port, optionally with a delay per message
+//   import { start } from './relay.mjs' tests start it on a free port, optionally with a delay per message (ms),
+//                                       and jitter: up to that much more, at random, still in order
 //
 // A room: players[team] (socket, or null while away), keys[team] (to rejoin), names, screens (each player's
 // window size, for choosing the board), lobby (the map the host is showing), setup (what the host started:
@@ -33,7 +34,7 @@ const TYPES = {
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // no 0/O or 1/I, so a code can be read aloud
 const IDLE_MS = 30 * 60 * 1000;
 
-export function start({ port = 8080, site = fileURLToPath(new URL('../site/', import.meta.url)), delay = 0 } = {}) {
+export function start({ port = 8080, site = fileURLToPath(new URL('../site/', import.meta.url)), delay = 0, jitter = 0 } = {}) {
   const root = resolve(site);
   const rooms = new Map();   // code -> { players: [socket|null, socket|null], keys, names, setup, turns, seen }
 
@@ -59,7 +60,14 @@ export function start({ port = 8080, site = fileURLToPath(new URL('../site/', im
 
   // ---------- the relay ----------
   const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 256 * 1024 });
-  const send = (ws, msg) => { if (ws && ws.readyState === 1) setTimeout(() => ws.send(JSON.stringify(msg)), delay); };
+  // a message is never sent before an earlier one to the same player, as on a real connection
+  const send = (ws, msg) => {
+    if (!ws || ws.readyState !== 1) return;
+    if (!delay && !jitter) return ws.send(JSON.stringify(msg));
+    const at = Math.max(ws.due || 0, Date.now() + delay + Math.random() * jitter);
+    ws.due = at;
+    setTimeout(() => { if (ws.readyState === 1) ws.send(JSON.stringify(msg)); }, at - Date.now());
+  };
   const newCode = () => { for (;;) { const b = randomBytes(4), c = [...b].map(x => CODE_CHARS[x % CODE_CHARS.length]).join(''); if (!rooms.has(c)) return c; } };
 
   wss.on('connection', ws => {

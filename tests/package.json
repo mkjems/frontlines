@@ -8,6 +8,7 @@
     "test": "node --test --test-concurrency=1 game.test.mjs match.test.mjs",
     "drift": "../build.sh >/dev/null && node drift.mjs",
     "balance": "../build.sh >/dev/null && node balance.mjs",
+    "matches": "../build.sh >/dev/null && npm --prefix ../server install --silent --no-audit --no-fund && node matches.mjs",
     "safari": "../build.sh >/dev/null && node safari.mjs"
   },
   "devDependencies": {

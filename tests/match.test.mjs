@@ -3,56 +3,24 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import puppeteer from 'puppeteer-core';
 import { start } from '../server/relay.mjs';
+import { SITE, LAPTOP, sleep, launch, t, until, player as newPlayer, pair, close } from './players.mjs';
 
-const CHROME = process.env.CHROME_PATH || [
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser',
-].find(existsSync);
-const SITE = fileURLToPath(new URL('../site/', import.meta.url));
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 let browser, server, slow;
 
 before(async () => {
-  browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--enable-unsafe-swiftshader', '--no-sandbox'] });
+  browser = await launch();
   server = await start({ port: 0, site: SITE });
   slow = await start({ port: 0, site: SITE, delay: 60 });   // every message held back 60 ms: about 120 ms there and back
 });
 after(async () => { await browser?.close(); await server?.close(); await slow?.close(); });
 
-const t = (page, fn, ...args) => page.evaluate((fn, args) => window.__t[fn](...args), fn, args);
-// waits for fn (run in the page, with arg) to come true; generous, as CI machines draw in software and run slowly
-async function until(page, fn, what, ms = 20000, arg) {
-  for (const end = Date.now() + ms; Date.now() < end; await sleep(50)) if (await page.evaluate(fn, arg)) return;
-  throw new Error(`timed out waiting for ${what}`);
-}
-// a player: their own browser storage, like a separate machine
-// slow: how many times slower this player's machine runs (a slow phone)
-async function player(srv, viewport, query = '', slow = 1) {
-  const page = await (await browser.createBrowserContext()).newPage();
-  await page.setViewport(viewport);
-  if (slow > 1) await page.emulateCPUThrottling(slow);
-  page.errors = [];
-  page.on('pageerror', e => page.errors.push(e.message));
-  await page.goto(`http://127.0.0.1:${srv.port}/?test${query}`);
-  await page.waitForFunction(() => window.__t);
-  return page;
-}
+const player = (srv, viewport, query) => newPlayer(browser, srv, viewport, query);
 // a host on a laptop and a guest on a phone, in a started match on River Valley, map 4821
 // lateGuest: the guest's countdown runs slowly, so the host begins (and sends turns) well before the guest does
 async function match(srv, query = '', lateGuest = false) {
-  const host = await player(srv, { width: 1200, height: 800 }, query), guest = await player(srv, { width: 390, height: 844, isMobile: true, hasTouch: true }, query + (lateGuest ? '&count=700' : ''));
-  await t(host, 'netHost', 'Ann');
-  await until(host, () => __t.net().code, 'a room code');
-  const { code } = await t(host, 'net');
+  const { host, guest, code } = await pair(browser, srv, { host: query, guest: query + (lateGuest ? '&count=700' : '') });
   assert.match(code, /^[A-HJ-NP-Z2-9]{4}$/, 'a four-character code without 0/O or 1/I');
-  await t(guest, 'netJoin', code, 'Bo');
-  await until(guest, () => __t.net().team === 1, 'the guest to join');
-  await t(host, 'netStart', 'valley', 4821);
-  for (const p of [host, guest]) await until(p, () => __t.net().live, 'the match to start');
   return { host, guest };
 }
 // the neutral town nearest to a side's capital
@@ -66,7 +34,6 @@ async function drag(page, from, to) {
   for (let i = 1; i <= 20; i++) { await page.mouse.move(a.x + (b.x - a.x) * i / 20, a.y + (b.y - a.y) * i / 20); await sleep(16); }
   await page.mouse.up();
 }
-async function close(...pages) { for (const p of pages) await p.browserContext().close(); }
 
 test('two players play a match through the relay, each with their own side, and stay in sync', async () => {
   // the guest finishes the countdown last, after the host has begun sending turns, as a slow phone would
@@ -128,8 +95,7 @@ test('a player who drops out rejoins, replays the battle and carries on in sync'
 });
 
 test('playing a friend through the screens: invite, join by link, battle, pause, give up, rematch', async () => {
-  const host = await player(server, { width: 1200, height: 800 }), guest = await player(server, { width: 1200, height: 800 });
-  guest.on('dialog', d => d.accept());   // Give up asks first
+  const host = await player(server, LAPTOP), guest = await player(server, LAPTOP);
   const text = (p, sel) => p.$eval(sel, e => e.textContent);
   const shown = (p, sel) => p.$eval(sel, e => !e.hidden && e.offsetParent !== null);
   // the host: Play a friend, a map, Invite
@@ -212,5 +178,25 @@ test('a player who stays away loses by walkover', async () => {
   assert.match(await host.$eval('#overLabel', e => e.textContent), /Victory/);
   await t(guest, 'netRejoin');
   await until(guest, () => /over/.test(document.getElementById('toast').textContent), 'the late guest to hear the game is over');
+  await close(host, guest);
+});
+
+// The short version of `npm run matches`: the computer plays both sides through the relay, a busy battle with
+// orders from both, a weekly choice, and a dropout and rejoin in the middle of it.
+test('two bots play a busy match through the relay, with a dropout, and stay in sync', async () => {
+  const { host, guest } = await match(server, '&bot&speed=2');
+  for (const p of [host, guest]) await until(p, () => __t.net().time > 35, 'the battle to get going', 90000);
+  await t(guest, 'netDrop');
+  await sleep(1500);
+  await t(guest, 'netRejoin');
+  await until(guest, () => __t.net().live && __t.net().turn > 0, 'the guest to catch up');
+  for (const p of [host, guest]) await until(p, () => __t.net().desync >= 0 || (__t.net().time > 60 && __t.net().agreed >= 5), 'the battle to carry on past the first week', 90000);
+  for (const p of [host, guest]) {
+    const n = await t(p, 'net');
+    assert.equal(n.desync, -1, `in sync (${p === host ? 'host' : 'guest'}, checksums agreed ${n.agreed} times)`);
+    assert.ok(n.orders[0] >= 5 && n.orders[1] >= 5, `both sides gave orders (${n.orders.join(' and ')})`);
+  }
+  assert.ok(await t(host, 'war').then(w => w.week >= 2), 'a week passed, its rewards chosen by both bots');
+  assert.deepEqual([...host.errors, ...guest.errors], []);
   await close(host, guest);
 });

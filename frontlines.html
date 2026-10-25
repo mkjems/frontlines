@@ -1229,7 +1229,7 @@ import * as THREE from 'three';
       : 'Drag from a blue town to draw a march route. Your first watchtower is in the tray.');
     startTutorial();
     match.grace ??= tut ? 25 : 6;   // a new player gets a moment before the computer's first push
-    ais = [0, 1].filter(team => byComputer(team) || (match.standin && team === me)).map(makeAI);
+    ais = [0, 1].filter(team => byComputer(team) || (match.standin && team === me)).map(team => makeAI(team));
     renderTray();
     view.z = 1; view.x = view.y = 0;
     FX.clear();
@@ -1945,6 +1945,7 @@ import * as THREE from 'three';
     if (team === me) toast(`${t.name} captured${towns.some(o => o.owner === me && o.route && o.route.target === t) ? '. Its attackers now guard it' : ''}`, 'good');
     else if (prev === me) toast(`${t.name} has fallen`, 'bad');
     for (const ai of ais) ai.hurry();
+    if (bot) bot.ai.hurry();
   }
 
   // Volleys: a company with VOLLEY_MIN or more archers also shoots together. Every VOLLEY_T seconds its archers (those not fighting hand to hand) each loose two
@@ -2225,8 +2226,12 @@ import * as THREE from 'three';
     barracks: ['barracks', 'farm', 'barracks', 'tower'],
     none: [],
   };
-  function makeAI(aiTeam) {
+  function makeAI(aiTeam, own) {
     const aiFoe = 1 - aiTeam;
+    // own: a random stream of its own, for a bot that plays this browser's side in a match (see botTurn); it runs in
+    // one browser only, so it mustn't draw from the battle's stream, and its orders go to both browsers like a person's
+    const R = () => own ? own() : rng(), rnd = (a, b) => a + R() * (b - a);
+    const act = o => own ? order(aiTeam, o) : carryOut(aiTeam, o, true);
     let plan = null, buys = 0, wait = match.grace, kinds = new Map();
     // warnings of its moves are for the person playing against it
     const warn = (p, msg, loud) => { if (aiFoe === me && match.ai !== 2) alertAt(p, msg, loud); };
@@ -2249,7 +2254,7 @@ import * as THREE from 'three';
       while (cool <= 0 && todo.length) {
         const { o, then } = todo.shift();
         if (!changes(o)) continue;
-        carryOut(aiTeam, o, true);
+        act(o);
         acts++; cool = actT;
         recent.push(time); while (recent[0] < time - 10) recent.shift();
         burst = Math.max(burst, recent.length);
@@ -2264,7 +2269,7 @@ import * as THREE from 'three';
         if (o.owner === aiTeam) continue;
         const d = hypot(o.x - from.x, o.y - from.y);
         const guards = o.owner === aiFoe ? countNear(aiFoe, o.x, o.y, 120) : 0;
-        const s = d * (0.6 + o.hold / o.holdMax) * (1 + guards / 8) * (o.capital ? 1.25 : 1) * rand(0.85, 1.15);
+        const s = d * (0.6 + o.hold / o.holdMax) * (1 + guards / 8) * (o.capital ? 1.25 : 1) * rnd(0.85, 1.15);
         if (s < bs) { bs = s; best = o; }
       }
       return best;
@@ -2275,7 +2280,7 @@ import * as THREE from 'three';
       const common = n.indexOf(Math.max(...n));
       const counter = [1, 2, 0][common];   // archers vs spears, cavalry vs archers, spears vs cavalry
       kinds.clear();
-      for (const t of red) kinds.set(t, rng() < D().counter ? counter : (rng() * 3 | 0));
+      for (const t of red) kinds.set(t, R() < D().counter ? counter : (R() * 3 | 0));
     }
     // A bridge of its own: where a river stands between the enemy and its target with no way across (or while it
     // still has the free bridge some maps give), it builds one where it best links home and target, and plans anew.
@@ -2308,8 +2313,8 @@ import * as THREE from 'three';
       if (L && (!main || inventory[aiTeam].bridge > 0)) aiBridge(L, home, target);
       let decoy = null, decoyTarget = null;
       const others = main ? bridges.filter(b => b !== main && b.line === main.line) : [];
-      if (others.length && red.length >= 3 && rng() < 0.45) {
-        decoy = others[rng() * others.length | 0];
+      if (others.length && red.length >= 3 && R() < 0.45) {
+        decoy = others[R() * others.length | 0];
         const ex = bridgeEnd(decoy, sideOfTeam(aiFoe));
         let bd = Infinity;
         for (const o of towns) if (o.owner !== aiTeam) { const d = hypot(o.x - ex.x, o.y - ex.y); if (d < bd) { bd = d; decoyTarget = o; } }
@@ -2390,7 +2395,7 @@ import * as THREE from 'three';
         if ((threat.get(t) || 0) > 4) { aiHold(0, t, true); continue; }
         let helping = null;
         for (const [o, n] of threat) if (o !== t && n > 6) { helping = o; break; }
-        if (helping && rng() < 0.5) { wants.push({ t, target: helping, urgency: 0 }); continue; }
+        if (helping && R() < 0.5) { wants.push({ t, target: helping, urgency: 0 }); continue; }
         if (t.capital && red.length < 4 && week < 3) { aiHold(3, t); continue; }
         const onRedSide = sideOf(t.x, t.y) === redSide();
         if (t === minerTown && t !== decoyTown && plan.phase === 'mass') { wants.push({ t, point: minerSpot }); continue; }
@@ -2445,7 +2450,7 @@ import * as THREE from 'three';
       }
       if (k === 'farm') {
         for (let tries = 0; tries < 40; tries++) {
-          const t = red[rng() * red.length | 0], a = rand(0, Math.PI * 2), r = rand(80, 120);
+          const t = red[R() * red.length | 0], a = rnd(0, Math.PI * 2), r = rnd(80, 120);
           const p = { x: t.x + cos(a) * r, y: t.y + sin(a) * r };
           if (aiSpotOk(k, p, sideOf(t.x, t.y))) return { ...p, town: t };
         }
@@ -2455,8 +2460,8 @@ import * as THREE from 'three';
       if (!anchors.length) anchors.push(...red);
       if (plan && plan.main) anchors.unshift(stagingPoint(plan.main), stagingPoint(plan.main));
       for (let tries = 0; tries < 40; tries++) {
-        const a = anchors[rng() * anchors.length | 0];
-        const p = { x: a.x + rand(-60, 60), y: a.y + rand(-60, 60) };
+        const a = anchors[R() * anchors.length | 0];
+        const p = { x: a.x + rnd(-60, 60), y: a.y + rnd(-60, 60) };
         if (aiSpotOk(k, p, redSide())) return p;
       }
       return null;
@@ -2473,9 +2478,9 @@ import * as THREE from 'three';
     // On hard, every other week the enemy also puts a free watchtower at one of its bridgeheads (a gift, placed at once).
     function aiBuild() {
       for (let tries = 0; tries < 20; tries++) {
-        const br = bridges[rng() * bridges.length | 0], t = !br && towns.filter(o => o.owner === aiTeam)[0];
-        const p = br ? XY(lineA(br.line, br.b) + redSide() * (hwAt(br.line, br.b) + rand(80, 140)), br.b + rand(-60, 60))
-          : t ? XY(A(t.x, t.y) - redSide() * rand(60, 140), B(t.x, t.y) + rand(-80, 80)) : null;   // no crossings: guard the front of a town
+        const br = bridges[R() * bridges.length | 0], t = !br && towns.filter(o => o.owner === aiTeam)[0];
+        const p = br ? XY(lineA(br.line, br.b) + redSide() * (hwAt(br.line, br.b) + rnd(80, 140)), br.b + rnd(-60, 60))
+          : t ? XY(A(t.x, t.y) - redSide() * rnd(60, 140), B(t.x, t.y) + rnd(-80, 80)) : null;   // no crossings: guard the front of a town
         if (!p) return;
         if (p.x < 20 || p.y < 20 || p.x > W - 20 || p.y > H - 20) continue;
         if (riverGap(p.x, p.y) < 10) continue;
@@ -2840,7 +2845,10 @@ import * as THREE from 'three';
   const TESTING = new URLSearchParams(location.search).has('test');
   const TURN_TICKS = 2, DELAY = 3, SUM_EVERY = 20, WEEK_PICK = TESTING && +new URLSearchParams(location.search).get('pick') || 300;   // tests: ?test&pick=turns
   const AWAY_S = TESTING && +new URLSearchParams(location.search).get('away') || 30;   // seconds a dropped player has to come back
-  let held = false;
+  // tests/matches.mjs: ?test&bot=s, the computer plays this browser's side, taking s seconds over each weekly choice
+  // (default 2); &speed=n runs turns n times faster than real time, so whole matches fit in a test
+  const BOT = TESTING ? new URLSearchParams(location.search).get('bot') : null, NET_SPEED = TESTING && +new URLSearchParams(location.search).get('speed') || 1;
+  let held = false, bot = null;
   let net = null;   // { ws, code, team, key, names, setup, live, turn, sent, acc, inbox: [Map, Map], outbox, sums, peerSums, desync, waitT }
   const relayURL = () => new URLSearchParams(location.search).get('relay') || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
   function netOpen(first) {
@@ -2906,6 +2914,7 @@ import * as THREE from 'three';
     newGame(setup.land, setup.map);
     Object.assign(net, { live: true, turn: 0, sent: DELAY - 1, acc: 0, outbox: [], desync: -1, awayAt: 0, rematch: [false, false], weekTurns: 0 });
     held = false;
+    bot = BOT === null ? null : { ai: makeAI(me, Math.random), pick: +BOT || 2, wait: 0, chose: 0 };
     tut = null; showTutorial(); setHint('');   // the first-game tutorial is for blue against the computer
     for (const id of ['intro', 'over', 'watchBar', 'upgrade', 'countdown']) $(id).hidden = true;
     state = 'play'; setPaused(false); speed = 1; Sound.init();
@@ -2965,8 +2974,19 @@ import * as THREE from 'three';
       if (++net.weekTurns >= WEEK_PICK) for (const team of [0, 1]) if (offers[team]) carryOut(team, { type: 'reward', key: offers[team][0] }, true);
     } else net.weekTurns = 0;
     for (let i = 0; i < TURN_TICKS; i++) if (running() && !held) step(STEP);
+    if (bot && !net.replaying) botTurn(TURN_TICKS * STEP);
     net.turn++;
     if (n % SUM_EVERY === 0 && !net.replaying) { net.sums.set(n, JSON.stringify(checksum())); netSend({ t: 'sum', id: net.setup.id, n, sum: net.sums.get(n) }); compareSums(n); }
+  }
+  // a bot's turn: it plays by the battle's clock, so it waits whenever the battle does, and isn't run while a
+  // rejoining browser replays the battle (those orders were sent long ago)
+  function botTurn(dt) {
+    if (state === 'upgrade') {
+      if (offers[me] && bot.chose !== week && (bot.wait += dt) >= bot.pick) { bot.chose = week; order(me, { type: 'reward', key: offers[me][Math.random() * 2 | 0] }); }
+    } else {
+      bot.wait = 0;
+      if (state === 'play' && !held) bot.ai.step(dt);
+    }
   }
   function compareSums(n) {
     const a = net.sums.get(n), b = net.peerSums.get(n);
@@ -2977,7 +2997,7 @@ import * as THREE from 'three';
   }
   // called every frame in a match: runs the turns that are due, as long as both players' orders are in
   function netFrame(dt) {
-    net.acc = Math.min(net.acc + dt, 0.5);
+    net.acc = Math.min(net.acc + dt * NET_SPEED, 0.5 * NET_SPEED);
     const T = TURN_TICKS * STEP;
     let ran = 0;
     while (net.acc >= T && ran < 10) {
@@ -5330,7 +5350,8 @@ vec3 noised(vec2 p) {   // value noise, and its slope
       netHost: name => netHost(name),
       netJoin: (code, name) => netJoin(code, name),
       netStart: (land, seed) => netStart(land, seed),
-      net: () => net && { code: net.code, team: net.team, live: net.live, turn: net.turn, desync: net.desync, agreed: net.agreed, waiting: net.waitT > 0, held, time },
+      net: () => net && { code: net.code, team: net.team, live: net.live, turn: net.turn, desync: net.desync, agreed: net.agreed, waiting: net.waitT > 0, held, time,
+        orders: [0, 1].map(team => orderLog.filter(o => o.team === team).length) },   // orders carried out, by team
       netDrop: () => net.ws.close(),
       netRejoin: () => netOpen({ t: 'rejoin', ...JSON.parse(sessionStorage.getItem('frontlines-match')) }),
       // for tests/drift.mjs (docs/multiplayer.md, phase 0): stop the real-time loop, so only run() moves the battle

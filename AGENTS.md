@@ -18,6 +18,9 @@ Ideas:
   after every change, and check the exit code before committing.
 - **Balance:** `cd tests && npm run balance` plays the computer against itself on every landscape and prints
   win rates and game length (options in [tests/balance.mjs](tests/balance.mjs)). Use it to check balance changes.
+- **Matches:** `cd tests && npm run matches` plays whole two-player matches, bots on both sides, through a local
+  relay under rough conditions (lag, dropouts, reloads, a slow phone) and reports sync, winners and stalls
+  (scenarios in [tests/matches.mjs](tests/matches.mjs)). Use it after changing match or network code.
 - **Test addresses:** `?test` exposes `window.__t`, the hook the tests use, and draws the board small and
   rarely to keep tests quick; add `&lite=0` for the full picture (for screenshots). Other switches:
   `?land=highlands` picks a landscape, `&map=4821` a map number, `&layout=classic` the hand-made town layout.

@@ -5,8 +5,8 @@ in order. Single player against the computer must keep working, and feel the sam
 
 **Current phase:** 6, trying it out. Phases 4 and 5 are deployed (23 October): matches work on frontlines.mkjems.dk,
 checked with two browsers through the VPS (about 60 ms round trip). The user is playing and reporting bugs; the
-first, the guest's route drawn red while dragging, is fixed. More to come. Next: bots playing real matches
-(phase 6), to find sync, stall and dropout bugs in whole games.
+first, the guest's route drawn red while dragging, is fixed. More to come. Bots playing real matches are in
+(`npm run matches`, 25 October) and found two dropout bugs; fixing those is next (see phase 6).
 
 How to keep this plan up to date:
 - Tick a step (`- [ ]` → `- [x]`) in the same commit as the work, once its tests pass.
@@ -282,11 +282,11 @@ pause and resume, give up, rematch), the weekly choice with its limit, and a wal
 Exit: a friend who has never seen the game can join from a link on a phone and finish a battle.
 
 ### Phase 6: try it out
-- [ ] Browser tests with two pages against a local relay, including an artificial delay and a dropped connection.
-      Done in part: [tests/match.test.mjs](../tests/match.test.mjs) has six short, scripted matches (join, a few
-      route drags, 120 ms round trip, a slow phone, drop and rejoin, the weekly choice and its limit, walkover,
-      rematch). What's missing is whole games with both sides busy; see the next step.
-- [ ] **Bots playing real matches** (agreed 25 October 2026, not started). Each browser runs a computer player for
+- [x] Browser tests with two pages against a local relay, including an artificial delay and a dropped connection.
+      [tests/match.test.mjs](../tests/match.test.mjs) has six short, scripted matches (join, a few route drags,
+      120 ms round trip, a slow phone, drop and rejoin, the weekly choice and its limit, walkover, rematch) and a
+      short bot match (next step). The helpers for two players are in [tests/players.mjs](../tests/players.mjs).
+- [x] **Bots playing real matches** (agreed 25 October 2026). Each browser runs a computer player for
       its own side that sends its orders through the relay like a person's clicks, so whole matches can be played
       many at a time and checked: in sync to the end (checksums), the same winner on both screens, no stalls, no
       page errors.
@@ -309,6 +309,25 @@ Exit: a friend who has never seen the game can join from a link on a phone and f
         throttling (a slow phone), a hidden tab, a slow weekly choice, a rematch at the end.
       - Bots won't find bugs in mouse and touch handling (like the guest's route drawn red), since they send
         orders directly; those stay with scripted-input tests.
+      Done 25 October. `?test&bot` (or `&bot=20`: 20 game seconds over each weekly choice) makes a bot of this
+      browser's side: `makeAI(me, Math.random)`, kept out of `ais` so it isn't in the checksum, run once per turn
+      from `runTurn` (`botTurn`), not while a rejoining browser replays. `&speed=3` runs turns 3 times faster than
+      real time, so a whole match takes 2–4 minutes. The relay takes `jitter` too (messages stay in order).
+      `npm run matches` plays one match per scenario side by side: plain, lag (40–120 ms), drop (the guest away
+      8 s, twice, rejoining), slow (guest's CPU ×4), hidden (host's tab frozen 10 s), reload (guest, then host,
+      reloads), pick (the guest's weekly choice made for them), rematch. About 4 minutes for all eight.
+      `npm test` has the short version: 60 game seconds at double speed with a drop and rejoin (34 s).
+      Checked that it catches the bot drawing from `rng`: out of sync at turn 140.
+      First run: plain, lag, drop, slow, pick and rematch played whole matches in sync, with the same winner on
+      both screens, no stalls and no page errors. Two bugs found, both about losing the connection:
+- [ ] **A lost connection never comes back by itself.** Found by "hidden": when a player's socket closes (a frozen
+      tab; on a phone, switching apps often does the same), nothing reconnects. Their battle stands still with
+      "Lost the connection to the game server", the other player wins by walkover after 30 s, and the stuck player
+      is never told. The existing rejoin works, but only the test hook (`netRejoin`) or a reload starts it.
+- [ ] **A host who reloads can't get back in.** Found by "reload": a guest's address has `#CODE` (from the link,
+      or the code box), so a reload rejoins; the host's has none, so `fromLink` never runs and the host loses by
+      walkover. The rejoin key is in sessionStorage already.
+- [ ] Smaller: after a walkover the winner's hint still reads "Waiting for Ann…".
       - Safari later: real Safari through `safaridriver` (as [tests/safari.mjs](../tests/safari.mjs) does for the
         twins; the iPhone's engine, but macOS only, a visible window, one at a time), or Playwright's WebKit
         (headless and parallel, also on GitHub's machines, but not Safari itself, and a new dependency).
