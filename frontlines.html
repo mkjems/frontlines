@@ -2795,9 +2795,15 @@ import * as THREE from 'three';
   // the world moves while you play, and after the war is decided, so you can watch it play out
   const running = () => state === 'play' || state === 'over';
   // why: how a match ended other than by a capital falling (a player gave up or left)
+  // An event for the site's visit counter (GoatCounter, loaded by build.sh on the real site only), e.g.
+  // frontlines/victory/hard; nothing anywhere else.
+  function countEvent(path) {
+    try { if (window.goatcounter && window.goatcounter.count) window.goatcounter.count({ path: `frontlines/${path}`, event: true }); } catch (e) {}
+  }
   function endGame(won, why) {
     state = 'over';   // the battle plays on behind the dialog; only the player's part is over
     const fallen = CAPITAL[won ? 1 - me : me], vs = match.ai < 0 ? oppName() : null;
+    countEvent(`${won ? 'victory' : 'defeat'}/${vs ? 'match' : match.difficulty}`);
     $('watchText').textContent = `${won ? 'Victory' : 'Defeat'} · ${why || `${fallen} has fallen`}`;
     const level = match.difficulty[0].toUpperCase() + match.difficulty.slice(1);
     $('overLabel').textContent = `${won ? 'Victory' : 'Defeat'} · ${vs ? `against ${vs}` : level}`;
@@ -3104,6 +3110,7 @@ import * as THREE from 'three';
     }
   }
   function beginMatch(setup) {
+    countEvent('start/match');
     net.setup = setup; board = setup.board; presetMatch = setup.match; me = net.team;
     net.live = false;   // while the map is made, orders aren't sent anywhere
     newGame(setup.land, setup.map);
@@ -3694,7 +3701,7 @@ import * as THREE from 'three';
   $('tipsOn').onchange = () => setTipsOff(!$('tipsOn').checked);
   // on a phone a tip shows as one line; tapping it opens the whole tip (and keeps it up a while longer)
   $('coach').onclick = () => { const open = $('coach').classList.toggle('open'); if (open) coachHide = Math.max(coachHide, 15); };
-  $('startBtn').onclick = () => { Sound.init(); $('intro').hidden = true; state = 'play'; };
+  $('startBtn').onclick = () => { Sound.init(); $('intro').hidden = true; state = 'play'; countEvent(`start/${match.difficulty}`); };
   function renderSound() { $('soundBtn').textContent = Sound.muted ? 'Sound off' : 'Sound on'; }
   $('soundBtn').onclick = () => { Sound.init(); Sound.setMuted(!Sound.muted); renderSound(); };
   renderSound();

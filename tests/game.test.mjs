@@ -391,7 +391,7 @@ test('a formation moves and its routes follow; another town reinforces it; its m
   await carryOn(page);
   const [g] = await t(page, 'forms');
   assert.ok(g.n > f.n, `everyone gathers at the new spot (${f.n} then ${g.n})`);
-  assert.ok(await t(page, 'near', 0, f.at.x, f.at.y, 30) <= 2, 'nobody waits at the old one');
+  assert.equal((await t(page, 'forms')).length, 1, 'nobody forms up at the old one (its route passes through it)');
 
   // a route dragged from another town onto it snaps to it and feeds it
   await dragTo(page, await t(page, 'pos', 'Coldwater'), { x: g.at.x + 12, y: g.at.y + 8 });

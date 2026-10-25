@@ -26,6 +26,16 @@ mkdir -p site
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="art/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="art/icon-180.png">
+<script>
+  // Visits are counted by GoatCounter (no cookies) at stats.mkjems.dk, on the real site only: not in tests or
+  // local copies. Paths carry the host, as all the mkjems.dk sites share one GoatCounter site.
+  if (location.hostname === 'frontlines.mkjems.dk') {
+    window.goatcounter = { path: p => location.host + p };
+    const gc = document.createElement('script');
+    gc.async = true; gc.dataset.goatcounter = 'https://stats.mkjems.dk/count'; gc.src = 'https://stats.mkjems.dk/count.js';
+    document.head.appendChild(gc);
+  }
+</script>
 HEAD
   # everything up to and including </style> belongs in <head>
   awk '/<\/style>/ { print; exit } { print }' "$SRC"
