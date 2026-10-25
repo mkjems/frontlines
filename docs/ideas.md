@@ -235,17 +235,36 @@ the pace.
 - Speed was worth a lot: the unlimited computer beat the paced one 60% to 39% over 800 games, mostly on river
   maps where quick re-routing at bridges pays (Two Rivers 78%, Highlands 73%, River Valley 69%), and not at all
   on open ground (Open Border, The Steppe, The Plateau, The Greenwood: about even).
-- So the single-player opponent is weaker than it was; the difficulty levels may want retuning.
+- Measured against a stand-in for the player (below), the pace limit hardly changed how hard each level is,
+  so the levels were not retuned. It made difficulty more even from map to map instead.
 
 Results at the person's pace, on hard:
-- **Sides:** 1,000 games of the usual computer against itself: 51% blue, 49% red. River Valley leans blue (63% of
-  100, and 61% before the pace limit), more than chance; worth a look.
+- **Sides:** 1,000 games of the usual computer against itself: 51% blue, 49% red. River Valley looked to lean
+  blue (63% of maps 1–100), but over 1,000 maps it is 52%: chance. Its towns, mines, fields, bridges and economy
+  are mirrored (both sides grow alike when idle), and the order the two computers act in makes no difference.
+  Learned: 100 games for one landscape can be off by ±10% by chance alone; the runner prints the margin.
 - **Games snowball:** the median game ends in week 8, after 5.5 minutes (before the pace limit: week 6, 4
   minutes). The side ahead in towns changes only 0.6 times a game, and 4% of games are won by a side that was
   ever 3 towns behind. Whoever gets ahead stays ahead; the loser has no soldiers left when its capital falls.
 - **Buying matters, but not by much:** a side that buys nothing still wins 22% against the usual rotation.
   Leaning on farms (47%) or barracks (43%) is about even with the rotation, or slightly worse; leaning on
   watchtowers loses (35%). The same within a few points before the pace limit.
+
+**Done the same day: a stand-in for the player** (`match.standin`, `--player` in the runner). The computer also
+plays the person's side, at the same pace and by the person's rules: their training speed and income, the
+watchtower in the tray, and the weekly choice (either of the two, at random), so its wins measure each level.
+It is weaker than a good player (it never uses Charge, and picks rewards at random), so the numbers compare
+levels and changes rather than predict a person's results. 600 games a level, the stand-in's wins:
+
+| Level  | The computer at its old speed | At a person's pace |
+|--------|-------------------------------|--------------------|
+| Easy   | 99%                           | 100%               |
+| Normal | 53%                           | 55%                |
+| Hard   | 9%                            | 10%                |
+
+On normal, the old computer was much harder on river maps (the stand-in won 28% on Two Rivers, 38% on River
+Valley) than on open ground (75% on Open Border); at a person's pace it is 52%, 52% and 65%.
+
 - Not yet: troop mixes and attack timing as styles, Charge for the computer, and the weekly choice for a
   computer side (it grows by the computer's rules instead).
 

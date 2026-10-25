@@ -620,6 +620,24 @@ test('the computer against the computer (tests/balance.mjs): both sides play, we
   for (const page of pages) { assert.deepEqual(page.errors, []); await page.close(); }
 });
 
+test('a stand-in for the player (tests/balance.mjs --player): the computer plays the person\'s side by their rules', async () => {
+  const page = await openGame({ width: 1200, height: 800 }, RANDOM);
+  const r = await page.evaluate(board => {
+    __t.freeze(); __t.board(board); __t.match({ ai: 1, standin: true, difficulty: 'normal', classic: false, grace: 6 });
+    __t.newMap('valley', 1); __t.start();
+    __t.run(15);   // its first few orders, after the 6 s before it starts
+    const towers = __t.war().sides[0].towers;
+    for (let s = 0; s < 150 && __t.war().winner < 0; s += 5) __t.run(5);
+    return { war: __t.war(), towers, state: __t.state() };
+  }, BOARD);
+  const blue = r.war.sides[0];
+  assert.equal(r.towers, 1, 'it puts the watchtower from its tray on the board in its first moves');
+  assert.ok(r.war.week >= 3 && r.state !== 'upgrade', `it makes the weekly choice itself (week ${r.war.week})`);
+  assert.ok(blue.acts > 20 && blue.burst <= 7, `it plays at a person's pace (${blue.acts} orders, ${blue.burst} within 10 s)`);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
 test('team colours are always looked up by team or by me, never as a literal 0 or 1', async () => {
   // the palettes swap for the red player (paintTeams), so COL.team[0] is red on their screen: "mine" is [me]
   const src = readFileSync(fileURLToPath(new URL('../frontlines.html', import.meta.url)), 'utf8');

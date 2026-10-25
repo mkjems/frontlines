@@ -7,10 +7,14 @@
 //   npm run balance -- --a farms --b even            two ways of spending gold against each other (BUY_ORDERS)
 //   npm run balance -- --a even+fast --b even        a style with +fast acts as fast as it likes (match.fast)
 //   npm run balance -- --mins 30 --diff normal       games stopped after 30 minutes; the computer's normal rules
+//   npm run balance -- --player --diff easy          a stand-in for the player against the computer on easy
+//                                                    (--a: the stand-in's style, --b: the computer's)
 //
 // With the same style on both sides it reports wins per side: the maps are mirrored, so a big gap means one side
 // is favoured by something other than the map. With two styles, each map is played twice, the sides swapped, and
-// it reports wins per style. Also: games that ran out of time, how long games last, how often the side ahead in
+// it reports wins per style. With --player, the computer also plays the person's side by the person's rules
+// (match.standin: their training, income, tray and weekly choice), each map from both sides, so the stand-in's
+// wins against each difficulty measure how hard it is. Also: games that ran out of time, how long games last, how often the side ahead in
 // towns changed, and comebacks: games won by the side that had once been behind by 3 or more towns.
 
 import { existsSync } from 'node:fs';
@@ -21,6 +25,7 @@ const LANDS = ['valley', 'lake', 'tworivers', 'mountains', 'open', 'steppe', 'gr
 const { values: opt } = parseArgs({ options: {
   land: { type: 'string', default: 'all' }, games: { type: 'string', default: '20' }, mins: { type: 'string', default: '20' },
   diff: { type: 'string', default: 'hard' }, a: { type: 'string', default: 'even' }, b: { type: 'string', default: '' },
+  player: { type: 'boolean', default: false },
 } });
 const lands = opt.land === 'all' ? LANDS : opt.land.split(','), GAMES = +opt.games, MINS = +opt.mins;
 const A = opt.a, B = opt.b || opt.a, versus = A !== B, PAGES = 4, SAMPLE = 15;
@@ -55,22 +60,26 @@ const pages = await Promise.all(Array.from({ length: PAGES }, async () => {
   return page;
 }));
 
-const sideups = versus ? [[A, B], [B, A]] : [[A, A]];
-const jobs = lands.flatMap(land => Array.from({ length: GAMES }, (_, i) => sideups.map(buys => ({ land, map: i + 1, buys }))).flat());
+// each map's games: who plays each team (labels, the columns of wins), the computer's team, and the styles by team
+const sideups = opt.player ? [1, 0].map(ai => ({ ai, labels: ai ? ['player', 'computer'] : ['computer', 'player'], buys: ai ? [A, B] : [B, A] }))
+  : versus ? [{ ai: 2, labels: [A, B], buys: [A, B] }, { ai: 2, labels: [B, A], buys: [B, A] }]
+  : [{ ai: 2, labels: ['blue', 'red'], buys: [A, A] }];
+const col = sideups[0].labels;
+const jobs = lands.flatMap(land => Array.from({ length: GAMES }, (_, i) => sideups.map(up => ({ land, map: i + 1, ...up }))).flat());
 const games = [];
 const started = Date.now();
 await Promise.all(pages.map(async page => {
   for (let job; (job = jobs.shift());) {
-    const match = { ai: 2, difficulty: opt.diff, classic: false, grace: 6, buys: job.buys.map(b => b.split('+')[0]), fast: job.buys.map(b => b.endsWith('+fast')) };
-    games.push({ ...await page.evaluate(playInPage, job.land, job.map, match, MINS * 60, SAMPLE), buys: job.buys });
+    const match = { ai: job.ai, standin: opt.player, difficulty: opt.diff, classic: false, grace: 6,
+      buys: job.buys.map(b => b.split('+')[0]), fast: job.buys.map(b => b.endsWith('+fast')) };
+    games.push({ ...await page.evaluate(playInPage, job.land, job.map, match, MINS * 60, SAMPLE), labels: job.labels });
   }
 }));
 const errors = [...new Set(pages.flatMap(p => p.errors))];
 await browser.close();
 
-// the two columns of wins: blue and red, or style A and style B (whichever side each played)
-const col = versus ? [A, B] : ['blue', 'red'];
-const teamOf = (g, c) => versus ? g.buys.indexOf(col[c]) : c;
+// the team that played a column in a game
+const teamOf = (g, c) => g.labels.indexOf(col[c]);
 // how often the side ahead in towns changed, and whether the winner had been behind by 3 or more towns
 function story(g) {
   let leader = 0, changes = 0, worst = 0;
@@ -97,8 +106,13 @@ const rows = [...lands, 'all'].map(land => {
 const head = ['landscape', 'games', ...col, 'timeout', 'minutes', 'week', 'lead changes', 'comebacks'];
 const width = head.map((h, i) => Math.max(h.length, ...rows.map(r => String(r[i]).length)));
 const line = r => r.map((c, i) => (i ? String(c).padStart(width[i]) : String(c).padEnd(width[i]))).join('  ');
-console.log(`${games.length} games on ${opt.diff}, ${versus ? `buying ${A} against ${B}, each map from both sides` : `both sides buying ${A}`}, up to ${MINS} minutes each, in ${((Date.now() - started) / 1000).toFixed(0)} s`);
-console.log('(minutes and week: the median of decided games)\n');
+const who = opt.player ? `a stand-in for the player${A !== 'even' ? ` (${A})` : ''} against the computer${B !== 'even' ? ` (${B})` : ''}, each map from both sides`
+  : versus ? `buying ${A} against ${B}, each map from both sides` : `both sides buying ${A}`;
+console.log(`${games.length} games on ${opt.diff}, ${who}, up to ${MINS} minutes each, in ${((Date.now() - started) / 1000).toFixed(0)} s`);
+// chance alone moves a win share by up to about twice its standard error, 100 / √games percent at even odds
+const margin = n => Math.round(100 / Math.sqrt(n));
+console.log(`(minutes and week: the median of decided games. By chance alone a share can be off by about ±${margin(GAMES * sideups.length)}% for one`
+  + ` landscape, ±${margin(games.length)}% for all)\n`);
 console.log(line(head));
 for (const r of rows) console.log(line(r));
 
@@ -113,11 +127,11 @@ if (decided.length) {
   };
   console.log(`\nAt the end of decided games, on average:\n${end('winners')}\n${end('losers')}`);
 }
-// the computer's pace, per style: orders that changed something (a route, a troop type, an army sent on, a
+// the computer's pace, per column: orders that changed something (a route, a troop type, an army sent on, a
 // purchase) per minute, and the most within 10 s; a person manages perhaps one every second or two
-for (const style of new Set([A, B])) {
-  const sides = games.flatMap(g => g.sides.filter((s, team) => g.buys[team] === style).map(s => ({ ...s, mins: g.time / 60 })));
-  console.log(`\nPace${versus ? ` of ${style}` : ''}: ${(sides.reduce((n, s) => n + s.acts, 0) / sides.reduce((n, s) => n + s.mins, 0)).toFixed(0)} orders a minute;`
+for (const label of new Set(col)) {
+  const sides = games.flatMap(g => g.sides.filter((s, team) => g.labels[team] === label).map(s => ({ ...s, mins: g.time / 60 })));
+  console.log(`\nPace of ${label}: ${(sides.reduce((n, s) => n + s.acts, 0) / sides.reduce((n, s) => n + s.mins, 0)).toFixed(0)} orders a minute;`
     + ` the most within 10 s ${median(sides.map(s => s.burst))} in a typical game, ${Math.max(...sides.map(s => s.burst))} at most`);
 }
 const timeouts = games.filter(g => g.winner < 0);

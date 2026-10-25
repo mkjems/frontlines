@@ -832,7 +832,8 @@ import * as THREE from 'three';
   // The match: everything that changes the battle besides the map, the same in every copy of a game. ai is the team
   // the computer plays (-1: none, two players; 2: both, the computer against itself, see tests/balance.mjs), grace
   // the seconds before its first push. In single player it comes from this browser's settings when a game is made;
-  // a test, a replay or (later) the host can fix it instead.
+  // a test, a replay or (later) the host can fix it instead. standin: the computer also plays the person's side, by
+  // the person's rules (its training, income, tray and weekly choice), to measure the difficulty (tests/balance.mjs).
   let match = { ai: 1, difficulty, classic: false, grace: 6 }, presetMatch = null;
   const D = () => DIFF[match.difficulty];
   const byComputer = team => match.ai === team || match.ai === 2;
@@ -1228,7 +1229,7 @@ import * as THREE from 'three';
       : 'Drag from a blue town to draw a march route. Your first watchtower is in the tray.');
     startTutorial();
     match.grace ??= tut ? 25 : 6;   // a new player gets a moment before the computer's first push
-    ais = [0, 1].filter(byComputer).map(makeAI);
+    ais = [0, 1].filter(team => byComputer(team) || (match.standin && team === me)).map(makeAI);
     renderTray();
     view.z = 1; view.x = view.y = 0;
     FX.clear();
@@ -2228,7 +2229,7 @@ import * as THREE from 'three';
     const aiFoe = 1 - aiTeam;
     let plan = null, buys = 0, wait = match.grace, kinds = new Map();
     // warnings of its moves are for the person playing against it
-    const warn = (p, msg, loud) => { if (match.ai !== 2) alertAt(p, msg, loud); };
+    const warn = (p, msg, loud) => { if (aiFoe === me && match.ai !== 2) alertAt(p, msg, loud); };
     // the orders it wants carried out, and how urgent each is: 0 saving a town, 1 a bridge, 2 an army sent on,
     // 3 a town's route, 4 a purchase, 5 a troop type; then, if given, runs once the order is carried out
     let todo = [], cool = 0;
@@ -2361,6 +2362,12 @@ import * as THREE from 'three';
         for (const t of red) if ((t.x - u.x) ** 2 + (t.y - u.y) ** 2 < 170 * 170) threat.set(t, (threat.get(t) || 0) + 1);
       }
       aiSpend();
+      // what it has in its tray (a stand-in for the person): put where it would put one it bought
+      for (const k of ['tower', 'farm', 'barracks']) {
+        if (!(inventory[aiTeam][k] > 0) || todo.some(w => w.o.kind === k)) continue;
+        const spot = aiSpot(k);
+        if (spot) want(4, { type: 'build', kind: k, x: spot.x, y: spot.y, town: spot.town && spot.town.name });
+      }
       // send one town's troops to camp on a gold mine on the enemy's side that it doesn't hold yet
       let minerTown = null, minerSpot = null;
       const wanted = mines.filter(m => m.owner !== aiTeam && sideOf(m.x, m.y) === redSide());
@@ -2506,7 +2513,7 @@ import * as THREE from 'three';
   let offers = [null, null];
   function nextWeek() {
     week++;
-    for (const ai of ais) ai.grow();   // the computer grows stronger each week
+    for (const ai of ais) if (byComputer(ai.team)) ai.grow();   // the computer grows stronger each week
     state = 'play';
   }
   function offerUpgrades() {
@@ -2521,6 +2528,7 @@ import * as THREE from 'three';
       const first = shuffled.find(u => u.place);
       offers[team] = [first, shuffled.find(u => u !== first)].map(u => u.key);
     }
+    if (match.standin) { ORDERS.reward({ key: offers[me][rng() * 2 | 0] }, me); return; }   // it picks either
     $('upLabel').textContent = `Week ${week} complete`;
     const box = $('choices'); box.innerHTML = '';
     offers[me].map(key => UPGRADES.find(u => u.key === key)).forEach((up, i) => {
