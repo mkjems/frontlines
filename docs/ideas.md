@@ -131,7 +131,24 @@ Agreed with the user instead of A/B/C above: a formation has some of a town's be
 - Learned: this made the computer's strikes from the bridges stronger, since one order now sends all of its
   massed army instead of one order per route. Over 200 games, games where it masses at bridges got shorter (median
   5.7 to 4.5 minutes; valley 6.2 to 4.0, mountains 6.0 to 3.8), and lead changes 0.5 to 0.4. Open maps unchanged.
-- Next: march as a block (at the slowest soldiers' pace, keeping its shape), then measure stream against formation.
+
+**Done (25 October 2026): formations march as a block** (`stepMarches`, `setOff`, `endMarch`). A formation sent on
+keeps its shape: its middle (`ax`, `ay`) moves along the way at its slowest soldiers' pace (0.9 of it, by the
+ground under the middle), slower while soldiers are out of place, and wheels onto the way it goes at 1.2 rad/s;
+each soldier keeps its place around the middle (`u.off`, by goalOf), or heads for the middle where its place is
+in a river. Soldiers keep their places with enemies near and the block stands to fight once any of it is at
+close quarters (`f.contact`). An attack on a town is a block of its own (`f.attack`) that goes in as a crowd once
+it is within 60 of the town's edge, or meets defenders within 160. Volleys work on the march; the shield wall
+and riding out don't (they need standing places). The rest of a march is drawn like a route.
+- Measured (open ground, 6 fights each, a standing formed defender of 30 mixed, attackers from 300 away):
+  a stream of one soldier a second loses every time (30 or 40 of them; the defender keeps about 22); a crowd
+  marching loose loses 6 of 6 at 30 against 30 and wins 6 of 6 at 40 (about 16 left); the block wins 2 of 6 at
+  30 (0 of 6 once it kept its places until contact) and 6 of 6 at 40 (about 15 left). So a formed attack beats a
+  stream by far, and is about as strong as a loose crowd: arriving together alone gives no edge in a fight.
+- Balance over 200 games: median 4.8 minutes (5.7 before formations, 4.5 with formations that didn't march as
+  a block), lead changes 0.5, comebacks 3%.
+- Open: an edge for the formed attacker in the fight itself, e.g. the shield wall on the march (spearmen in
+  place guarded), or a company charge by tapping the banner; chasing a moving enemy formation.
 
 ## Then: formations for the three troop types
 

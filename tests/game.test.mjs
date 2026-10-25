@@ -434,16 +434,23 @@ test('formations join up, attack with everyone and fill up again where they stoo
   const n = fs[0].n;
   assert.ok(n > a.n + b.n, `both armies stand in it (${a.n} + ${b.n}, then ${n})`);
 
-  await dragTo(page, fs[0].at, await t(page, 'pos', 'Millbrook'));
+  const home = fs[0];
+  await dragTo(page, home.at, await t(page, 'pos', 'Millbrook'));
   await page.mouse.up();
   await sleep(100);
   fs = await t(page, 'forms');
-  assert.equal(fs.length, 1, 'attacking, it stays where it stood');
-  assert.equal(fs[0].n, 0, 'but everyone in it goes');
-  assert.deepEqual(fs[0].fed.sort(), ['Brindle', 'Coldwater'], 'and the routes feed it still');
+  const stays = fs.find(f => f.id === home.id), block = fs.find(f => f.id !== home.id);
+  assert.ok(stays, 'attacking, it stays where it stood');
+  assert.equal(stays.n, 0, 'but everyone in it goes');
+  assert.deepEqual(stays.fed.sort(), ['Brindle', 'Coldwater'], 'and the routes feed it still');
+  assert.ok(block && block.marching && block.n === n, 'everyone marches on Millbrook as one block');
+  await t(page, 'run', 2);
+  fs = await t(page, 'forms');
+  assert.ok(fs.find(f => f.id === block.id).spread < 75, `keeping together on the way (${Math.round(fs.find(f => f.id === block.id).spread)} from its middle at most)`);
   for (let i = 0; i < 6 && await t(page, 'owner', 'Millbrook') !== 0; i++) { await t(page, 'run', 5); await carryOn(page); }
   assert.equal(await t(page, 'owner', 'Millbrook'), 0, 'the attack takes Millbrook');
   fs = (await t(page, 'forms')).filter(f => f.team === 0);
+  assert.deepEqual(fs.map(f => f.id), [home.id], 'the block went in at the town, and only the old formation is left');
   assert.ok(fs[0].n > 0, 'new soldiers fill it up again');
 
   await dragTo(page, fs[0].at, await t(page, 'pos', 'Ashford'));
