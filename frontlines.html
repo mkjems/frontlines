@@ -4982,10 +4982,9 @@ vec3 noised(vec2 p) {   // value noise, and its slope
     for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
     ctx.stroke();
   }
-  function chevrons(pts, color) {
+  function chevrons(pts, color) {   // still, like arrows painted on a board: the soldiers are what moves
     ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineCap = 'round';
-    const off = (time * 10) % 5 | 0;
-    for (let i = 3 + off; i < pts.length - 2; i += 5) {
+    for (let i = 3; i < pts.length - 2; i += 5) {
       const a = pts[i - 1], b = pts[i + 1], ang = Math.atan2(b.y - a.y, b.x - a.x), p = pts[i];
       ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ang);
       ctx.beginPath(); ctx.moveTo(-2.5, -3.5); ctx.lineTo(1.5, 0); ctx.lineTo(-2.5, 3.5); ctx.stroke();
