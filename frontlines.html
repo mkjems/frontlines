@@ -543,7 +543,7 @@
         <li><span class="k">End a route on open ground</span> to form up an army there. Drag from the formation to move it: it marches as one block, at its slowest soldiers' pace, and the routes feeding it follow. Drag it onto another formation to join them, into your town to join its garrison, or onto an enemy to attack with all of it; its routes then form up a new one where it stood. Drag a town's route onto a formation to reinforce it. Tap a formation to stop all routes into it.</li>
         <li><span class="k">Tap a town</span> to pick its troops or clear its route.</li>
         <li><span class="k">Charge</span> (first in the tray, or press C; every 25s): your troops in the circle run at the enemy where you click, sprinting, and their first blow hits two to three times as hard.</li>
-        <li><span class="k">Space</span> pauses, <span class="k">Esc</span> cancels. Hold <span class="k">Shift</span> and hover to inspect anything.</li>
+        <li><span class="k">Space</span> pauses, <span class="k">Esc</span> drops a route you're drawing or something you're placing. Hold <span class="k">Shift</span> and hover to inspect anything.</li>
         <li><span class="k">Scroll or pinch</span> to zoom in on the fighting, <span class="k">drag open ground</span> to look around, <span class="k">double-click</span> to zoom in or back out.</li>
       </ul></div>
       <div><h3>Troops</h3><ul>
@@ -3514,7 +3514,10 @@ import * as THREE from 'three';
   addEventListener('keydown', e => {
     if (e.code === 'Space' && running()) { e.preventDefault(); togglePause(); }
     if ((e.key === 'c' || e.key === 'C') && !e.metaKey && !e.ctrlKey && !e.altKey) toggleCharge();
-    if (e.key === 'Escape') { if (armed) { armed = null; renderTray(); } closeMenu(); if (!$('rules').hidden) $('rulesClose').onclick(); }
+    if (e.key === 'Escape') {
+      // a route half drawn is dropped; the pointer going up afterwards then does nothing
+      if (drawing) { if (cvs.hasPointerCapture(pointerId)) cvs.releasePointerCapture(pointerId); drawing = null; }
+      if (armed) { armed = null; renderTray(); } closeMenu(); if (!$('rules').hidden) $('rulesClose').onclick(); }
   });
   cvs.addEventListener('pointerleave', () => { ghost = null; lastPointer = null; inspectAt = null; showInspect(); });
 

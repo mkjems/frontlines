@@ -105,6 +105,13 @@ test('drawing routes', async () => {
   await page.mouse.up();
   await sleep(100);
   assert.equal(await t(page, 'route', 'Coldwater'), 'Oakhollow', 'a route released near a town locks onto it');
+
+  // Esc mid-drag drops the new route; the old one stands
+  await dragTo(page, await t(page, 'pos', 'Brindle'), await t(page, 'pos', 'Oakhollow'));
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  await sleep(100);
+  assert.equal(await t(page, 'route', 'Brindle'), 'Millbrook', 'Esc drops a route being drawn');
   assert.deepEqual(page.errors, []);
   await page.close();
 });
