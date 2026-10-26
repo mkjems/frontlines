@@ -15,7 +15,9 @@
     --ink: #e6e9e3;
     --muted: #9aa49d;
     --line: #3b4342;
-    --blue: #4a84f2;         /* filled buttons and team marks */
+    --blue: #4a84f2;         /* team marks */
+    --azure: linear-gradient(180deg, #3762c4, #26499f);         /* heraldic enamel: main buttons, a picked tray button */
+    --azure-hover: linear-gradient(180deg, #4370d4, #2d54b0);
     --blue-ink: #9fc0ff;     /* blue text and icons on dark */
     --blue-soft: #b7cbef;
     --red: #df5448;
@@ -91,7 +93,8 @@
   .tray button .ico { width: 12px; height: 12px; border-radius: 3px; background: var(--blue-ink); display: block; }
   .tray button .ico.tower { border-radius: 50%; }
   .tray button .ico.bridge { border-radius: 2px; height: 6px; width: 16px; background: #8d806a; }
-  .tray button.armed { background: var(--blue); color: #fff; }
+  .tray button.armed, .tray #chargeBtn.armed, .btn.primary { background: var(--azure); color: #fff;
+    box-shadow: var(--shadow), inset 0 0 0 1px var(--gold-line), inset 0 1px 0 rgba(255, 255, 255, .18); }
   .tray button.armed .ico { background: #fff; }
   .townmenu {
     position: fixed; z-index: 5; background: var(--panel); border-radius: 14px; padding: 10px; width: 230px; box-sizing: border-box;
@@ -119,7 +122,6 @@
   /* Charge leads the tray, set apart from the things you buy: it is free but recharges, filling as it does */
   .tray #chargeBtn { background: linear-gradient(90deg, var(--raised) var(--fill, 0%), var(--panel) var(--fill, 0%)); }
   .tray #chargeBtn:disabled { opacity: .6; }
-  .tray #chargeBtn.armed { background: var(--blue); color: #fff; }
   .tray #chargeBtn .cd { color: var(--muted); font-weight: 600; min-width: 34px; text-align: left; }
   .tray #chargeBtn.armed .cd { color: #fff; }
   .tray .sep { width: 1px; align-self: stretch; margin: 6px 2px; background: var(--line); }
@@ -252,7 +254,7 @@
   }
   .watchbar[hidden] { display: none; }
   .watchbar .btn.primary { padding: 8px 14px; font-size: 13px; }
-  .btn.primary { background: var(--blue); color: #fff; padding: 12px 18px; font-size: 14px; align-self: flex-start; }
+  .btn.primary { padding: 12px 18px; font-size: 14px; align-self: flex-start; }
   .diff { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .diff .label { margin-right: 4px; min-width: 70px; }
   .land { display: grid; grid-template-columns: 74px auto 1fr; align-items: center; gap: 4px 6px; }
@@ -306,7 +308,7 @@
   #intro:not([data-mode="friend"]) #inviteBtn, #intro[data-mode="friend"] #step2 [data-go="3"] { display: none; }
   .tips ol { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: 12.5px; line-height: 1.45; color: var(--ink); }
   .tips p { font-size: 12.5px; }
-  .btn.primary:hover { background: #5d93f7; }
+  .btn.primary:hover { background: var(--azure-hover); }
   /* intro tip carousel: slides share one grid cell, so the card keeps the height of the longest tip */
   .carousel { background: var(--raised); border-radius: 14px; padding: 14px 16px 10px; box-shadow: inset 0 0 0 1px var(--edge); display: grid; gap: 8px; touch-action: pan-y; }
   .slides { display: grid; }
