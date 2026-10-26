@@ -223,6 +223,25 @@
   .hud-right { display: flex; gap: 10px; align-items: flex-start; }
   .tray .price { display: inline-flex; align-items: center; gap: 3px; color: #e2b93b; font-weight: 600; }
   .tray button.armed .price { color: #fff; }
+  /* What you can buy (or have in hand) is polished brass with a shining price; what you can't afford fades to grey.
+     The moment one becomes affordable, a sweep of light crosses it once (.ready, see refreshTray). */
+  .tray .item { position: relative; overflow: hidden; }
+  .tray .item:disabled { opacity: .32; filter: grayscale(1); }
+  .tray .item:disabled .price { color: var(--muted); }
+  .tray .item:disabled .coin { background: #6f7671; box-shadow: inset 0 0 0 1.5px #555c58; }
+  .tray .item:not(:disabled):not(.armed) { background: linear-gradient(180deg, #353c39, #2a302e);
+    box-shadow: var(--shadow), inset 0 0 0 1px var(--gold), inset 0 1px 0 rgba(255, 236, 190, .12), 0 0 16px rgba(209, 173, 94, .28); }
+  .tray .item:not(:disabled):not(.armed):hover { background: linear-gradient(180deg, #3d4541, #313735);
+    box-shadow: var(--shadow), inset 0 0 0 1.5px #e6c477, inset 0 1px 0 rgba(255, 236, 190, .16), 0 0 20px rgba(209, 173, 94, .4); }
+  .tray .item:not(:disabled):not(.armed) .price { color: #f4cf5c; text-shadow: 0 0 10px rgba(244, 207, 92, .55); }
+  .tray .item:not(:disabled):not(.armed) .coin { background: #f4cf5c; box-shadow: inset 0 0 0 1.5px #c79a1e, 0 0 8px rgba(244, 207, 92, .7); }
+  .tray .item.ready:not(.armed) { animation: bloom 1.1s ease-out; }
+  .tray .item.ready:not(.armed)::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(105deg, transparent 30%, rgba(255, 233, 170, .55) 50%, transparent 70%);
+    transform: translateX(-120%); animation: sweep .7s ease-out forwards; }
+  @keyframes sweep { to { transform: translateX(120%); } }
+  @keyframes bloom { 25% { box-shadow: var(--shadow), inset 0 0 0 1.5px #f4cf5c, 0 0 26px rgba(244, 207, 92, .7); } }
+  @media (prefers-reduced-motion: reduce) { .tray .item.ready, .tray .item.ready::after { animation: none; } }
   .coin { width: 9px; height: 9px; border-radius: 50%; background: #e2b93b; box-shadow: inset 0 0 0 1.5px #c79a1e; display: inline-block; }
   #gold .big { display: flex; align-items: center; gap: 6px; }
   #gold .coin { width: 12px; height: 12px; }
@@ -2768,7 +2787,7 @@ import * as THREE from 'three';
     renderCharge();
     for (const k of trayItems()) {
       const b = document.createElement('button');
-      b.type = 'button'; b.id = 'tray-' + k; b.dataset.inspect = k; b.className = armed === k ? 'armed' : '';
+      b.type = 'button'; b.id = 'tray-' + k; b.dataset.inspect = k; b.className = armed === k ? 'item armed' : 'item';
       b.onclick = () => {
         if (armed === k) { armed = null; renderTray(); return; }
         if (!(inventory[me][k] > 0) && gold[me] < priceOf(me, k)) { toast(`Not enough gold: ${priceOf(me, k)} needed`, 'bad'); return; }
@@ -2795,7 +2814,9 @@ import * as THREE from 'three';
       const n = inventory[me][k] || 0, pr = priceOf(me, k);
       const html = `${icon(k, 16)}<span class="name">${ITEM[k]}</span> ${n ? `×${n}` : `<span class="price"><i class="coin"></i>${pr}</span>`}`;
       if (force || b.dataset.html !== html) { b.innerHTML = html; b.dataset.html = html; }
-      b.disabled = !n && gold[me] < pr && armed !== k;
+      const off = !n && gold[me] < pr && armed !== k;
+      if (b.disabled && !off && !force) { b.classList.remove('ready'); void b.offsetWidth; b.classList.add('ready'); }   // just became affordable
+      b.disabled = off;
     }
   }
   function setHint(text) { hintBase = text; if (!armed) { $('hint').textContent = text; $('hint').style.opacity = text ? 1 : 0; } }
